@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">مونوليث</string>
+    <string name="app_subtitle">النظام الشامل لإدارة المحتوى</string>
+    <string name="btn_start">تشغيل النموذج المحلي</string>
+</resources>
