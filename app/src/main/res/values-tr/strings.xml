@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Monolith</string>
+    <string name="app_subtitle">Nihai İçerik Yönetim Sistemi</string>
+    <string name="btn_start">Yerel Modeli Başlat</string>
+</resources>
