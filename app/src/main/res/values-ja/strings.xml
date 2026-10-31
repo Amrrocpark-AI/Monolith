@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">モノリス</string>
+    <string name="app_subtitle">究極のコンテンツ管理システム</string>
+    <string name="btn_start">ローカルモデルを起動</string>
+</resources>
