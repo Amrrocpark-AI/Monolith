@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Monolith</string>
+    <string name="app_subtitle">Sistem Manajemen Konten Terbaik</string>
+    <string name="btn_start">Mulai Model Lokal</string>
+</resources>
