@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Monolith</string>
+    <string name="app_subtitle">El Sistema Definitivo de Gestión de Contenido</string>
+    <string name="btn_start">Iniciar Modelo Local</string>
+</resources>
