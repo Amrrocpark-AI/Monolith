@@ -1,7 +1,0 @@
-<resources>
-    <string name="app_name">ⵎⵓⵏⵓⵍⵉⵜ</string>
-    <string name="app_subtitle">ⴰⵏⴳⵔⴰⵡ ⴰⵎⴰⵜⴰⵢ ⵏ ⵓⵙⵡⵓⴷⵓ ⵏ ⵓⴳⴱⵓⵔ</string>
-    <string name="btn_start">ⵙⵙⵏⵜⵉ ⴰⵎⵓⴷⵍ ⴰⴷⵖⴰⵔⴰⵏ</string>
-    <string name="chat_hint">ⴰⵔⴰ ⵜⴰⴱⵔⴰⵜ ⵏⵏⴽ...</string>
-    <string name="btn_send">ⴰⵣⵏ</string>
-</resources>

@@ -1,7 +1,0 @@
-<resources>
-    <string name="app_name">Monolith</string>
-    <string name="app_subtitle">Nihai İçerik Yönetim Sistemi</string>
-    <string name="btn_start">Yerel Modeli Başlat</string>
-    <string name="chat_hint">Mesajınızı buraya yazın...</string>
-    <string name="btn_send">Gönder</string>
-</resources>
