@@ -40,6 +40,10 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var tvImagePreviewText: TextView
     private lateinit var chatContainer: LinearLayout
     private lateinit var chatScrollView: android.widget.ScrollView
+    private lateinit var tvAppTitle: TextView
+    
+    // متغير لحفظ اللون الحالي
+    private var themeColorHex = "#00FF00"
 
     private lateinit var sharedPreferences: SharedPreferences
     private val gson = Gson()
@@ -63,6 +67,7 @@ class ChatActivity : AppCompatActivity() {
         val btnAttach = findViewById<ImageButton>(R.id.btnAttach)
         val btnMic = findViewById<ImageButton>(R.id.btnMic)
         val btnVisionToggle = findViewById<ImageButton>(R.id.btnVisionToggle)
+        tvAppTitle = findViewById(R.id.tvAppTitle)
         
         chatContainer = findViewById(R.id.chatContainer)
         chatScrollView = findViewById(R.id.chatScrollView)
@@ -121,7 +126,6 @@ class ChatActivity : AppCompatActivity() {
             try {
                 val message = etMessage.text.toString().trim()
                 if (message.isNotEmpty() || selectedImageUri != null) {
-                    
                     vibratePhone() 
                     
                     val userMsg = ChatMessage(
@@ -261,6 +265,17 @@ class ChatActivity : AppCompatActivity() {
             val settingsPrefs = getSharedPreferences("Settings", MODE_PRIVATE)
             val rootLayout = findViewById<LinearLayout>(R.id.rootLayout)
 
+            // 1. قراءة اللون المحفوظ وتطبيقه على العناصر
+            themeColorHex = settingsPrefs.getString("AppThemeColor", "#00FF00") ?: "#00FF00"
+            val themeColor = Color.parseColor(themeColorHex)
+            
+            tvAppTitle.setTextColor(themeColor)
+            btnSend.setColorFilter(themeColor, PorterDuff.Mode.SRC_IN)
+            
+            val btnAttach = findViewById<ImageButton>(R.id.btnAttach)
+            btnAttach.setColorFilter(themeColor, PorterDuff.Mode.SRC_IN)
+
+            // 2. إعداد الخلفية (صورة أو لون)
             val imageUriString = settingsPrefs.getString("AppBackgroundImage", null)
             
             if (imageUriString != null) {
@@ -285,8 +300,8 @@ class ChatActivity : AppCompatActivity() {
                 }
             }
 
+            // 3. تعديل ألوان أيقونات الشريط العلوي بناءً على الخلفية
             val savedColor = settingsPrefs.getString("AppBackground", "#0A0A0A") ?: "#0A0A0A"
-            
             val btnBack = findViewById<ImageButton>(R.id.btnBack)
             val btnSettings = findViewById<ImageButton>(R.id.btnSettings)
             val btnVisionToggle = findViewById<ImageButton>(R.id.btnVisionToggle)
@@ -326,7 +341,8 @@ class ChatActivity : AppCompatActivity() {
         textView.textAlignment = TextView.TEXT_ALIGNMENT_CENTER
 
         val background = GradientDrawable()
-        background.setColor(if (isUser) Color.parseColor("#00FF00") else Color.parseColor("#CC2A2A2A"))
+        // استخدام اللون المخصص للفقاعة
+        background.setColor(if (isUser) Color.parseColor(themeColorHex) else Color.parseColor("#CC2A2A2A"))
         background.cornerRadius = 40f
         textView.background = background
 
