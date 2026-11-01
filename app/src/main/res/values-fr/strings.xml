@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">Monolith</string>
+    <string name="app_subtitle">Le Système Ultime de Gestion de Contenu</string>
+    <string name="btn_start">Démarrer le Modèle Local</string>
+    <string name="chat_hint">Tapez un message...</string>
+    <string name="btn_send">Envoyer</string>
+</resources>
