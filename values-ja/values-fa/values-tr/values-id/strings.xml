@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">Monolith</string>
+    <string name="app_subtitle">Sistem Manajemen Konten Terbaik</string>
+    <string name="btn_start">Mulai Model Lokal</string>
+    <string name="chat_hint">Ketik pesan...</string>
+    <string name="btn_send">Kirim</string>
+</resources>
