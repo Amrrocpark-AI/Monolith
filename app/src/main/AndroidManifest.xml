@@ -5,9 +5,9 @@
         android:allowBackup="true"
         android:label="@string/app_name"
         android:supportsRtl="true"
-        android:usesCleartextTraffic="false" 
+        android:usesCleartextTraffic="false"
         android:theme="@style/Theme.Monolith">
-        
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -19,8 +19,11 @@
             </intent-filter>
         </activity>
 
-        <!-- هذا هو السطر الجديد الذي أضفناه لشاشة الدردشة -->
+        <!-- شاشة الدردشة -->
         <activity android:name=".ChatActivity" />
+        
+        <!-- شاشة الإعدادات (السطر الجديد الذي أضفناه) -->
+        <activity android:name=".SettingsActivity" />
 
     </application>
 
