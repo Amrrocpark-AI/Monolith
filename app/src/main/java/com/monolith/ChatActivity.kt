@@ -1,8 +1,11 @@
 package com.monolith
 
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.GradientDrawable
+import android.net.Uri
 import android.os.Bundle
 import android.view.Gravity
 import android.view.inputmethod.EditorInfo
@@ -53,26 +56,45 @@ class ChatActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         val sharedPreferences = getSharedPreferences("Settings", MODE_PRIVATE)
-        val savedColor = sharedPreferences.getString("AppBackground", "#0A0A0A") ?: "#0A0A0A"
-        
         val rootLayout = findViewById<LinearLayout>(R.id.rootLayout)
-        rootLayout.setBackgroundColor(Color.parseColor(savedColor))
 
-        // تغيير لون النصوص بناءً على الخلفية
+        // 1. التحقق من وجود صورة محفوظة أولاً
+        val imageUriString = sharedPreferences.getString("AppBackgroundImage", null)
+        
+        if (imageUriString != null) {
+            try {
+                val uri = Uri.parse(imageUriString)
+                val inputStream = contentResolver.openInputStream(uri)
+                val bitmap = BitmapFactory.decodeStream(inputStream)
+                rootLayout.background = BitmapDrawable(resources, bitmap)
+            } catch (e: Exception) {
+                // إذا فشل تحميل الصورة، نعود للون
+                applyColorBackground(sharedPreferences, rootLayout)
+            }
+        } else {
+            // إذا لم توجد صورة، نطبق اللون المحفوظ
+            applyColorBackground(sharedPreferences, rootLayout)
+        }
+
+        // تغيير لون النصوص بناءً على الخلفية (نفترض هنا دائماً وضع النصوص البيضاء أو السوداء حسب اللون)
+        val savedColor = sharedPreferences.getString("AppBackground", "#0A0A0A") ?: "#0A0A0A"
         val etMessage = findViewById<EditText>(R.id.etMessage)
         val btnSettings = findViewById<Button>(R.id.btnSettings)
         
         if (savedColor == "#FFFFFF") {
-            // إذا كانت الخلفية بيضاء، اجعل النصوص سوداء
             etMessage.setTextColor(Color.BLACK)
             etMessage.setHintTextColor(Color.GRAY)
             btnSettings.setTextColor(Color.BLACK)
         } else {
-            // إذا كانت الخلفية داكنة، اجعل النصوص بيضاء
             etMessage.setTextColor(Color.WHITE)
             etMessage.setHintTextColor(Color.parseColor("#666666"))
             btnSettings.setTextColor(Color.WHITE)
         }
+    }
+
+    private fun applyColorBackground(sharedPreferences: android.content.SharedPreferences, rootLayout: LinearLayout) {
+        val savedColor = sharedPreferences.getString("AppBackground", "#0A0A0A") ?: "#0A0A0A"
+        rootLayout.setBackgroundColor(Color.parseColor(savedColor))
     }
 
     private fun addChatBubble(container: LinearLayout, text: String, isUser: Boolean) {
