@@ -1,17 +1,23 @@
-طpackage com.monolith
+package com.monolith
 
+import android.content.Context
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.graphics.Color
-import android.graphics.PorterDuff
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.Gravity
 import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -22,13 +28,18 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 class ChatActivity : AppCompatActivity() {
     
     private var selectedImageUri: Uri? = null
+    private lateinit var etMessage: EditText
+    private lateinit var btnSend: TextView
+    private lateinit var imagePreviewContainer: LinearLayout
+    private lateinit var ivPreviewImage: ImageView
+    private lateinit var tvImagePreviewText: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_chat)
 
-        val etMessage = findViewById<EditText>(R.id.etMessage)
-        val btnSend = findViewById<TextView>(R.id.btnSend)
+        etMessage = findViewById(R.id.etMessage)
+        btnSend = findViewById(R.id.btnSend)
         val btnSettings = findViewById<TextView>(R.id.btnSettings)
         val btnBack = findViewById<TextView>(R.id.btnBack)
         val btnAttach = findViewById<TextView>(R.id.btnAttach)
@@ -38,47 +49,75 @@ class ChatActivity : AppCompatActivity() {
         val chatContainer = findViewById<LinearLayout>(R.id.chatContainer)
         val chatScrollView = findViewById<android.widget.ScrollView>(R.id.chatScrollView)
         
-        val imagePreviewContainer = findViewById<LinearLayout>(R.id.imagePreviewContainer)
-        val tvImagePreviewText = findViewById<TextView>(R.id.tvImagePreviewText)
+        imagePreviewContainer = findViewById(R.id.imagePreviewContainer)
+        ivPreviewImage = findViewById(R.id.ivPreviewImage)
+        tvImagePreviewText = findViewById(R.id.tvImagePreviewText)
         val btnRemoveImage = findViewById<TextView>(R.id.btnRemoveImage)
 
-        // 1. برمجة زر الإرفاق لفتح القائمة السفلية
+        // استعادة الصورة إذا تم تدوير الشاشة
+        if (savedInstanceState != null) {
+            val savedUriString = savedInstanceState.getString("savedImageUri")
+            if (savedUriString != null) {
+                selectedImageUri = Uri.parse(savedUriString)
+                showImagePreview(selectedImageUri!!)
+            }
+        }
+
+        // تعطيل زر الإرسال في البداية
+        btnSend.isEnabled = false
+        btnSend.alpha = 0.5f
+
+        // مراقبة الكتابة لتفعيل/تعطيل زر الإرسال
+        etMessage.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                val hasText = !s.isNullOrEmpty()
+                val hasImage = selectedImageUri != null
+                btnSend.isEnabled = hasText || hasImage
+                btnSend.alpha = if (hasText || hasImage) 1.0f else 0.5f
+            }
+            override fun afterTextChanged(s: Editable?) {}
+        })
+
         btnAttach.setOnClickListener {
+            hideKeyboard()
             showAttachBottomSheet()
         }
 
-        // 2. إزالة الملف المرفق
         btnRemoveImage.setOnClickListener {
             selectedImageUri = null
             imagePreviewContainer.visibility = LinearLayout.GONE
+            ivPreviewImage.setImageDrawable(null)
+            btnSend.isEnabled = etMessage.text.isNotEmpty()
+            btnSend.alpha = if (btnSend.isEnabled) 1.0f else 0.5f
         }
 
-        // 3. زر الرجوع
         btnBack.setOnClickListener { finish() }
 
-        // 4. زر الإعدادات
         btnSettings.setOnClickListener {
             val intent = Intent(this, SettingsActivity::class.java)
             startActivity(intent)
         }
 
-        // 5. أزرار أخرى (مؤقتاً)
         btnMic.setOnClickListener { Toast.makeText(this, "تسجيل الصوت قريباً", Toast.LENGTH_SHORT).show() }
         btnVisionToggle.setOnClickListener { Toast.makeText(this, "الرؤية الحاسوبية قريباً", Toast.LENGTH_SHORT).show() }
 
-        // 6. إرسال الرسالة
         fun sendMessage() {
             val message = etMessage.text.toString().trim()
             if (message.isNotEmpty() || selectedImageUri != null) {
+                vibratePhone()
                 if (selectedImageUri != null) {
                     addChatBubble(chatContainer, "📷 [صورة مرفقة] $message", isUser = true)
                     selectedImageUri = null
                     imagePreviewContainer.visibility = LinearLayout.GONE
+                    ivPreviewImage.setImageDrawable(null)
                 } else {
                     addChatBubble(chatContainer, message, isUser = true)
                 }
                 
                 etMessage.text.clear()
+                hideKeyboard()
+                
                 addChatBubble(chatContainer, "جاري الاتصال بالنموذج المحلي...", isUser = false)
                 chatScrollView.post { chatScrollView.fullScroll(android.widget.ScrollView.FOCUS_DOWN) }
             }
@@ -96,7 +135,19 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    // دالة إظهار القائمة السفلية
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString("savedImageUri", selectedImageUri?.toString())
+    }
+
+    private fun showImagePreview(uri: Uri) {
+        imagePreviewContainer.visibility = LinearLayout.VISIBLE
+        ivPreviewImage.setImageURI(uri)
+        tvImagePreviewText.text = "صورة جاهزة للإرسال"
+        btnSend.isEnabled = true
+        btnSend.alpha = 1.0f
+    }
+
     private fun showAttachBottomSheet() {
         val bottomSheetDialog = BottomSheetDialog(this)
         val bottomSheetView = layoutInflater.inflate(R.layout.bottom_sheet_attach, null)
@@ -107,17 +158,12 @@ class ChatActivity : AppCompatActivity() {
         val btnOptionAudio = bottomSheetView.findViewById<TextView>(R.id.btnOptionAudio)
         val btnOptionSearch = bottomSheetView.findViewById<TextView>(R.id.btnOptionSearch)
 
-        // معالجة النقر على الخيارات
         btnOptionImage.setOnClickListener {
             bottomSheetDialog.dismiss()
-            // فتح المعرض
             val pickImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
                 if (uri != null) {
                     selectedImageUri = uri
-                    val imagePreviewContainer = findViewById<LinearLayout>(R.id.imagePreviewContainer)
-                    val tvImagePreviewText = findViewById<TextView>(R.id.tvImagePreviewText)
-                    imagePreviewContainer.visibility = LinearLayout.VISIBLE
-                    tvImagePreviewText.text = "📎 صورة مرفقة جاهزة للإرسال"
+                    showImagePreview(uri)
                 }
             }
             pickImageLauncher.launch("image/*")
@@ -139,6 +185,21 @@ class ChatActivity : AppCompatActivity() {
         }
 
         bottomSheetDialog.show()
+    }
+
+    private fun hideKeyboard() {
+        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        imm.hideSoftInputFromWindow(etMessage.windowToken, 0)
+    }
+
+    private fun vibratePhone() {
+        val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            vibrator.vibrate(VibrationEffect.createOneShot(40, VibrationEffect.DEFAULT_AMPLITUDE))
+        } else {
+            @Suppress("DEPRECATION")
+            vibrator.vibrate(40)
+        }
     }
 
     override fun onResume() {
@@ -173,7 +234,6 @@ class ChatActivity : AppCompatActivity() {
         val savedColor = sharedPreferences.getString("AppBackground", "#0A0A0A") ?: "#0A0A0A"
         val etMessage = findViewById<EditText>(R.id.etMessage)
         
-        // إصلاح ألوان الأيقونات بناءً على الخلفية
         val btnBack = findViewById<TextView>(R.id.btnBack)
         val btnSettings = findViewById<TextView>(R.id.btnSettings)
         val btnVisionToggle = findViewById<TextView>(R.id.btnVisionToggle)
