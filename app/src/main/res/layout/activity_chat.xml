@@ -67,7 +67,7 @@
             android:orientation="vertical" />
     </ScrollView>
 
-    <!-- شريط معاينة المرفقات (تصميم DeepSeek) -->
+    <!-- شريط معاينة المرفقات (تصميم DeepSeek - مصحح) -->
     <LinearLayout
         android:id="@+id/imagePreviewContainer"
         android:layout_width="match_parent"
@@ -79,11 +79,12 @@
         android:layout_marginTop="4dp"
         android:gravity="start|center_vertical">
 
-        <androidx.cardview.widget.CardView
+        <com.google.android.material.card.MaterialCardView
             android:layout_width="60dp"
             android:layout_height="60dp"
             app:cardCornerRadius="8dp"
-            app:cardElevation="0dp">
+            app:cardElevation="0dp"
+            app:strokeWidth="0dp">
 
             <RelativeLayout
                 android:layout_width="match_parent"
@@ -111,7 +112,7 @@
                     android:layout_margin="2dp"/>
 
             </RelativeLayout>
-        </androidx.cardview.widget.CardView>
+        </com.google.android.material.card.MaterialCardView>
     </LinearLayout>
 
     <!-- شريط الإدخال الكبسولة -->
