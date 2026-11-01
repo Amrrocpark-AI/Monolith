@@ -42,7 +42,6 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var chatScrollView: android.widget.ScrollView
     private lateinit var tvAppTitle: TextView
     
-    // متغير لحفظ اللون الحالي
     private var themeColorHex = "#00FF00"
 
     private lateinit var sharedPreferences: SharedPreferences
@@ -80,8 +79,9 @@ class ChatActivity : AppCompatActivity() {
         sharedPreferences = getSharedPreferences("ChatHistory", MODE_PRIVATE)
         messageList = loadMessages()
 
+        // استعادة الرسائل السابقة مع لونها الخاص
         for (msg in messageList) {
-            addChatBubble(chatContainer, msg.content, msg.role == MessageRole.USER)
+            addChatBubble(chatContainer, msg.content, msg.role == MessageRole.USER, msg.colorHex)
         }
         chatScrollView.post { chatScrollView.fullScroll(android.widget.ScrollView.FOCUS_DOWN) }
 
@@ -126,16 +126,19 @@ class ChatActivity : AppCompatActivity() {
             try {
                 val message = etMessage.text.toString().trim()
                 if (message.isNotEmpty() || selectedImageUri != null) {
+                    
                     vibratePhone() 
                     
+                    // حفظ اللون الحالي داخل الرسالة نفسها
                     val userMsg = ChatMessage(
                         role = MessageRole.USER,
                         content = if(selectedImageUri != null) "📷 [صورة مرفقة] $message" else message,
-                        attachmentUri = selectedImageUri?.toString()
+                        attachmentUri = selectedImageUri?.toString(),
+                        colorHex = themeColorHex 
                     )
                     messageList.add(userMsg)
                     saveMessages()
-                    addChatBubble(chatContainer, userMsg.content, isUser = true)
+                    addChatBubble(chatContainer, userMsg.content, isUser = true, colorHex = userMsg.colorHex)
 
                     selectedImageUri = null
                     imagePreviewContainer.visibility = LinearLayout.GONE
@@ -143,16 +146,15 @@ class ChatActivity : AppCompatActivity() {
                     etMessage.text.clear()
                     hideKeyboard()
                     
-                    val aiMsg = ChatMessage(role = MessageRole.AI, content = "جاري الاتصال بالنموذج المحلي...")
+                    val aiMsg = ChatMessage(role = MessageRole.AI, content = "جاري الاتصال بالنموذج المحلي...", colorHex = "#2A2A2A")
                     messageList.add(aiMsg)
                     saveMessages()
-                    addChatBubble(chatContainer, aiMsg.content, isUser = false)
+                    addChatBubble(chatContainer, aiMsg.content, isUser = false, colorHex = aiMsg.colorHex)
                     
                     chatScrollView.post { chatScrollView.fullScroll(android.widget.ScrollView.FOCUS_DOWN) }
                 }
             } catch (e: Exception) {
-                Toast.makeText(this, "حدث خطأ غير متوقع: ${e.message}", Toast.LENGTH_LONG).show()
-                e.printStackTrace()
+                Toast.makeText(this, "حدث خطأ: ${e.message}", Toast.LENGTH_LONG).show()
             }
         }
 
@@ -254,9 +256,7 @@ class ChatActivity : AppCompatActivity() {
                 @Suppress("DEPRECATION")
                 vibrator.vibrate(40)
             }
-        } catch (e: Exception) {
-            // التطبيق سيكمل العمل حتى لو فشل الاهتزاز
-        }
+        } catch (e: Exception) {}
     }
 
     override fun onResume() {
@@ -265,7 +265,7 @@ class ChatActivity : AppCompatActivity() {
             val settingsPrefs = getSharedPreferences("Settings", MODE_PRIVATE)
             val rootLayout = findViewById<LinearLayout>(R.id.rootLayout)
 
-            // 1. قراءة اللون المحفوظ وتطبيقه على العناصر
+            // قراءة اللون الحالي لتطبيقه على الأزرار العلوية فقط
             themeColorHex = settingsPrefs.getString("AppThemeColor", "#00FF00") ?: "#00FF00"
             val themeColor = Color.parseColor(themeColorHex)
             
@@ -275,7 +275,6 @@ class ChatActivity : AppCompatActivity() {
             val btnAttach = findViewById<ImageButton>(R.id.btnAttach)
             btnAttach.setColorFilter(themeColor, PorterDuff.Mode.SRC_IN)
 
-            // 2. إعداد الخلفية (صورة أو لون)
             val imageUriString = settingsPrefs.getString("AppBackgroundImage", null)
             
             if (imageUriString != null) {
@@ -300,7 +299,6 @@ class ChatActivity : AppCompatActivity() {
                 }
             }
 
-            // 3. تعديل ألوان أيقونات الشريط العلوي بناءً على الخلفية
             val savedColor = settingsPrefs.getString("AppBackground", "#0A0A0A") ?: "#0A0A0A"
             val btnBack = findViewById<ImageButton>(R.id.btnBack)
             val btnSettings = findViewById<ImageButton>(R.id.btnSettings)
@@ -329,7 +327,8 @@ class ChatActivity : AppCompatActivity() {
         rootLayout.setBackgroundColor(Color.parseColor(savedColor))
     }
 
-    private fun addChatBubble(container: LinearLayout, text: String, isUser: Boolean) {
+    // الدالة المعدلة لاستقبال اللون
+    private fun addChatBubble(container: LinearLayout, text: String, isUser: Boolean, colorHex: String) {
         val textView = TextView(this)
         textView.text = text
         textView.textSize = 16f
@@ -341,8 +340,8 @@ class ChatActivity : AppCompatActivity() {
         textView.textAlignment = TextView.TEXT_ALIGNMENT_CENTER
 
         val background = GradientDrawable()
-        // استخدام اللون المخصص للفقاعة
-        background.setColor(if (isUser) Color.parseColor(themeColorHex) else Color.parseColor("#CC2A2A2A"))
+        // استخدام اللون الممرر (الخاص بالرسالة)
+        background.setColor(Color.parseColor(colorHex)) 
         background.cornerRadius = 40f
         textView.background = background
 
