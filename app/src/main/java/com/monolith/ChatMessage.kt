@@ -2,7 +2,7 @@ package com.monolith
 
 import java.util.UUID
 
-// 1. تحديد نوع الرسالة (هل هي نص، صورة، ملف، إلخ)
+// 1. تحديد نوع الرسالة
 enum class MessageType {
     TEXT,
     IMAGE,
@@ -11,7 +11,7 @@ enum class MessageType {
     SYSTEM
 }
 
-// 2. تحديد من أرسل الرسالة (أنت، الذكاء الاصطناعي، أو نظام التطبيق)
+// 2. تحديد من أرسل الرسالة
 enum class MessageRole {
     USER,
     AI,
@@ -20,30 +20,16 @@ enum class MessageRole {
 
 // 3. القالب الاحترافي الشامل للرسالة
 data class ChatMessage(
-    // معرف فريد لكل رسالة (يولد تلقائياً)
     val id: String = UUID.randomUUID().toString(),
-    
-    // من أرسلها؟
     val role: MessageRole,
-    
-    // ما نوعها؟
     val type: MessageType = MessageType.TEXT,
-    
-    // النص أو المحتوى
     val content: String,
-    
-    // مسار المرفق (إذا كانت صورة أو ملف)
     val attachmentUri: String? = null,
-    
-    // وقت الإرسال
     val timestamp: Long = System.currentTimeMillis(),
-    
-    // حالة الرسالة (هل هي في طور الإرسال؟ هل فشلت؟)
     val isError: Boolean = false,
-    
-    // لتمييز الرسائل كـ "مفضلة"
     val isStarred: Boolean = false,
+    val tokensUsed: Int = 0,
     
-    // لعدّ التوكنز التي يستهلكها الذكاء الاصطناعي (لرسومنا البيانية لاحقاً)
-    val tokensUsed: Int = 0
+    // الحقل الجديد: لحفظ لون كل رسالة على حدة (حتى لا يتغير عند إعادة فتح التطبيق)
+    val colorHex: String = "#00FF00" 
 )
