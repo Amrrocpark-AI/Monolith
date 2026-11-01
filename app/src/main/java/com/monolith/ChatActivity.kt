@@ -1,5 +1,6 @@
 package com.monolith
 
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
@@ -20,6 +21,13 @@ class ChatActivity : AppCompatActivity() {
         val btnSend = findViewById<Button>(R.id.btnSend)
         val chatContainer = findViewById<LinearLayout>(R.id.chatContainer)
         val chatScrollView = findViewById<android.widget.ScrollView>(R.id.chatScrollView)
+        val btnSettings = findViewById<Button>(R.id.btnSettings) // زر الإعدادات الجديد
+
+        // فتح شاشة الإعدادات عند الضغط على الترس
+        btnSettings.setOnClickListener {
+            val intent = Intent(this, SettingsActivity::class.java)
+            startActivity(intent)
+        }
 
         fun sendMessage() {
             val message = etMessage.text.toString().trim()
