@@ -24,7 +24,9 @@
             android:background="?attr/selectableItemBackgroundBorderless"
             android:tint="#FFFFFF" />
 
+        <!-- أضفنا ID هنا لتغيير لونه لاحقاً -->
         <TextView
+            android:id="@+id/tvAppTitle"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
@@ -150,13 +152,14 @@
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:tint="#FFFFFF" />
 
+            <!-- زر الإرسال أصبح شفافاً (بدون خلفية خضراء) -->
             <ImageButton
                 android:id="@+id/btnSend"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
                 android:src="@drawable/ic_send"
-                android:backgroundTint="#00FF00"
-                android:tint="#000000"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:tint="#00FF00"
                 android:layout_marginStart="4dp" />
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
