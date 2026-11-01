@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.graphics.PorterDuff
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
@@ -18,6 +19,7 @@ import android.view.Gravity
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
+import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -32,7 +34,7 @@ class ChatActivity : AppCompatActivity() {
     
     private var selectedImageUri: Uri? = null
     private lateinit var etMessage: EditText
-    private lateinit var btnSend: TextView
+    private lateinit var btnSend: ImageButton
     private lateinit var imagePreviewContainer: LinearLayout
     private lateinit var ivPreviewImage: ImageView
     private lateinit var tvImagePreviewText: TextView
@@ -43,7 +45,6 @@ class ChatActivity : AppCompatActivity() {
     private val gson = Gson()
     private var messageList: MutableList<ChatMessage> = mutableListOf()
 
-    // الإصلاح: تعريف مشغل المعرض هنا كمتغير عام (وليس داخل الزر)
     private val pickImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         if (uri != null) {
             selectedImageUri = uri
@@ -57,11 +58,11 @@ class ChatActivity : AppCompatActivity() {
 
         etMessage = findViewById(R.id.etMessage)
         btnSend = findViewById(R.id.btnSend)
-        val btnSettings = findViewById<TextView>(R.id.btnSettings)
-        val btnBack = findViewById<TextView>(R.id.btnBack)
-        val btnAttach = findViewById<TextView>(R.id.btnAttach)
-        val btnMic = findViewById<TextView>(R.id.btnMic)
-        val btnVisionToggle = findViewById<TextView>(R.id.btnVisionToggle)
+        val btnSettings = findViewById<ImageButton>(R.id.btnSettings)
+        val btnBack = findViewById<ImageButton>(R.id.btnBack)
+        val btnAttach = findViewById<ImageButton>(R.id.btnAttach)
+        val btnMic = findViewById<ImageButton>(R.id.btnMic)
+        val btnVisionToggle = findViewById<ImageButton>(R.id.btnVisionToggle)
         
         chatContainer = findViewById(R.id.chatContainer)
         chatScrollView = findViewById(R.id.chatScrollView)
@@ -69,13 +70,11 @@ class ChatActivity : AppCompatActivity() {
         imagePreviewContainer = findViewById(R.id.imagePreviewContainer)
         ivPreviewImage = findViewById(R.id.ivPreviewImage)
         tvImagePreviewText = findViewById(R.id.tvImagePreviewText)
-        val btnRemoveImage = findViewById<TextView>(R.id.btnRemoveImage)
+        val btnRemoveImage = findViewById<ImageButton>(R.id.btnRemoveImage)
 
-        // تهيئة الذاكرة
         sharedPreferences = getSharedPreferences("ChatHistory", MODE_PRIVATE)
         messageList = loadMessages()
 
-        // استعادة الرسائل السابقة
         for (msg in messageList) {
             addChatBubble(chatContainer, msg.content, msg.role == MessageRole.USER)
         }
@@ -137,7 +136,6 @@ class ChatActivity : AppCompatActivity() {
                 etMessage.text.clear()
                 hideKeyboard()
                 
-                // رد وهمي (سنستبدله بالذكاء الاصطناعي لاحقاً)
                 val aiMsg = ChatMessage(role = MessageRole.AI, content = "جاري الاتصال بالنموذج المحلي...")
                 messageList.add(aiMsg)
                 saveMessages()
@@ -164,7 +162,6 @@ class ChatActivity : AppCompatActivity() {
         sharedPreferences.edit().putString("messages", json).apply()
     }
 
-    // الإصلاح: إضافة حماية (Try-Catch) لمنع الانهيار إذا كانت هناك بيانات قديمة
     private fun loadMessages(): MutableList<ChatMessage> {
         val json = sharedPreferences.getString("messages", null)
         return if (json != null) {
@@ -172,7 +169,6 @@ class ChatActivity : AppCompatActivity() {
                 val type = object : TypeToken<MutableList<ChatMessage>>() {}.type
                 gson.fromJson<MutableList<ChatMessage>>(json, type) ?: mutableListOf()
             } catch (e: Exception) {
-                // إذا فشل تحميل البيانات القديمة، نبدأ من جديد
                 mutableListOf()
             }
         } else {
@@ -192,7 +188,6 @@ class ChatActivity : AppCompatActivity() {
 
         btnOptionImage.setOnClickListener {
             bottomSheetDialog.dismiss()
-            // الإصلاح: استخدام المشغل المُعرف في الأعلى
             pickImageLauncher.launch("image/*")
         }
 
@@ -267,24 +262,24 @@ class ChatActivity : AppCompatActivity() {
         }
 
         val savedColor = settingsPrefs.getString("AppBackground", "#0A0A0A") ?: "#0A0A0A"
-        val etMessage = findViewById<EditText>(R.id.etMessage)
         
-        val btnBack = findViewById<TextView>(R.id.btnBack)
-        val btnSettings = findViewById<TextView>(R.id.btnSettings)
-        val btnVisionToggle = findViewById<TextView>(R.id.btnVisionToggle)
+        // استخدام setColorFilter لأن الأزرار الآن ImageButton وليست TextView
+        val btnBack = findViewById<ImageButton>(R.id.btnBack)
+        val btnSettings = findViewById<ImageButton>(R.id.btnSettings)
+        val btnVisionToggle = findViewById<ImageButton>(R.id.btnVisionToggle)
         
         if (savedColor == "#FFFFFF" && imageUriString == null) {
             etMessage.setTextColor(Color.BLACK)
             etMessage.setHintTextColor(Color.GRAY)
-            btnBack.setTextColor(Color.BLACK)
-            btnSettings.setTextColor(Color.BLACK)
-            btnVisionToggle.setTextColor(Color.BLACK)
+            btnBack.setColorFilter(Color.BLACK, PorterDuff.Mode.SRC_IN)
+            btnSettings.setColorFilter(Color.BLACK, PorterDuff.Mode.SRC_IN)
+            btnVisionToggle.setColorFilter(Color.BLACK, PorterDuff.Mode.SRC_IN)
         } else {
             etMessage.setTextColor(Color.WHITE)
             etMessage.setHintTextColor(Color.parseColor("#666666"))
-            btnBack.setTextColor(Color.WHITE)
-            btnSettings.setTextColor(Color.WHITE)
-            btnVisionToggle.setTextColor(Color.WHITE)
+            btnBack.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN)
+            btnSettings.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN)
+            btnVisionToggle.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN)
         }
     }
 
