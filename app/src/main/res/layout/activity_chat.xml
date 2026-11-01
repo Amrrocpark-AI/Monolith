@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/rootLayout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -7,24 +8,53 @@
     android:background="#0A0A0A"
     android:padding="8dp">
 
-    <!-- شريط علوي يحتوي على زر الإعدادات -->
+    <!-- الشريط العلوي (Header) -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:gravity="end"
+        android:gravity="center_vertical"
         android:padding="4dp">
 
-        <Button
-            android:id="@+id/btnSettings"
-            android:layout_width="wrap_content"
+        <!-- زر الرجوع (أيقونة سهم النظام) -->
+        <ImageButton
+            android:id="@+id/btnBack"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:src="@android:drawable/ic_menu_revert"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:tint="#FFFFFF" />
+
+        <TextView
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:text="⛭"
+            android:layout_weight="1"
+            android:text="مونوليث"
             android:textColor="#00FF00"
-            android:textSize="28sp"
-            android:backgroundTint="#00000000" />
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:gravity="center" />
+
+        <!-- زر الرؤية الحاسوبية (أيقونة كاميرا النظام) -->
+        <ImageButton
+            android:id="@+id/btnVisionToggle"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:src="@android:drawable/ic_menu_camera"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:tint="#FFFFFF" />
+
+        <!-- زر الإعدادات (أيقونة إعدادات النظام) -->
+        <ImageButton
+            android:id="@+id/btnSettings"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:src="@android:drawable/ic_menu_preferences"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:tint="#FFFFFF" />
     </LinearLayout>
 
+    <!-- منطقة الرسائل -->
     <ScrollView
         android:id="@+id/chatScrollView"
         android:layout_width="match_parent"
@@ -39,37 +69,93 @@
             android:orientation="vertical" />
     </ScrollView>
 
+    <!-- منطقة معاينة الصور المرفقة -->
     <LinearLayout
+        android:id="@+id/imagePreviewContainer"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:layout_marginTop="8dp"
-        android:background="#1A1A1A"
+        android:visibility="gone"
         android:padding="8dp"
-        android:gravity="center_vertical">
-
-        <EditText
-            android:id="@+id/etMessage"
+        android:background="#1A1A1A">
+        
+        <TextView
+            android:id="@+id/tvImagePreviewText"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:hint="@string/chat_hint"
-            android:textColor="#FFFFFF"
-            android:textColorHint="#666666"
-            android:background="@android:color/transparent"
-            android:padding="12dp"
-            android:imeOptions="actionSend"
-            android:maxLines="4" />
+            android:text="صورة مرفقة"
+            android:textColor="#FFFFFF" />
 
-        <Button
-            android:id="@+id/btnSend"
-            android:layout_width="wrap_content"
-            android:layout_height="48dp"
-            android:text="@string/btn_send"
-            android:backgroundTint="#00FF00"
-            android:textColor="#000000"
-            android:textStyle="bold"
-            android:layout_marginStart="8dp" />
+        <ImageButton
+            android:id="@+id/btnRemoveImage"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:src="@android:drawable/ic_menu_close_clear_cancel"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:tint="#FF4444" />
     </LinearLayout>
+
+    <!-- شريط الإدخال الكبسولة -->
+    <com.google.android.material.card.MaterialCardView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        app:cardCornerRadius="30dp"
+        app:cardBackgroundColor="#CC1A1A1A"
+        app:cardElevation="0dp"
+        app:strokeWidth="1dp"
+        app:strokeColor="#33FFFFFF">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="4dp">
+
+            <!-- زر الإضافة (أيقونة + النظام) -->
+            <ImageButton
+                android:id="@+id/btnAttach"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:src="@android:drawable/ic_menu_add"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:tint="#00FF00" />
+
+            <!-- مربع الكتابة -->
+            <EditText
+                android:id="@+id/etMessage"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="@string/chat_hint"
+                android:textColor="#FFFFFF"
+                android:textColorHint="#888888"
+                android:background="@android:color/transparent"
+                android:padding="8dp"
+                android:imeOptions="actionSend"
+                android:maxLines="4" />
+
+            <!-- زر المايك (أيقونة صوت النظام) -->
+            <ImageButton
+                android:id="@+id/btnMic"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:src="@android:drawable/ic_btn_speak_now"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:tint="#FFFFFF" />
+
+            <!-- زر الإرسال (أيقونة إرسال النظام) -->
+            <ImageButton
+                android:id="@+id/btnSend"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:src="@android:drawable/ic_menu_send"
+                android:backgroundTint="#00FF00"
+                android:tint="#000000"
+                android:layout_marginStart="4dp" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
 
 </LinearLayout>
