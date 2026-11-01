@@ -2,4 +2,6 @@
     <string name="app_name">Monolith</string>
     <string name="app_subtitle">The Ultimate Content Management System</string>
     <string name="btn_start">Start Local Model</string>
+    <string name="chat_hint">Type a message...</string>
+    <string name="btn_send">Send</string>
 </resources>
