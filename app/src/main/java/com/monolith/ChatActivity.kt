@@ -118,30 +118,37 @@ class ChatActivity : AppCompatActivity() {
         btnVisionToggle.setOnClickListener { Toast.makeText(this, "الرؤية الحاسوبية قريباً", Toast.LENGTH_SHORT).show() }
 
         fun sendMessage() {
-            val message = etMessage.text.toString().trim()
-            if (message.isNotEmpty() || selectedImageUri != null) {
-                vibratePhone()
-                
-                val userMsg = ChatMessage(
-                    role = MessageRole.USER,
-                    content = if(selectedImageUri != null) "📷 [صورة مرفقة] $message" else message
-                )
-                messageList.add(userMsg)
-                saveMessages()
-                addChatBubble(chatContainer, userMsg.content, isUser = true)
+            try {
+                val message = etMessage.text.toString().trim()
+                if (message.isNotEmpty() || selectedImageUri != null) {
+                    
+                    vibratePhone() 
+                    
+                    val userMsg = ChatMessage(
+                        role = MessageRole.USER,
+                        content = if(selectedImageUri != null) "📷 [صورة مرفقة] $message" else message,
+                        attachmentUri = selectedImageUri?.toString()
+                    )
+                    messageList.add(userMsg)
+                    saveMessages()
+                    addChatBubble(chatContainer, userMsg.content, isUser = true)
 
-                selectedImageUri = null
-                imagePreviewContainer.visibility = LinearLayout.GONE
-                ivPreviewImage.setImageDrawable(null)
-                etMessage.text.clear()
-                hideKeyboard()
-                
-                val aiMsg = ChatMessage(role = MessageRole.AI, content = "جاري الاتصال بالنموذج المحلي...")
-                messageList.add(aiMsg)
-                saveMessages()
-                addChatBubble(chatContainer, aiMsg.content, isUser = false)
-                
-                chatScrollView.post { chatScrollView.fullScroll(android.widget.ScrollView.FOCUS_DOWN) }
+                    selectedImageUri = null
+                    imagePreviewContainer.visibility = LinearLayout.GONE
+                    ivPreviewImage.setImageDrawable(null)
+                    etMessage.text.clear()
+                    hideKeyboard()
+                    
+                    val aiMsg = ChatMessage(role = MessageRole.AI, content = "جاري الاتصال بالنموذج المحلي...")
+                    messageList.add(aiMsg)
+                    saveMessages()
+                    addChatBubble(chatContainer, aiMsg.content, isUser = false)
+                    
+                    chatScrollView.post { chatScrollView.fullScroll(android.widget.ScrollView.FOCUS_DOWN) }
+                }
+            } catch (e: Exception) {
+                Toast.makeText(this, "حدث خطأ غير متوقع: ${e.message}", Toast.LENGTH_LONG).show()
+                e.printStackTrace()
             }
         }
 
@@ -158,8 +165,12 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun saveMessages() {
-        val json = gson.toJson(messageList)
-        sharedPreferences.edit().putString("messages", json).apply()
+        try {
+            val json = gson.toJson(messageList)
+            sharedPreferences.edit().putString("messages", json).apply()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     private fun loadMessages(): MutableList<ChatMessage> {
@@ -188,7 +199,11 @@ class ChatActivity : AppCompatActivity() {
 
         btnOptionImage.setOnClickListener {
             bottomSheetDialog.dismiss()
-            pickImageLauncher.launch("image/*")
+            try {
+                pickImageLauncher.launch("image/*")
+            } catch (e: Exception) {
+                Toast.makeText(this, "لا يمكن فتح المعرض", Toast.LENGTH_SHORT).show()
+            }
         }
 
         btnOptionDocument.setOnClickListener {
@@ -210,11 +225,15 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun showImagePreview(uri: Uri) {
-        imagePreviewContainer.visibility = LinearLayout.VISIBLE
-        ivPreviewImage.setImageURI(uri)
-        tvImagePreviewText.text = "صورة جاهزة للإرسال"
-        btnSend.isEnabled = true
-        btnSend.alpha = 1.0f
+        try {
+            imagePreviewContainer.visibility = LinearLayout.VISIBLE
+            ivPreviewImage.setImageURI(uri)
+            tvImagePreviewText.text = "صورة جاهزة للإرسال"
+            btnSend.isEnabled = true
+            btnSend.alpha = 1.0f
+        } catch (e: Exception) {
+            Toast.makeText(this, "تعذر تحميل الصورة", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun hideKeyboard() {
@@ -223,63 +242,70 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun vibratePhone() {
-        val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            vibrator.vibrate(VibrationEffect.createOneShot(40, VibrationEffect.DEFAULT_AMPLITUDE))
-        } else {
-            @Suppress("DEPRECATION")
-            vibrator.vibrate(40)
+        try {
+            val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator.vibrate(VibrationEffect.createOneShot(40, VibrationEffect.DEFAULT_AMPLITUDE))
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(40)
+            }
+        } catch (e: Exception) {
+            // التطبيق سيكمل العمل حتى لو فشل الاهتزاز
         }
     }
 
     override fun onResume() {
         super.onResume()
-        val settingsPrefs = getSharedPreferences("Settings", MODE_PRIVATE)
-        val rootLayout = findViewById<LinearLayout>(R.id.rootLayout)
+        try {
+            val settingsPrefs = getSharedPreferences("Settings", MODE_PRIVATE)
+            val rootLayout = findViewById<LinearLayout>(R.id.rootLayout)
 
-        val imageUriString = settingsPrefs.getString("AppBackgroundImage", null)
-        
-        if (imageUriString != null) {
-            try {
-                val uri = Uri.parse(imageUriString)
-                val inputStream = contentResolver.openInputStream(uri)
-                val options = BitmapFactory.Options()
-                options.inSampleSize = 2 
-                val bitmap = BitmapFactory.decodeStream(inputStream, null, options)
-                rootLayout.background = BitmapDrawable(resources, bitmap)
-                
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    rootLayout.foreground = android.graphics.drawable.ColorDrawable(Color.parseColor("#99000000"))
+            val imageUriString = settingsPrefs.getString("AppBackgroundImage", null)
+            
+            if (imageUriString != null) {
+                try {
+                    val uri = Uri.parse(imageUriString)
+                    val inputStream = contentResolver.openInputStream(uri)
+                    val options = BitmapFactory.Options()
+                    options.inSampleSize = 2 
+                    val bitmap = BitmapFactory.decodeStream(inputStream, null, options)
+                    rootLayout.background = BitmapDrawable(resources, bitmap)
+                    
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        rootLayout.foreground = android.graphics.drawable.ColorDrawable(Color.parseColor("#99000000"))
+                    }
+                } catch (e: Exception) {
+                    applyColorBackground(settingsPrefs, rootLayout)
                 }
-            } catch (e: Exception) {
+            } else {
                 applyColorBackground(settingsPrefs, rootLayout)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    rootLayout.foreground = null
+                }
             }
-        } else {
-            applyColorBackground(settingsPrefs, rootLayout)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                rootLayout.foreground = null
-            }
-        }
 
-        val savedColor = settingsPrefs.getString("AppBackground", "#0A0A0A") ?: "#0A0A0A"
-        
-        // استخدام setColorFilter لأن الأزرار الآن ImageButton وليست TextView
-        val btnBack = findViewById<ImageButton>(R.id.btnBack)
-        val btnSettings = findViewById<ImageButton>(R.id.btnSettings)
-        val btnVisionToggle = findViewById<ImageButton>(R.id.btnVisionToggle)
-        
-        if (savedColor == "#FFFFFF" && imageUriString == null) {
-            etMessage.setTextColor(Color.BLACK)
-            etMessage.setHintTextColor(Color.GRAY)
-            btnBack.setColorFilter(Color.BLACK, PorterDuff.Mode.SRC_IN)
-            btnSettings.setColorFilter(Color.BLACK, PorterDuff.Mode.SRC_IN)
-            btnVisionToggle.setColorFilter(Color.BLACK, PorterDuff.Mode.SRC_IN)
-        } else {
-            etMessage.setTextColor(Color.WHITE)
-            etMessage.setHintTextColor(Color.parseColor("#666666"))
-            btnBack.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN)
-            btnSettings.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN)
-            btnVisionToggle.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN)
+            val savedColor = settingsPrefs.getString("AppBackground", "#0A0A0A") ?: "#0A0A0A"
+            
+            val btnBack = findViewById<ImageButton>(R.id.btnBack)
+            val btnSettings = findViewById<ImageButton>(R.id.btnSettings)
+            val btnVisionToggle = findViewById<ImageButton>(R.id.btnVisionToggle)
+            
+            if (savedColor == "#FFFFFF" && imageUriString == null) {
+                etMessage.setTextColor(Color.BLACK)
+                etMessage.setHintTextColor(Color.GRAY)
+                btnBack.setColorFilter(Color.BLACK, PorterDuff.Mode.SRC_IN)
+                btnSettings.setColorFilter(Color.BLACK, PorterDuff.Mode.SRC_IN)
+                btnVisionToggle.setColorFilter(Color.BLACK, PorterDuff.Mode.SRC_IN)
+            } else {
+                etMessage.setTextColor(Color.WHITE)
+                etMessage.setHintTextColor(Color.parseColor("#666666"))
+                btnBack.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN)
+                btnSettings.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN)
+                btnVisionToggle.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 
