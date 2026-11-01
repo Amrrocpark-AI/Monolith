@@ -65,23 +65,31 @@ class SettingsActivity : AppCompatActivity() {
             editor.apply()
         }
 
-        // اختيار صورة الخلفية
-        val pickImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        // اختيار صورة الخلفية (بإذن دائم)
+        val pickImageLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
             if (uri != null) {
-                sharedPreferences.edit().putString("AppBackgroundImage", uri.toString()).apply()
-                Toast.makeText(this, "تم حفظ الصورة بنجاح!", Toast.LENGTH_SHORT).show()
+                try {
+                    // طلب إذن دائم للوصول للصورة
+                    val takeFlags: Int = Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    contentResolver.takePersistableUriPermission(uri, takeFlags)
+                    
+                    sharedPreferences.edit().putString("AppBackgroundImage", uri.toString()).apply()
+                    Toast.makeText(this, "تم حفظ الصورة بإذن دائم!", Toast.LENGTH_SHORT).show()
+                } catch (e: Exception) {
+                    Toast.makeText(this, "حدث خطأ أثناء حفظ الصورة", Toast.LENGTH_SHORT).show()
+                }
             }
         }
 
         btnPickImage.setOnClickListener {
-            pickImageLauncher.launch("image/*")
+            // استخدام المصفوفة لأن OpenDocument يتطلب ذلك
+            pickImageLauncher.launch(arrayOf("image/*"))
         }
 
         // ==========================================
         // منطق شرائح الألوان (RGB)
         // ==========================================
         
-        // دالة لتحديث اللون في مربع المعاينة
         val updateColorPreview = {
             val r = sbRed.progress
             val g = sbGreen.progress
@@ -90,7 +98,6 @@ class SettingsActivity : AppCompatActivity() {
             viewColorPreview.setBackgroundColor(color)
         }
 
-        // إضافة مستمع لكل شريحة لتحديث المعاينة فوراً
         sbRed.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) { updateColorPreview() }
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
@@ -118,7 +125,7 @@ class SettingsActivity : AppCompatActivity() {
             Toast.makeText(this, "تم حفظ اللون: $colorHex", Toast.LENGTH_SHORT).show()
         }
 
-        // استعادة اللون المحفوظ (إذا وجد) لضبط الشرائح عليه عند فتح الشاشة
+        // استعادة اللون المحفوظ
         val savedColorHex = sharedPreferences.getString("AppThemeColor", "#00FF00")
         if (savedColorHex != null) {
             try {
@@ -127,9 +134,7 @@ class SettingsActivity : AppCompatActivity() {
                 sbGreen.progress = Color.green(savedColor)
                 sbBlue.progress = Color.blue(savedColor)
                 viewColorPreview.setBackgroundColor(savedColor)
-            } catch (e: Exception) {
-                // تجاهل الخطأ إذا كان اللون المحفوظ تالفاً
-            }
+            } catch (e: Exception) {}
         }
     }
 }
