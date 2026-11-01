@@ -2,6 +2,7 @@ package com.monolith
 
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.drawable.BitmapDrawable
@@ -24,6 +25,8 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 
 class ChatActivity : AppCompatActivity() {
     
@@ -33,6 +36,13 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var imagePreviewContainer: LinearLayout
     private lateinit var ivPreviewImage: ImageView
     private lateinit var tvImagePreviewText: TextView
+    private lateinit var chatContainer: LinearLayout
+    private lateinit var chatScrollView: android.widget.ScrollView
+
+    // الذاكرة
+    private lateinit var sharedPreferences: SharedPreferences
+    private val gson = Gson()
+    private var messageList: MutableList<ChatMessage> = mutableListOf()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -46,28 +56,28 @@ class ChatActivity : AppCompatActivity() {
         val btnMic = findViewById<TextView>(R.id.btnMic)
         val btnVisionToggle = findViewById<TextView>(R.id.btnVisionToggle)
         
-        val chatContainer = findViewById<LinearLayout>(R.id.chatContainer)
-        val chatScrollView = findViewById<android.widget.ScrollView>(R.id.chatScrollView)
+        chatContainer = findViewById(R.id.chatContainer)
+        chatScrollView = findViewById(R.id.chatScrollView)
         
         imagePreviewContainer = findViewById(R.id.imagePreviewContainer)
         ivPreviewImage = findViewById(R.id.ivPreviewImage)
         tvImagePreviewText = findViewById(R.id.tvImagePreviewText)
         val btnRemoveImage = findViewById<TextView>(R.id.btnRemoveImage)
 
-        // استعادة الصورة إذا تم تدوير الشاشة
-        if (savedInstanceState != null) {
-            val savedUriString = savedInstanceState.getString("savedImageUri")
-            if (savedUriString != null) {
-                selectedImageUri = Uri.parse(savedUriString)
-                showImagePreview(selectedImageUri!!)
-            }
+        // تهيئة الذاكرة
+        sharedPreferences = getSharedPreferences("ChatHistory", MODE_PRIVATE)
+        messageList = loadMessages()
+
+        // استعادة الرسائل السابقة وعرضها
+        for (msg in messageList) {
+            addChatBubble(chatContainer, msg.content, msg.role == MessageRole.USER)
         }
+        chatScrollView.post { chatScrollView.fullScroll(android.widget.ScrollView.FOCUS_DOWN) }
 
         // تعطيل زر الإرسال في البداية
         btnSend.isEnabled = false
         btnSend.alpha = 0.5f
 
-        // مراقبة الكتابة لتفعيل/تعطيل زر الإرسال
         etMessage.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
@@ -106,19 +116,27 @@ class ChatActivity : AppCompatActivity() {
             val message = etMessage.text.toString().trim()
             if (message.isNotEmpty() || selectedImageUri != null) {
                 vibratePhone()
-                if (selectedImageUri != null) {
-                    addChatBubble(chatContainer, "📷 [صورة مرفقة] $message", isUser = true)
-                    selectedImageUri = null
-                    imagePreviewContainer.visibility = LinearLayout.GONE
-                    ivPreviewImage.setImageDrawable(null)
-                } else {
-                    addChatBubble(chatContainer, message, isUser = true)
-                }
                 
+                val userMsg = ChatMessage(
+                    role = MessageRole.USER,
+                    content = if(selectedImageUri != null) "📷 [صورة مرفقة] $message" else message
+                )
+                messageList.add(userMsg)
+                saveMessages()
+                addChatBubble(chatContainer, userMsg.content, isUser = true)
+
+                selectedImageUri = null
+                imagePreviewContainer.visibility = LinearLayout.GONE
+                ivPreviewImage.setImageDrawable(null)
                 etMessage.text.clear()
                 hideKeyboard()
                 
-                addChatBubble(chatContainer, "جاري الاتصال بالنموذج المحلي...", isUser = false)
+                // رد وهمي (مؤقت)
+                val aiMsg = ChatMessage(role = MessageRole.AI, content = "جاري الاتصال بالنموذج المحلي...")
+                messageList.add(aiMsg)
+                saveMessages()
+                addChatBubble(chatContainer, aiMsg.content, isUser = false)
+                
                 chatScrollView.post { chatScrollView.fullScroll(android.widget.ScrollView.FOCUS_DOWN) }
             }
         }
@@ -135,17 +153,19 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    override fun onSaveInstanceState(outState: Bundle) {
-        super.onSaveInstanceState(outState)
-        outState.putString("savedImageUri", selectedImageUri?.toString())
+    private fun saveMessages() {
+        val json = gson.toJson(messageList)
+        sharedPreferences.edit().putString("messages", json).apply()
     }
 
-    private fun showImagePreview(uri: Uri) {
-        imagePreviewContainer.visibility = LinearLayout.VISIBLE
-        ivPreviewImage.setImageURI(uri)
-        tvImagePreviewText.text = "صورة جاهزة للإرسال"
-        btnSend.isEnabled = true
-        btnSend.alpha = 1.0f
+    private fun loadMessages(): MutableList<ChatMessage> {
+        val json = sharedPreferences.getString("messages", null)
+        return if (json != null) {
+            val type = object : TypeToken<MutableList<ChatMessage>>() {}.type
+            gson.fromJson(json, type) ?: mutableListOf()
+        } else {
+            mutableListOf()
+        }
     }
 
     private fun showAttachBottomSheet() {
@@ -187,6 +207,14 @@ class ChatActivity : AppCompatActivity() {
         bottomSheetDialog.show()
     }
 
+    private fun showImagePreview(uri: Uri) {
+        imagePreviewContainer.visibility = LinearLayout.VISIBLE
+        ivPreviewImage.setImageURI(uri)
+        tvImagePreviewText.text = "صورة جاهزة للإرسال"
+        btnSend.isEnabled = true
+        btnSend.alpha = 1.0f
+    }
+
     private fun hideKeyboard() {
         val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
         imm.hideSoftInputFromWindow(etMessage.windowToken, 0)
@@ -204,10 +232,10 @@ class ChatActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        val sharedPreferences = getSharedPreferences("Settings", MODE_PRIVATE)
+        val settingsPrefs = getSharedPreferences("Settings", MODE_PRIVATE)
         val rootLayout = findViewById<LinearLayout>(R.id.rootLayout)
 
-        val imageUriString = sharedPreferences.getString("AppBackgroundImage", null)
+        val imageUriString = settingsPrefs.getString("AppBackgroundImage", null)
         
         if (imageUriString != null) {
             try {
@@ -222,16 +250,16 @@ class ChatActivity : AppCompatActivity() {
                     rootLayout.foreground = android.graphics.drawable.ColorDrawable(Color.parseColor("#99000000"))
                 }
             } catch (e: Exception) {
-                applyColorBackground(sharedPreferences, rootLayout)
+                applyColorBackground(settingsPrefs, rootLayout)
             }
         } else {
-            applyColorBackground(sharedPreferences, rootLayout)
+            applyColorBackground(settingsPrefs, rootLayout)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 rootLayout.foreground = null
             }
         }
 
-        val savedColor = sharedPreferences.getString("AppBackground", "#0A0A0A") ?: "#0A0A0A"
+        val savedColor = settingsPrefs.getString("AppBackground", "#0A0A0A") ?: "#0A0A0A"
         val etMessage = findViewById<EditText>(R.id.etMessage)
         
         val btnBack = findViewById<TextView>(R.id.btnBack)
@@ -253,7 +281,7 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    private fun applyColorBackground(sharedPreferences: android.content.SharedPreferences, rootLayout: LinearLayout) {
+    private fun applyColorBackground(sharedPreferences: SharedPreferences, rootLayout: LinearLayout) {
         val savedColor = sharedPreferences.getString("AppBackground", "#0A0A0A") ?: "#0A0A0A"
         rootLayout.setBackgroundColor(Color.parseColor(savedColor))
     }
