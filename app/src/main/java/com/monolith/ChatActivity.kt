@@ -326,11 +326,15 @@ class ChatActivity : AppCompatActivity() {
         textView.text = text
         textView.textSize = 16f
         
+        // إصلاح: جعل لون النص أبيض أو أسود
         textView.setTextColor(if (isUser) Color.BLACK else Color.WHITE)
-        textView.setPadding(32, 24, 32, 24)
         
+        // إصلاح: مساحات داخلية مريحة (Padding) مثل ChatGPT
+        textView.setPadding(40, 24, 40, 24)
+        
+        // إصلاح: محاذاة النص لليمين (للعربية) وليس المنتصف
         textView.textDirection = if (isUser) TextView.TEXT_DIRECTION_RTL else TextView.TEXT_DIRECTION_LOCALE
-        textView.textAlignment = TextView.TEXT_ALIGNMENT_CENTER
+        textView.textAlignment = TextView.TEXT_ALIGNMENT_VIEW_START
 
         val background = GradientDrawable()
         background.setColor(Color.parseColor(colorHex)) 
