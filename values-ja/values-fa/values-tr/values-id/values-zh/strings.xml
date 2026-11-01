@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">莫诺利斯</string>
+    <string name="app_subtitle">终极内容管理系统</string>
+    <string name="btn_start">启动本地模型</string>
+    <string name="chat_hint">输入消息...</string>
+    <string name="btn_send">发送</string>
+</resources>
