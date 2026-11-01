@@ -6,6 +6,24 @@
     android:background="#0A0A0A"
     android:padding="8dp">
 
+    <!-- شريط علوي يحتوي على زر الإعدادات -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="end"
+        android:padding="4dp">
+
+        <Button
+            android:id="@+id/btnSettings"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="⛭"
+            android:textColor="#00FF00"
+            android:textSize="28sp"
+            android:backgroundTint="#00000000" />
+    </LinearLayout>
+
     <ScrollView
         android:id="@+id/chatScrollView"
         android:layout_width="match_parent"
