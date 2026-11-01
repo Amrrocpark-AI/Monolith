@@ -37,7 +37,6 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var btnSend: ImageButton
     private lateinit var imagePreviewContainer: LinearLayout
     private lateinit var ivPreviewImage: ImageView
-    private lateinit var tvImagePreviewText: TextView
     private lateinit var chatContainer: LinearLayout
     private lateinit var chatScrollView: android.widget.ScrollView
     private lateinit var tvAppTitle: TextView
@@ -73,13 +72,11 @@ class ChatActivity : AppCompatActivity() {
         
         imagePreviewContainer = findViewById(R.id.imagePreviewContainer)
         ivPreviewImage = findViewById(R.id.ivPreviewImage)
-        tvImagePreviewText = findViewById(R.id.tvImagePreviewText)
-        val btnRemoveImage = findViewById<ImageButton>(R.id.btnRemoveImage)
+        val btnRemoveImage = findViewById<TextView>(R.id.btnRemoveImage)
 
         sharedPreferences = getSharedPreferences("ChatHistory", MODE_PRIVATE)
         messageList = loadMessages()
 
-        // استعادة الرسائل السابقة مع لونها الخاص
         for (msg in messageList) {
             addChatBubble(chatContainer, msg.content, msg.role == MessageRole.USER, msg.colorHex)
         }
@@ -129,7 +126,6 @@ class ChatActivity : AppCompatActivity() {
                     
                     vibratePhone() 
                     
-                    // حفظ اللون الحالي داخل الرسالة نفسها
                     val userMsg = ChatMessage(
                         role = MessageRole.USER,
                         content = if(selectedImageUri != null) "📷 [صورة مرفقة] $message" else message,
@@ -234,7 +230,6 @@ class ChatActivity : AppCompatActivity() {
         try {
             imagePreviewContainer.visibility = LinearLayout.VISIBLE
             ivPreviewImage.setImageURI(uri)
-            tvImagePreviewText.text = "صورة جاهزة للإرسال"
             btnSend.isEnabled = true
             btnSend.alpha = 1.0f
         } catch (e: Exception) {
@@ -265,7 +260,6 @@ class ChatActivity : AppCompatActivity() {
             val settingsPrefs = getSharedPreferences("Settings", MODE_PRIVATE)
             val rootLayout = findViewById<LinearLayout>(R.id.rootLayout)
 
-            // قراءة اللون الحالي لتطبيقه على الأزرار العلوية فقط
             themeColorHex = settingsPrefs.getString("AppThemeColor", "#00FF00") ?: "#00FF00"
             val themeColor = Color.parseColor(themeColorHex)
             
@@ -327,7 +321,6 @@ class ChatActivity : AppCompatActivity() {
         rootLayout.setBackgroundColor(Color.parseColor(savedColor))
     }
 
-    // الدالة المعدلة لاستقبال اللون
     private fun addChatBubble(container: LinearLayout, text: String, isUser: Boolean, colorHex: String) {
         val textView = TextView(this)
         textView.text = text
@@ -340,7 +333,6 @@ class ChatActivity : AppCompatActivity() {
         textView.textAlignment = TextView.TEXT_ALIGNMENT_CENTER
 
         val background = GradientDrawable()
-        // استخدام اللون الممرر (الخاص بالرسالة)
         background.setColor(Color.parseColor(colorHex)) 
         background.cornerRadius = 40f
         textView.background = background
