@@ -39,10 +39,17 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var chatContainer: LinearLayout
     private lateinit var chatScrollView: android.widget.ScrollView
 
-    // الذاكرة
     private lateinit var sharedPreferences: SharedPreferences
     private val gson = Gson()
     private var messageList: MutableList<ChatMessage> = mutableListOf()
+
+    // الإصلاح: تعريف مشغل المعرض هنا كمتغير عام (وليس داخل الزر)
+    private val pickImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        if (uri != null) {
+            selectedImageUri = uri
+            showImagePreview(uri)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -68,13 +75,12 @@ class ChatActivity : AppCompatActivity() {
         sharedPreferences = getSharedPreferences("ChatHistory", MODE_PRIVATE)
         messageList = loadMessages()
 
-        // استعادة الرسائل السابقة وعرضها
+        // استعادة الرسائل السابقة
         for (msg in messageList) {
             addChatBubble(chatContainer, msg.content, msg.role == MessageRole.USER)
         }
         chatScrollView.post { chatScrollView.fullScroll(android.widget.ScrollView.FOCUS_DOWN) }
 
-        // تعطيل زر الإرسال في البداية
         btnSend.isEnabled = false
         btnSend.alpha = 0.5f
 
@@ -131,7 +137,7 @@ class ChatActivity : AppCompatActivity() {
                 etMessage.text.clear()
                 hideKeyboard()
                 
-                // رد وهمي (مؤقت)
+                // رد وهمي (سنستبدله بالذكاء الاصطناعي لاحقاً)
                 val aiMsg = ChatMessage(role = MessageRole.AI, content = "جاري الاتصال بالنموذج المحلي...")
                 messageList.add(aiMsg)
                 saveMessages()
@@ -158,11 +164,17 @@ class ChatActivity : AppCompatActivity() {
         sharedPreferences.edit().putString("messages", json).apply()
     }
 
+    // الإصلاح: إضافة حماية (Try-Catch) لمنع الانهيار إذا كانت هناك بيانات قديمة
     private fun loadMessages(): MutableList<ChatMessage> {
         val json = sharedPreferences.getString("messages", null)
         return if (json != null) {
-            val type = object : TypeToken<MutableList<ChatMessage>>() {}.type
-            gson.fromJson(json, type) ?: mutableListOf()
+            try {
+                val type = object : TypeToken<MutableList<ChatMessage>>() {}.type
+                gson.fromJson<MutableList<ChatMessage>>(json, type) ?: mutableListOf()
+            } catch (e: Exception) {
+                // إذا فشل تحميل البيانات القديمة، نبدأ من جديد
+                mutableListOf()
+            }
         } else {
             mutableListOf()
         }
@@ -180,12 +192,7 @@ class ChatActivity : AppCompatActivity() {
 
         btnOptionImage.setOnClickListener {
             bottomSheetDialog.dismiss()
-            val pickImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-                if (uri != null) {
-                    selectedImageUri = uri
-                    showImagePreview(uri)
-                }
-            }
+            // الإصلاح: استخدام المشغل المُعرف في الأعلى
             pickImageLauncher.launch("image/*")
         }
 
