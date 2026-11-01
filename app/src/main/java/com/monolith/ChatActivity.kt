@@ -3,6 +3,7 @@ package com.monolith
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.view.Gravity
 import android.view.inputmethod.EditorInfo
 import android.widget.Button
 import android.widget.EditText
@@ -25,7 +26,6 @@ class ChatActivity : AppCompatActivity() {
             if (message.isNotEmpty()) {
                 addChatBubble(chatContainer, message, isUser = true)
                 etMessage.text.clear()
-                // الرد الوهمي حالياً
                 addChatBubble(chatContainer, "جاري الاتصال بالنموذج المحلي...", isUser = false)
                 chatScrollView.post { chatScrollView.fullScroll(android.widget.ScrollView.FOCUS_DOWN) }
             }
@@ -49,22 +49,29 @@ class ChatActivity : AppCompatActivity() {
         textView.textSize = 16f
         textView.setTextColor(if (isUser) Color.BLACK else Color.WHITE)
         textView.setPadding(32, 24, 32, 24)
-        textView.textAlignment = if (isUser) TextView.TEXT_ALIGNMENT_VIEW_END else TextView.TEXT_ALIGNMENT_VIEW_START
+        
+        textView.textDirection = if (isUser) TextView.TEXT_DIRECTION_RTL else TextView.TEXT_DIRECTION_LOCALE
+        textView.textAlignment = TextView.TEXT_ALIGNMENT_CENTER
 
-        // تصميم الفقاعة (زوايا دائرية وألوان نيون)
         val background = GradientDrawable()
         background.setColor(if (isUser) Color.parseColor("#00FF00") else Color.parseColor("#2A2A2A"))
-        background.cornerRadius = 40f // حواف دائرية أكثر
+        background.cornerRadius = 40f
         textView.background = background
 
-        // الهوامش والمسافات
         val params = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
         )
-        params.setMargins(if (isUser) 80 else 0, 12, if (isUser) 0 else 80, 12)
+        
+        if (isUser) {
+            params.gravity = Gravity.END
+            params.setMargins(80, 12, 0, 12)
+        } else {
+            params.gravity = Gravity.START
+            params.setMargins(0, 12, 80, 12)
+        }
+        
         textView.layoutParams = params
-
         container.addView(textView)
     }
 }
