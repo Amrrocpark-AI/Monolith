@@ -8,7 +8,7 @@
     android:background="#0A0A0A"
     android:padding="8dp">
 
-    <!-- الشريط العلوي (Header) -->
+    <!-- الشريط العلوي -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -16,14 +16,15 @@
         android:gravity="center_vertical"
         android:padding="4dp">
 
-        <!-- زر الرجوع (أيقونة سهم النظام) -->
-        <ImageButton
+        <TextView
             android:id="@+id/btnBack"
             android:layout_width="48dp"
             android:layout_height="48dp"
-            android:src="@android:drawable/ic_menu_revert"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:tint="#FFFFFF" />
+            android:text="↩"
+            android:textColor="#FFFFFF"
+            android:textSize="24sp"
+            android:gravity="center"
+            android:background="?attr/selectableItemBackgroundBorderless" />
 
         <TextView
             android:layout_width="0dp"
@@ -35,23 +36,25 @@
             android:textStyle="bold"
             android:gravity="center" />
 
-        <!-- زر الرؤية الحاسوبية (أيقونة كاميرا النظام) -->
-        <ImageButton
+        <TextView
             android:id="@+id/btnVisionToggle"
             android:layout_width="48dp"
             android:layout_height="48dp"
-            android:src="@android:drawable/ic_menu_camera"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:tint="#FFFFFF" />
+            android:text="◉"
+            android:textColor="#FFFFFF"
+            android:textSize="28sp"
+            android:gravity="center"
+            android:background="?attr/selectableItemBackgroundBorderless" />
 
-        <!-- زر الإعدادات (أيقونة إعدادات النظام) -->
-        <ImageButton
+        <TextView
             android:id="@+id/btnSettings"
             android:layout_width="48dp"
             android:layout_height="48dp"
-            android:src="@android:drawable/ic_menu_preferences"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:tint="#FFFFFF" />
+            android:text="⛭"
+            android:textColor="#FFFFFF"
+            android:textSize="28sp"
+            android:gravity="center"
+            android:background="?attr/selectableItemBackgroundBorderless" />
     </LinearLayout>
 
     <!-- منطقة الرسائل -->
@@ -69,7 +72,7 @@
             android:orientation="vertical" />
     </ScrollView>
 
-    <!-- منطقة معاينة الصور المرفقة -->
+    <!-- شريط معاينة الملف المرفق -->
     <LinearLayout
         android:id="@+id/imagePreviewContainer"
         android:layout_width="match_parent"
@@ -77,23 +80,26 @@
         android:orientation="horizontal"
         android:visibility="gone"
         android:padding="8dp"
-        android:background="#1A1A1A">
+        android:background="#1A1A1A"
+        android:layout_marginTop="4dp">
         
         <TextView
             android:id="@+id/tvImagePreviewText"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="صورة مرفقة"
+            android:text="ملف مرفق جاهز للإرسال"
             android:textColor="#FFFFFF" />
 
-        <ImageButton
+        <TextView
             android:id="@+id/btnRemoveImage"
             android:layout_width="32dp"
             android:layout_height="32dp"
-            android:src="@android:drawable/ic_menu_close_clear_cancel"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:tint="#FF4444" />
+            android:text="✕"
+            android:textColor="#FF4444"
+            android:textSize="18sp"
+            android:gravity="center"
+            android:background="?attr/selectableItemBackgroundBorderless" />
     </LinearLayout>
 
     <!-- شريط الإدخال الكبسولة -->
@@ -114,16 +120,16 @@
             android:gravity="center_vertical"
             android:padding="4dp">
 
-            <!-- زر الإضافة (أيقونة + النظام) -->
-            <ImageButton
+            <TextView
                 android:id="@+id/btnAttach"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
-                android:src="@android:drawable/ic_menu_add"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:tint="#00FF00" />
+                android:text="＋"
+                android:textColor="#00FF00"
+                android:textSize="28sp"
+                android:gravity="center"
+                android:background="?attr/selectableItemBackgroundBorderless" />
 
-            <!-- مربع الكتابة -->
             <EditText
                 android:id="@+id/etMessage"
                 android:layout_width="0dp"
@@ -137,23 +143,25 @@
                 android:imeOptions="actionSend"
                 android:maxLines="4" />
 
-            <!-- زر المايك (أيقونة صوت النظام) -->
-            <ImageButton
+            <TextView
                 android:id="@+id/btnMic"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
-                android:src="@android:drawable/ic_btn_speak_now"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:tint="#FFFFFF" />
+                android:text="⏺"
+                android:textColor="#FFFFFF"
+                android:textSize="24sp"
+                android:gravity="center"
+                android:background="?attr/selectableItemBackgroundBorderless" />
 
-            <!-- زر الإرسال (أيقونة إرسال النظام) -->
-            <ImageButton
+            <TextView
                 android:id="@+id/btnSend"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
-                android:src="@android:drawable/ic_menu_send"
+                android:text="➤"
+                android:textColor="#000000"
+                android:textSize="24sp"
+                android:gravity="center"
                 android:backgroundTint="#00FF00"
-                android:tint="#000000"
                 android:layout_marginStart="4dp" />
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
