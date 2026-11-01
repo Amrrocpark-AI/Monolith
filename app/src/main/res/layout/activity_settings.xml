@@ -100,5 +100,87 @@
             android:backgroundTint="#2A2A2A"
             android:textColor="#00FF00" />
 
+        <!-- خط فاصل -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#333333"
+            android:layout_marginTop="32dp"
+            android:layout_marginBottom="32dp" />
+
+        <!-- قسم لون التطبيق (الحرية المطلقة) -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="لون التطبيق الرئيسي"
+            android:textColor="#FFFFFF"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="الأحمر (Red)"
+            android:textColor="#FF4444"
+            android:layout_marginTop="8dp"/>
+        <SeekBar
+            android:id="@+id/sbRed"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="255"
+            android:progress="0"
+            android:progressTint="#FF4444" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="الأخضر (Green)"
+            android:textColor="#00FF00" />
+        <SeekBar
+            android:id="@+id/sbGreen"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="255"
+            android:progress="255"
+            android:progressTint="#00FF00" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="الأزرق (Blue)"
+            android:textColor="#4444FF" />
+        <SeekBar
+            android:id="@+id/sbBlue"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="255"
+            android:progress="0"
+            android:progressTint="#4444FF" />
+
+        <!-- مربع المعاينة -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="معاينة اللون:"
+            android:textColor="#FFFFFF"
+            android:layout_marginTop="16dp" />
+
+        <View
+            android:id="@+id/viewColorPreview"
+            android:layout_width="match_parent"
+            android:layout_height="60dp"
+            android:background="#00FF00"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="16dp" />
+
+        <Button
+            android:id="@+id/btnSaveColor"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="حفظ اللون وتطبيقه"
+            android:backgroundTint="#00FF00"
+            android:textColor="#000000"
+            android:textStyle="bold" />
+
     </LinearLayout>
 </ScrollView>
