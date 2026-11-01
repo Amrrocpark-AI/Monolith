@@ -1,4 +1,4 @@
-package com.monolith
+طpackage com.monolith
 
 import android.content.Intent
 import android.graphics.BitmapFactory
@@ -12,16 +12,15 @@ import android.os.Bundle
 import android.view.Gravity
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
-import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import com.google.android.material.bottomsheet.BottomSheetDialog
 
 class ChatActivity : AppCompatActivity() {
     
-    // متغير لحفظ مسار الصورة التي سيتم اختيارها
     private var selectedImageUri: Uri? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -29,36 +28,26 @@ class ChatActivity : AppCompatActivity() {
         setContentView(R.layout.activity_chat)
 
         val etMessage = findViewById<EditText>(R.id.etMessage)
-        val btnSend = findViewById<ImageButton>(R.id.btnSend)
-        val btnSettings = findViewById<ImageButton>(R.id.btnSettings)
-        val btnBack = findViewById<ImageButton>(R.id.btnBack)
-        val btnAttach = findViewById<ImageButton>(R.id.btnAttach)
-        val btnMic = findViewById<ImageButton>(R.id.btnMic)
-        val btnVisionToggle = findViewById<ImageButton>(R.id.btnVisionToggle)
+        val btnSend = findViewById<TextView>(R.id.btnSend)
+        val btnSettings = findViewById<TextView>(R.id.btnSettings)
+        val btnBack = findViewById<TextView>(R.id.btnBack)
+        val btnAttach = findViewById<TextView>(R.id.btnAttach)
+        val btnMic = findViewById<TextView>(R.id.btnMic)
+        val btnVisionToggle = findViewById<TextView>(R.id.btnVisionToggle)
         
         val chatContainer = findViewById<LinearLayout>(R.id.chatContainer)
         val chatScrollView = findViewById<android.widget.ScrollView>(R.id.chatScrollView)
         
-        // عناصر معاينة الصورة
         val imagePreviewContainer = findViewById<LinearLayout>(R.id.imagePreviewContainer)
         val tvImagePreviewText = findViewById<TextView>(R.id.tvImagePreviewText)
-        val btnRemoveImage = findViewById<ImageButton>(R.id.btnRemoveImage)
+        val btnRemoveImage = findViewById<TextView>(R.id.btnRemoveImage)
 
-        // 1. برمجة زر الإرفاق لفتح المعرض
-        val pickImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-            if (uri != null) {
-                selectedImageUri = uri
-                // إظهار شريط المعاينة
-                imagePreviewContainer.visibility = LinearLayout.VISIBLE
-                tvImagePreviewText.text = "📎 صورة مرفقة جاهزة للإرسال"
-            }
-        }
-
+        // 1. برمجة زر الإرفاق لفتح القائمة السفلية
         btnAttach.setOnClickListener {
-            pickImageLauncher.launch("image/*")
+            showAttachBottomSheet()
         }
 
-        // 2. إزالة الصورة المرفقة
+        // 2. إزالة الملف المرفق
         btnRemoveImage.setOnClickListener {
             selectedImageUri = null
             imagePreviewContainer.visibility = LinearLayout.GONE
@@ -107,6 +96,51 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
+    // دالة إظهار القائمة السفلية
+    private fun showAttachBottomSheet() {
+        val bottomSheetDialog = BottomSheetDialog(this)
+        val bottomSheetView = layoutInflater.inflate(R.layout.bottom_sheet_attach, null)
+        bottomSheetDialog.setContentView(bottomSheetView)
+
+        val btnOptionImage = bottomSheetView.findViewById<TextView>(R.id.btnOptionImage)
+        val btnOptionDocument = bottomSheetView.findViewById<TextView>(R.id.btnOptionDocument)
+        val btnOptionAudio = bottomSheetView.findViewById<TextView>(R.id.btnOptionAudio)
+        val btnOptionSearch = bottomSheetView.findViewById<TextView>(R.id.btnOptionSearch)
+
+        // معالجة النقر على الخيارات
+        btnOptionImage.setOnClickListener {
+            bottomSheetDialog.dismiss()
+            // فتح المعرض
+            val pickImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+                if (uri != null) {
+                    selectedImageUri = uri
+                    val imagePreviewContainer = findViewById<LinearLayout>(R.id.imagePreviewContainer)
+                    val tvImagePreviewText = findViewById<TextView>(R.id.tvImagePreviewText)
+                    imagePreviewContainer.visibility = LinearLayout.VISIBLE
+                    tvImagePreviewText.text = "📎 صورة مرفقة جاهزة للإرسال"
+                }
+            }
+            pickImageLauncher.launch("image/*")
+        }
+
+        btnOptionDocument.setOnClickListener {
+            bottomSheetDialog.dismiss()
+            Toast.makeText(this, "قريباً: اختيار ملفات TXT و PDF", Toast.LENGTH_SHORT).show()
+        }
+
+        btnOptionAudio.setOnClickListener {
+            bottomSheetDialog.dismiss()
+            Toast.makeText(this, "قريباً: اختيار ملفات صوتية", Toast.LENGTH_SHORT).show()
+        }
+
+        btnOptionSearch.setOnClickListener {
+            bottomSheetDialog.dismiss()
+            Toast.makeText(this, "قريباً: البحث الشامل في الملفات", Toast.LENGTH_SHORT).show()
+        }
+
+        bottomSheetDialog.show()
+    }
+
     override fun onResume() {
         super.onResume()
         val sharedPreferences = getSharedPreferences("Settings", MODE_PRIVATE)
@@ -140,24 +174,22 @@ class ChatActivity : AppCompatActivity() {
         val etMessage = findViewById<EditText>(R.id.etMessage)
         
         // إصلاح ألوان الأيقونات بناءً على الخلفية
-        val btnBack = findViewById<ImageButton>(R.id.btnBack)
-        val btnSettings = findViewById<ImageButton>(R.id.btnSettings)
-        val btnVisionToggle = findViewById<ImageButton>(R.id.btnVisionToggle)
+        val btnBack = findViewById<TextView>(R.id.btnBack)
+        val btnSettings = findViewById<TextView>(R.id.btnSettings)
+        val btnVisionToggle = findViewById<TextView>(R.id.btnVisionToggle)
         
         if (savedColor == "#FFFFFF" && imageUriString == null) {
-            // في الوضع الفاتح: اجعل النصوص والأيقونات سوداء
             etMessage.setTextColor(Color.BLACK)
             etMessage.setHintTextColor(Color.GRAY)
-            btnBack.setColorFilter(Color.BLACK, PorterDuff.Mode.SRC_IN)
-            btnSettings.setColorFilter(Color.BLACK, PorterDuff.Mode.SRC_IN)
-            btnVisionToggle.setColorFilter(Color.BLACK, PorterDuff.Mode.SRC_IN)
+            btnBack.setTextColor(Color.BLACK)
+            btnSettings.setTextColor(Color.BLACK)
+            btnVisionToggle.setTextColor(Color.BLACK)
         } else {
-            // في الوضع الداكن أو مع الصورة: اجعل النصوص والأيقونات بيضاء
             etMessage.setTextColor(Color.WHITE)
             etMessage.setHintTextColor(Color.parseColor("#666666"))
-            btnBack.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN)
-            btnSettings.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN)
-            btnVisionToggle.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN)
+            btnBack.setTextColor(Color.WHITE)
+            btnSettings.setTextColor(Color.WHITE)
+            btnVisionToggle.setTextColor(Color.WHITE)
         }
     }
 
