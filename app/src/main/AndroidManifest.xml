@@ -18,6 +18,10 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- هذا هو السطر الجديد الذي أضفناه لشاشة الدردشة -->
+        <activity android:name=".ChatActivity" />
+
     </application>
 
 </manifest>
