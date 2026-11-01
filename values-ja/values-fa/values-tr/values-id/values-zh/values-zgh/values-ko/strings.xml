@@ -1,7 +1,0 @@
-<resources>
-    <string name="app_name">모놀리스</string>
-    <string name="app_subtitle">궁극의 콘텐츠 관리 시스템</string>
-    <string name="btn_start">로컬 모델 시작</string>
-    <string name="chat_hint">메시지를 입력하세요...</string>
-    <string name="btn_send">보내기</string>
-</resources>
