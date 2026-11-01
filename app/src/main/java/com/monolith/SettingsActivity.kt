@@ -1,13 +1,18 @@
 package com.monolith
 
-import android.content.res.Configuration
+import android.app.Activity
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.RadioGroup
 import android.widget.Spinner
+import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import java.util.Locale
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.os.LocaleListCompat
 
 class SettingsActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -19,20 +24,29 @@ class SettingsActivity : AppCompatActivity() {
         val backgroundGroup = findViewById<RadioGroup>(R.id.backgroundGroup)
         val btnPickImage = findViewById<Button>(R.id.btnPickImage)
 
-        // قائمة اللغات المتاحة
+        // قائمة اللغات
         val languages = arrayOf("English", "العربية", "Français", "Español", "日本語", "فارسی", "Türkçe", "Bahasa Indonesia", "中文", "ⵜⴰⵎⴰⵣⵉⵖⵜ", "한국어")
         val languageCodes = arrayOf("en", "ar", "fr", "es", "ja", "fa", "tr", "id", "zh", "zgh", "ko")
         val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, languages)
         spinner.adapter = adapter
 
-        // تطبيق اللغة عند الضغط على الزر
+        // 1. إصلاح تغيير اللغة (الطريقة الحديثة)
         btnApplyLanguage.setOnClickListener {
             val selectedPosition = spinner.selectedItemPosition
             val langCode = languageCodes[selectedPosition]
-            setLocale(langCode)
+            
+            // تطبيق اللغة باستخدام AppCompatDelegate
+            val appLocale = LocaleListCompat.forLanguageTags(langCode)
+            AppCompatDelegate.setApplicationLocales(appLocale)
+            
+            // إعادة تشغيل التطبيق من البداية ليتفهم اللغة
+            val intent = Intent(this, MainActivity::class.java)
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(intent)
+            finish()
         }
 
-        // حفظ خيار الخلفية
+        // 2. حفظ خيار الخلفية (لون)
         backgroundGroup.setOnCheckedChangeListener { _, checkedId ->
             val sharedPreferences = getSharedPreferences("Settings", MODE_PRIVATE)
             val editor = sharedPreferences.edit()
@@ -44,20 +58,18 @@ class SettingsActivity : AppCompatActivity() {
             editor.apply()
         }
 
-        // زر اختيار الصورة (سنبرمجه لاحقاً)
-        btnPickImage.setOnClickListener {
-            // كود اختيار الصورة سيأتي في الخطوة القادمة
+        // 3. اختيار صورة من المعرض
+        val pickImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+            if (uri != null) {
+                val sharedPreferences = getSharedPreferences("Settings", MODE_PRIVATE)
+                sharedPreferences.edit().putString("AppBackgroundImage", uri.toString()).apply()
+                Toast.makeText(this, "تم حفظ الصورة بنجاح!", Toast.LENGTH_SHORT).show()
+            }
         }
-    }
 
-    // دالة تغيير اللغة
-    private fun setLocale(langCode: String) {
-        val locale = Locale(langCode)
-        Locale.setDefault(locale)
-        val config = Configuration()
-        config.setLocale(locale)
-        val sharedPreferences = getSharedPreferences("Settings", MODE_PRIVATE)
-        sharedPreferences.edit().putString("My_Lang", langCode).apply()
-        recreate() // إعادة تشغيل الشاشة لتطبيق اللغة
+        btnPickImage.setOnClickListener {
+            // هذا الأمر يفتح معرض الصور
+            pickImageLauncher.launch("image/*")
+        }
     }
 }
