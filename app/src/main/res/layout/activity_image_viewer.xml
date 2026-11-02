@@ -89,7 +89,6 @@
             android:background="?attr/selectableItemBackgroundBorderless"
             android:tint="#FFFFFF" />
 
-        <!-- زر تعديل البيانات الجديد (EXIF) -->
         <ImageButton
             android:id="@+id/btnEditExif"
             android:layout_width="48dp"
@@ -117,4 +116,14 @@
             android:background="?attr/selectableItemBackgroundBorderless"
             android:tint="#FFFFFF" />
     </LinearLayout>
+
+    <!-- شريط التحميل (يظهر فقط أثناء معالجة البيانات) -->
+    <ProgressBar
+        android:id="@+id/progressBar"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_centerInParent="true"
+        android:visibility="gone"
+        android:indeterminateTint="#00FF00" />
+
 </RelativeLayout>
