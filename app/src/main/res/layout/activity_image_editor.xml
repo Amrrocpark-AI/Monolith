@@ -1,1 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#050505">
 
+    <LinearLayout
+        android:id="@+id/topBarEditor"
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="8dp"
+        android:background="#111111"
+        app:layout_constraintTop_toTopOf="parent">
+        <ImageButton android:id="@+id/btnCloseEditor" android:layout_width="40dp" android:layout_height="40dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@android:drawable/ic_menu_close_clear_cancel" app:tint="#FFFFFF" />
+        <TextView android:id="@+id/tvEditorTimer" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="جاهز" android:textColor="#00D4FF" android:textSize="14sp" android:gravity="center" android:textStyle="italic"/>
+        <ImageButton android:id="@+id/btnUndo" android:layout_width="40dp" android:layout_height="40dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@android:drawable/ic_menu_revert" app:tint="#666666" />
+        <ImageButton android:id="@+id/btnRedo" android:layout_width="40dp" android:layout_height="40dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@android:drawable/ic_menu_rotate" app:tint="#666666" />
+        <Button android:id="@+id/btnSaveImage" android:layout_width="wrap_content" android:layout_height="36dp" android:text="حفظ" android:textColor="#000000" android:backgroundTint="#00D4FF" android:textStyle="bold" android:layout_marginStart="8dp"/>
+    </LinearLayout>
+
+    <FrameLayout
+        android:id="@+id/imageContainer"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        app:layout_constraintTop_toBottomOf="@+id/topBarEditor"
+        app:layout_constraintBottom_toTopOf="@+id/bottomPanel">
+        <ImageView android:id="@+id/ivEditorImage" android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="fitCenter" android:background="#000000" />
+        <TextView android:id="@+id/tvCompareHint" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="اضغط مطولاً للمقارنة" android:textColor="#88FFFFFF" android:layout_gravity="bottom|center_horizontal" android:layout_marginBottom="16dp"/>
+        <Button android:id="@+id/btnPickImageForEdit" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="اختر صورة" android:textColor="#000000" android:backgroundTint="#00D4FF" android:layout_gravity="center" />
+    </FrameLayout>
+
+    <LinearLayout android:id="@+id/bottomPanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:background="#111111" app:layout_constraintBottom_toBottomOf="parent">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="السطوع" android:textColor="#FFFFFF" />
+            <SeekBar android:id="@+id/sbBrightness" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" android:progress="50" android:progressTint="#00D4FF" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="التباين" android:textColor="#FFFFFF" />
+            <SeekBar android:id="@+id/sbContrast" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" android:progress="50" android:progressTint="#00D4FF" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="التشبع" android:textColor="#FFFFFF" />
+            <SeekBar android:id="@+id/sbSaturation" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" android:progress="50" android:progressTint="#00D4FF" />
+        </LinearLayout>
+    </LinearLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>
