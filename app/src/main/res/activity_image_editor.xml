@@ -1,157 +1,201 @@
-<?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="#050505">
+package com.monolith
 
-    <LinearLayout
-        android:id="@+id/topBarEditor"
-        android:layout_width="match_parent"
-        android:layout_height="60dp"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:paddingHorizontal="8dp"
-        android:background="#111111"
-        app:layout_constraintTop_toTopOf="parent">
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.ColorMatrix
+import android.graphics.ColorMatrixColorFilter
+import android.net.Uri
+import android.os.Bundle
+import android.os.CountDownTimer
+import android.view.MotionEvent
+import android.view.View
+import android.widget.Button
+import android.widget.ImageButton
+import android.widget.ImageView
+import android.widget.SeekBar
+import android.widget.TextView
+import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatActivity
+import java.io.InputStream
 
-        <ImageButton
-            android:id="@+id/btnCloseEditor"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_menu_close_clear_cancel"
-            app:tint="#FFFFFF" />
+class ImageEditorActivity : AppCompatActivity() {
 
-        <TextView
-            android:id="@+id/tvEditorTimer"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="جاهز"
-            android:textColor="#00D4FF"
-            android:textSize="14sp"
-            android:gravity="center"
-            android:textStyle="italic"/>
+    // --- إعلانات المتغيرات (هذا ما كان يسبب الخطأ) ---
+    private lateinit var ivEditorImage: ImageView
+    private lateinit var btnSaveImage: Button
+    private lateinit var btnUndo: ImageButton
+    private lateinit var btnRedo: ImageButton
+    private lateinit var btnCloseEditor: ImageButton
+    private lateinit var btnPickImageForEdit: Button
+    private lateinit var tvEditorTimer: TextView
 
-        <ImageButton
-            android:id="@+id/btnUndo"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_menu_revert"
-            app:tint="#666666" />
+    private lateinit var sbBrightness: SeekBar
+    private lateinit var sbContrast: SeekBar
+    private lateinit var sbSaturation: SeekBar
 
-        <ImageButton
-            android:id="@+id/btnRedo"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_menu_rotate"
-            app:tint="#666666" />
+    private var originalBitmap: Bitmap? = null
+    private var currentBitmap: Bitmap? = null
 
-        <Button
-            android:id="@+id/btnSaveImage"
-            android:layout_width="wrap_content"
-            android:layout_height="36dp"
-            android:text="حفظ"
-            android:textColor="#000000"
-            android:backgroundTint="#00D4FF"
-            android:textStyle="bold"
-            android:layout_marginStart="8dp"/>
-    </LinearLayout>
+    private val undoStack = ArrayDeque<ColorMatrix>()
+    private val redoStack = ArrayDeque<ColorMatrix>()
+    private var autoSaveTimer: CountDownTimer? = null
 
-    <FrameLayout
-        android:id="@+id/imageContainer"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        app:layout_constraintTop_toBottomOf="@+id/topBarEditor"
-        app:layout_constraintBottom_toTopOf="@+id/bottomPanel">
+    private val pickImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        if (uri != null) {
+            try {
+                val inputStream: InputStream? = contentResolver.openInputStream(uri)
+                val bitmap = BitmapFactory.decodeStream(inputStream)
+                originalBitmap = bitmap
+                currentBitmap = bitmap
+                ivEditorImage.setImageBitmap(bitmap)
+                btnPickImageForEdit.visibility = View.GONE
+                resetSliders()
+            } catch (e: Exception) {
+                Toast.makeText(this, "فشل تحميل الصورة", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
-        <ImageView
-            android:id="@+id/ivEditorImage"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:scaleType="fitCenter"
-            android:background="#000000" />
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_image_editor)
 
-        <TextView
-            android:id="@+id/tvCompareHint"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="اضغط مطولاً للمقارنة مع الأصل"
-            android:textColor="#88FFFFFF"
-            android:textSize="12sp"
-            android:layout_gravity="bottom|center_horizontal"
-            android:layout_marginBottom="16dp"/>
+        // --- ربط المتغيرات بالواجهة ---
+        ivEditorImage = findViewById(R.id.ivEditorImage)
+        btnSaveImage = findViewById(R.id.btnSaveImage)
+        btnUndo = findViewById(R.id.btnUndo)
+        btnRedo = findViewById(R.id.btnRedo)
+        btnCloseEditor = findViewById(R.id.btnCloseEditor)
+        btnPickImageForEdit = findViewById(R.id.btnPickImageForEdit)
+        tvEditorTimer = findViewById(R.id.tvEditorTimer)
 
-        <Button
-            android:id="@+id/btnPickImageForEdit"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="اختر صورة لتحريرها"
-            android:textColor="#000000"
-            android:backgroundTint="#00D4FF"
-            android:layout_gravity="center" />
-    </FrameLayout>
+        sbBrightness = findViewById(R.id.sbBrightness)
+        sbContrast = findViewById(R.id.sbContrast)
+        sbSaturation = findViewById(R.id.sbSaturation)
 
-    <LinearLayout
-        android:id="@+id/bottomPanel"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:background="#111111"
-        app:layout_constraintBottom_toBottomOf="parent">
+        // --- المستمعين (Listeners) ---
+        btnPickImageForEdit.setOnClickListener {
+            pickImageLauncher.launch("image/*")
+        }
 
-        <HorizontalScrollView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:scrollbars="none"
-            android:background="#1A1A1A">
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:padding="8dp">
-                
-                <TextView
-                    android:id="@+id/tabColor"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="الألوان"
-                    android:textColor="#00D4FF"
-                    android:textStyle="bold"
-                    android:padding="12dp"
-                    android:background="?attr/selectableItemBackground"/>
-            </LinearLayout>
-        </HorizontalScrollView>
+        btnCloseEditor.setOnClickListener { finish() }
 
-        <LinearLayout
-            android:id="@+id/layoutColorTools"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="16dp">
+        btnSaveImage.setOnClickListener {
+            Toast.makeText(this, "تم تطبيق التعديلات (ميزة الحفظ للمعرض قريباً)", Toast.LENGTH_SHORT).show()
+        }
 
-            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
-                <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="السطوع" android:textColor="#FFFFFF" android:textSize="14sp" />
-                <ImageButton android:id="@+id/btnResetBrightness" android:layout_width="24dp" android:layout_height="24dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@android:drawable/ic_menu_revert" app:tint="#666666" />
-            </LinearLayout>
-            <SeekBar android:id="@+id/sbBrightness" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" android:progress="50" android:progressTint="#00D4FF" />
+        btnUndo.setOnClickListener { performUndo() }
+        btnRedo.setOnClickListener { performRedo() }
 
-            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginTop="8dp">
-                <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="التباين" android:textColor="#FFFFFF" android:textSize="14sp" />
-                <ImageButton android:id="@+id/btnResetContrast" android:layout_width="24dp" android:layout_height="24dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@android:drawable/ic_menu_revert" app:tint="#666666" />
-            </LinearLayout>
-            <SeekBar android:id="@+id/sbContrast" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" android:progress="50" android:progressTint="#00D4FF" />
+        val changeListener = object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (fromUser) applyColorFilters()
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                saveCurrentStateToUndo()
+                startAutoSaveTimer()
+            }
+        }
 
-            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginTop="8dp">
-                <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="التشبع" android:textColor="#FFFFFF" android:textSize="14sp" />
-                <ImageButton android:id="@+id/btnResetSaturation" android:layout_width="24dp" android:layout_height="24dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@android:drawable/ic_menu_revert" app:tint="#666666" />
-            </LinearLayout>
-            <SeekBar android:id="@+id/sbSaturation" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" android:progress="50" android:progressTint="#00D4FF" />
+        sbBrightness.setOnSeekBarChangeListener(changeListener)
+        sbContrast.setOnSeekBarChangeListener(changeListener)
+        sbSaturation.setOnSeekBarChangeListener(changeListener)
 
-        </LinearLayout>
-    </LinearLayout>
+        // ميزة الضغط المطول للمقارنة
+        ivEditorImage.setOnTouchListener { v, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    originalBitmap?.let { ivEditorImage.setImageBitmap(it) }
+                    true
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    applyColorFilters()
+                    true
+                }
+                else -> false
+            }
+        }
+    }
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+    private fun applyColorFilters() {
+        if (originalBitmap == null) return
+
+        val brightness = sbBrightness.progress - 50
+        val contrast = sbContrast.progress - 50
+        val saturation = sbSaturation.progress
+
+        val colorMatrix = ColorMatrix()
+
+        val brightnessMatrix = ColorMatrix()
+        val scale = 1f + (brightness / 50f)
+        brightnessMatrix.setScale(scale, scale, scale, 1f)
+        colorMatrix.postConcat(brightnessMatrix)
+
+        val contrastMatrix = ColorMatrix()
+        val contrastScale = (contrast + 50f) / 50f
+        val translate = (-0.5f * contrastScale + 0.5f) * 255f
+        contrastMatrix.set(
+            floatArrayOf(
+                contrastScale, 0f, 0f, 0f, translate,
+                0f, contrastScale, 0f, 0f, translate,
+                0f, 0f, contrastScale, 0f, translate,
+                0f, 0f, 0f, 1f, 0f
+            )
+        )
+        colorMatrix.postConcat(contrastMatrix)
+
+        val saturationMatrix = ColorMatrix()
+        saturationMatrix.setSaturation(saturation / 50f)
+        colorMatrix.postConcat(saturationMatrix)
+
+        ivEditorImage.colorFilter = ColorMatrixColorFilter(colorMatrix)
+    }
+
+    private fun saveCurrentStateToUndo() {
+        val tempMatrix = ColorMatrix()
+        tempMatrix.setSaturation(sbSaturation.progress / 50f)
+        undoStack.addLast(tempMatrix)
+        if (undoStack.size > 10) undoStack.removeFirst()
+        redoStack.clear()
+    }
+
+    private fun performUndo() {
+        if (undoStack.isNotEmpty()) {
+            val lastState = undoStack.removeLast()
+            redoStack.addLast(lastState)
+            resetSliders()
+            Toast.makeText(this, "تم التراجع", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun performRedo() {
+        if (redoStack.isNotEmpty()) {
+            val nextState = redoStack.removeLast()
+            undoStack.addLast(nextState)
+            Toast.makeText(this, "تم الإعادة", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun startAutoSaveTimer() {
+        autoSaveTimer?.cancel()
+        tvEditorTimer.text = "جاري المعالجة..."
+        
+        autoSaveTimer = object : CountDownTimer(3000, 1000) {
+            override fun onTick(millisUntilFinished: Long) {
+                tvEditorTimer.text = "تثبيت في: ${millisUntilFinished / 1000} ث"
+            }
+            override fun onFinish() {
+                tvEditorTimer.text = "جاهز"
+            }
+        }.start()
+    }
+
+    private fun resetSliders() {
+        sbBrightness.progress = 50
+        sbContrast.progress = 50
+        sbSaturation.progress = 50
+        ivEditorImage.colorFilter = null
+    }
+}
