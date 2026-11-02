@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
@@ -47,10 +48,10 @@
             <ImageView
                 android:layout_width="56dp"
                 android:layout_height="56dp"
-                android:src="@drawable/ic_vision"
+                android:src="@android:drawable/ic_menu_gallery"
                 android:background="@drawable/bg_circle_dark"
                 android:padding="12dp"
-                android:tint="#00FF00" />
+                app:tint="#00FF00" />
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -74,10 +75,10 @@
             <ImageView
                 android:layout_width="56dp"
                 android:layout_height="56dp"
-                android:src="@drawable/ic_attach"
+                android:src="@android:drawable/ic_menu_agenda"
                 android:background="@drawable/bg_circle_dark"
                 android:padding="12dp"
-                android:tint="#FFFFFF" />
+                app:tint="#FFFFFF" />
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -101,10 +102,10 @@
             <ImageView
                 android:layout_width="56dp"
                 android:layout_height="56dp"
-                android:src="@drawable/ic_mic"
+                android:src="@android:drawable/ic_btn_speak_now"
                 android:background="@drawable/bg_circle_dark"
                 android:padding="12dp"
-                android:tint="#FFFFFF" />
+                app:tint="#FFFFFF" />
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -140,7 +141,7 @@
                 android:src="@android:drawable/ic_menu_search"
                 android:background="@drawable/bg_circle_dark"
                 android:padding="12dp"
-                android:tint="#FFFFFF" />
+                app:tint="#FFFFFF" />
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -167,7 +168,7 @@
                 android:src="@android:drawable/ic_menu_camera"
                 android:background="@drawable/bg_circle_dark"
                 android:padding="12dp"
-                android:tint="#FFFFFF" />
+                app:tint="#FFFFFF" />
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -194,7 +195,7 @@
                 android:src="@android:drawable/ic_menu_compass"
                 android:background="@drawable/bg_circle_dark"
                 android:padding="12dp"
-                android:tint="#00FF00" />
+                app:tint="#00FF00" />
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
