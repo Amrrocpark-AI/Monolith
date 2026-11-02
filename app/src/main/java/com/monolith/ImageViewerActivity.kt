@@ -127,7 +127,6 @@ class ImageViewerActivity : AppCompatActivity() {
             inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL or InputType.TYPE_NUMBER_FLAG_SIGNED
         }
 
-        // زر المساعد الذكي
         val btnSuggest = Button(this).apply {
             text = "🤖 اقتراح ذكي (تزييف واقعي)"
             setBackgroundColor(Color.parseColor("#00FF00"))
@@ -140,8 +139,8 @@ class ImageViewerActivity : AppCompatActivity() {
         btnSuggest.setOnClickListener {
             etModel.setText("iPhone 15 Pro Max")
             etDate.setText("2024:05:12 18:30:00")
-            etLat.setText("25.2048") // دبي
-            etLong.setText("55.2708") // دبي
+            etLat.setText("25.2048")
+            etLong.setText("55.2708")
             Toast.makeText(this, "تم توليد بيانات وهمية مطابقة للواقع!", Toast.LENGTH_SHORT).show()
         }
 
@@ -184,21 +183,19 @@ class ImageViewerActivity : AppCompatActivity() {
                     exif.setAttribute(ExifInterface.TAG_MAKE, "Monolith Studio")
                 }
                 
-                // التصحيح الذكي للتاريخ
                 if (date.isNotEmpty()) {
                     val validDate = if (date.length == 19 && date.contains(":")) {
                         date
                     } else if (date.matches(Regex("^\\d{4}$"))) {
                         wasCorrected = true
-                        "$date:01:01 12:00:00" // سنة فقط
+                        "$date:01:01 12:00:00"
                     } else {
                         wasCorrected = true
-                        SimpleDateFormat("yyyy:MM:dd HH:mm:ss", Locale.US).format(Date()) // تاريخ عشوائي
+                        SimpleDateFormat("yyyy:MM:dd HH:mm:ss", Locale.US).format(Date())
                     }
                     exif.setAttribute(ExifInterface.TAG_DATETIME, validDate)
                 }
                 
-                // التصحيح الذكي للإحداثيات
                 if (latStr.isNotEmpty() && longStr.isNotEmpty()) {
                     val lat = latStr.toDoubleOrNull()
                     val long = longStr.toDoubleOrNull()
@@ -210,7 +207,6 @@ class ImageViewerActivity : AppCompatActivity() {
                         exif.setAttribute(ExifInterface.TAG_GPS_LONGITUDE_REF, if (long >= 0) "E" else "W")
                     } else if (lat != null && long != null) {
                         wasCorrected = true
-                        // تصحيح تلقائي: قسمة الرقم على 10000 حتى يصبح ضمن النطاق
                         val fixedLat = (lat % 90.0)
                         val fixedLong = (long % 180.0)
                         exif.setAttribute(ExifInterface.TAG_GPS_LATITUDE, convertToDegreeMinuteSec(fixedLat))
