@@ -14,7 +14,6 @@ android {
         versionCode 1
         versionName "1.0"
         
-        // ميزة الخبراء: تجهيز رابط الخادم هنا لسهولة تغييره لاحقاً
         buildConfigField "String", "API_BASE_URL", "\"https://api.groq.com/openai/\""
     }
 
@@ -34,13 +33,11 @@ android {
         jvmTarget = '17'
     }
     
-    // ميزة الخبراء: تفعيل قراءة الإعدادات والربط الآمن للواجهات
     buildFeatures {
         buildConfig true
         viewBinding true 
     }
 
-    // ميزة الخبراء: منع تعارض المكتبات (حماية من فشل البناء مستقبلاً)
     packagingOptions {
         resources {
             excludes += '/META-INF/{AL2.0,LGPL2.1}'
@@ -54,24 +51,20 @@ android {
 }
 
 dependencies {
-    // مكتبات أندرويد الأساسية
     implementation 'androidx.core:core-ktx:1.12.0'
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'com.google.android.material:material:1.11.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
     implementation 'com.google.code.gson:gson:2.10.1'
-    
-    // مكتبة قص الصور
     implementation 'com.github.yalantis:ucrop:2.2.8'
     
-    // مكتبات الذكاء الاصطناعي (الشبكة)
     implementation 'com.squareup.retrofit2:retrofit:2.11.0'
     implementation 'com.squareup.retrofit2:converter-gson:2.11.0'
     implementation 'com.squareup.okhttp3:logging-interceptor:4.12.0'
     
-    // *** المكتبة الجديدة: محرك عرض الصور من الإنترنت ***
     implementation 'com.github.bumptech.glide:glide:4.16.0'
+    implementation 'androidx.core:core-splashscreen:1.0.1'
     
-    // شاشة البداية الاحترافية (للمستقبل)
-    implementation 'androidx.core:core-splashscreen:1.0.1' 
+    // *** المكتبة الجديدة: تشفير المفاتيح ***
+    implementation 'androidx.security:security-crypto:1.1.0-alpha06'
 }
