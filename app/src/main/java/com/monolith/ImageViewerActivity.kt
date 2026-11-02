@@ -12,6 +12,7 @@ import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.FileProvider
 import com.yalantis.ucrop.UCrop
 import java.io.File
 import java.io.FileOutputStream
@@ -34,28 +35,36 @@ class ImageViewerActivity : AppCompatActivity() {
         val btnRename = findViewById<ImageButton>(R.id.btnRename)
         val btnInfo = findViewById<ImageButton>(R.id.btnInfo)
 
-        // استقبال مسار الصورة من الشاشة السابقة
         val uriString = intent.getStringExtra("image_uri")
         if (uriString != null) {
             imageUri = Uri.parse(uriString)
             fullImageView.setImageURI(imageUri)
         }
 
-        // زر الإغلاق
         btnClose.setOnClickListener { finish() }
 
-        // زر القص (uCrop)
         btnCrop.setOnClickListener {
             if (imageUri != null) {
-                val destinationUri = Uri.fromFile(File(cacheDir, "cropped_${System.currentTimeMillis()}.jpg"))
-                val uCrop = UCrop.of(imageUri!!, destinationUri)
-                    .withAspectRatio(1f, 1f) // نسبة 1:1
-                    .withMaxResultSize(1080, 1080)
-                uCrop.start(this)
+                try {
+                    // الإصلاح: استخدام FileProvider بدلاً من Uri.fromFile
+                    val file = File(cacheDir, "cropped_${System.currentTimeMillis()}.jpg")
+                    val destinationUri = FileProvider.getUriForFile(
+                        this,
+                        "com.monolith.fileprovider",
+                        file
+                    )
+                    
+                    val uCrop = UCrop.of(imageUri!!, destinationUri)
+                        .withAspectRatio(1f, 1f)
+                        .withMaxResultSize(1080, 1080)
+                        
+                    uCrop.start(this)
+                } catch (e: Exception) {
+                    Toast.makeText(this, "خطأ في الإعداد: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
             }
         }
 
-        // زر التحميل (حفظ في معرض الهاتف)
         btnDownload.setOnClickListener {
             if (imageUri != null) {
                 try {
@@ -66,18 +75,15 @@ class ImageViewerActivity : AppCompatActivity() {
             }
         }
 
-        // زر إعادة التسمية (محاكاة مؤقتة)
         btnRename.setOnClickListener {
             Toast.makeText(this, "ميزة إعادة التسمية ستتوفر قريباً", Toast.LENGTH_SHORT).show()
         }
 
-        // زر المعلومات
         btnInfo.setOnClickListener {
             Toast.makeText(this, "الصورة: ${imageUri?.lastPathSegment}", Toast.LENGTH_LONG).show()
         }
     }
 
-    // دالة حفظ الصورة في المعرض (تعمل على أندرويد الحديث)
     private fun saveImageToGallery(sourceUri: Uri) {
         val inputStream: InputStream? = contentResolver.openInputStream(sourceUri)
         val bitmap = BitmapFactory.decodeStream(inputStream)
@@ -92,15 +98,17 @@ class ImageViewerActivity : AppCompatActivity() {
                 val contentValues = ContentValues().apply {
                     put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
                     put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
-                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES)
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Monolith")
                 }
                 uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
                 if (uri != null) {
                     outputStream = resolver.openOutputStream(uri)
                 }
             } else {
-                val imagesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES).toString()
-                val image = File(imagesDir, filename)
+                val imagesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES).toString() + "/Monolith"
+                val dir = File(imagesDir)
+                if (!dir.exists()) dir.mkdirs()
+                val image = File(dir, filename)
                 outputStream = FileOutputStream(image)
                 uri = Uri.fromFile(image)
             }
@@ -108,14 +116,13 @@ class ImageViewerActivity : AppCompatActivity() {
             if (outputStream != null) {
                 bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
                 outputStream.close()
-                Toast.makeText(this, "تم حفظ الصورة بنجاح!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "تم حفظ الصورة في مجلد Monolith!", Toast.LENGTH_SHORT).show()
             }
         } catch (e: Exception) {
             Toast.makeText(this, "خطأ أثناء الحفظ: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 
-    // استقبال نتيجة القص من مكتبة uCrop
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (resultCode == RESULT_OK && requestCode == UCrop.REQUEST_CROP) {
