@@ -1,16 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- 1. أذونات الشبكة -->
+    <!-- أذونات الشبكة والوسائط الأساسية -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    
-    <!-- 2. أذونات الوسائط -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
     
-    <!-- 3. أذونات أخرى -->
+    <!-- *** إذن الوصول الكامل للملفات (The Sovereign Permission) *** -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:ignore="ScopedStorage" />
+
+    <!-- أذونات أخرى -->
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
 
@@ -18,10 +22,11 @@
         android:allowBackup="true"
         android:label="@string/app_name"
         android:supportsRtl="true"
+        android:requestLegacyExternalStorage="true"
         android:usesCleartextTraffic="false"
         android:theme="@style/Theme.Monolith">
 
-        <!-- *** 1. شاشة البداية الزرقاء (البوابة الجديدة) *** -->
+        <!-- شاشة البداية -->
         <activity
             android:name=".SplashActivity"
             android:exported="true"
@@ -32,18 +37,21 @@
             </intent-filter>
         </activity>
 
-        <!-- *** 2. الشاشة الرئيسية (مخفية) *** -->
+        <!-- الشاشة الرئيسية -->
         <activity
             android:name=".MainActivity"
             android:exported="false"
             android:windowSoftInputMode="adjustResize"
             android:configChanges="orientation|screenSize|keyboardHidden" />
 
-        <!-- *** 3. شاشة القفل (مخفية تماماً - ميزة داخلية فقط) *** -->
+        <!-- شاشة القفل (مخفية) -->
         <activity
             android:name=".LockScreenActivity"
             android:exported="false"
             android:configChanges="orientation|screenSize|keyboardHidden" />
+
+        <!-- *** شاشة مدير الملفات الجديدة *** -->
+        <activity android:name=".FileManagerActivity" />
 
         <!-- شاشة الدردشة -->
         <activity android:name=".ChatActivity" />
