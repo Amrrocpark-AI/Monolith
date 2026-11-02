@@ -4,14 +4,13 @@
     android:layout_height="match_parent"
     android:background="#000000">
 
-    <!-- الصورة (تستخدم Matrix للسماح بالتكبير والتحريك) -->
     <ImageView
         android:id="@+id/fullImageView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:scaleType="matrix" />
 
-    <!-- الشريط العلوي: إغلاق، تحليل AI، ومشاركة -->
+    <!-- الشريط العلوي -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -34,6 +33,15 @@
             android:layout_height="1dp"
             android:layout_weight="1" />
 
+        <!-- زر درع الخصوصية -->
+        <ImageButton
+            android:id="@+id/btnPrivacyShield"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:src="@android:drawable/ic_lock_lock"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:tint="#00FF00" />
+
         <TextView
             android:id="@+id/btnAnalyze"
             android:layout_width="wrap_content"
@@ -53,7 +61,7 @@
             android:tint="#FFFFFF" />
     </LinearLayout>
 
-    <!-- شريط الأدوات السفلي: قص، تدوير، تحميل، تسمية، معلومات -->
+    <!-- شريط الأدوات السفلي -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
