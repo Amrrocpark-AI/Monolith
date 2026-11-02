@@ -11,6 +11,7 @@
         android:usesCleartextTraffic="false"
         android:theme="@style/Theme.Monolith">
 
+        <!-- الشاشة الرئيسية -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -28,10 +29,19 @@
         <!-- شاشة الإعدادات -->
         <activity android:name=".SettingsActivity" />
 
-        <!-- شاشة عرض الصور الجديدة -->
-        <activity 
-            android:name=".ImageViewerActivity"
-            android:theme="@style/Theme.AppCompat.NoActionBar" />
+        <!-- شاشة عرض الصور -->
+        <activity android:name=".ImageViewerActivity" android:theme="@style/Theme.AppCompat.NoActionBar" />
+
+        <!-- الجسر الآمن لمشاركة الملفات مع مكتبة القص -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="com.monolith.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
     </application>
 
