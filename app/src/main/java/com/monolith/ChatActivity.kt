@@ -29,13 +29,16 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.AppCompatTextView
+import androidx.lifecycle.lifecycleScope
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.bumptech.glide.Glide
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.card.MaterialCardView
 import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -44,7 +47,7 @@ import java.io.InputStream
 class ChatActivity : AppCompatActivity() {
 
     private val selectedImageUris = mutableListOf<Uri>()
-    private var selectedDocumentText: String = "" // لتخزين نص الملف المختار
+    private var selectedDocumentText: String = ""
 
     private lateinit var etMessage: EditText
     private lateinit var btnSend: ImageButton
@@ -56,12 +59,14 @@ class ChatActivity : AppCompatActivity() {
 
     private var themeColorHex = "#00FF00"
 
-    private lateinit var sharedPreferences: SharedPreferences
     private lateinit var securePrefs: SharedPreferences
+    private lateinit var messageDao: MessageDao
     private val gson = Gson()
     private var messageList: MutableList<ChatMessage> = mutableListOf()
+    
+    // معرف مؤقت للمحادثة الحالية (سنطوره لاحقاً للمجموعات)
+    private val currentConversationId = "main_chat" 
 
-    // ميزة اختيار الصور (تراكمي)
     private val pickImagesLauncher = registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris: List<Uri> ->
         if (uris.isNotEmpty()) {
             selectedImageUris.addAll(uris)
@@ -69,23 +74,19 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    // *** قارئ الملفات النصية فقط ***
     private val pickDocumentLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) {
             try {
                 val mimeType = contentResolver.getType(uri)
-                // التحقق من أن الملف نصي
-                if (mimeType != null && (mimeType.startsWith("text/") || mimeType.contains("json") || mimeType.contains("xml"))) {
+                if (mimeType != null && (mimeType.startsWith("text/") || mimeType.contains("json"))) {
                     val inputStream: InputStream? = contentResolver.openInputStream(uri)
                     val text = inputStream?.bufferedReader()?.use { it.readText() } ?: ""
-                    
                     if (text.isNotEmpty()) {
-                        selectedDocumentText = text
-                        etMessage.setText("محتوى الملف:\n$text") // عرض النص في مربع الكتابة
-                        Toast.makeText(this, "تم قراءة الملف النصي بنجاح!", Toast.LENGTH_SHORT).show()
+                        etMessage.setText("محتوى الملف:\n$text")
+                        Toast.makeText(this, "تم قراءة الملف النصي!", Toast.LENGTH_SHORT).show()
                     }
                 } else {
-                    Toast.makeText(this, "عذراً، التطبيق يدعم حالياً الملفات النصية فقط (Text, JSON).", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, "يدعم التطبيق الملفات النصية فقط حالياً.", Toast.LENGTH_LONG).show()
                 }
             } catch (e: Exception) {
                 Toast.makeText(this, "حدث خطأ أثناء قراءة الملف", Toast.LENGTH_SHORT).show()
@@ -105,18 +106,14 @@ class ChatActivity : AppCompatActivity() {
                 if (msgIndex != -1) {
                     val msg = messageList[msgIndex]
                     val newUris = msg.attachmentUris?.toMutableList()
-
                     if (newUris != null && imgIndex < newUris.size) {
                         newUris[imgIndex] = newImageUri
                         val updatedMsg = msg.copy(attachmentUris = newUris)
                         messageList[msgIndex] = updatedMsg
-                        saveMessages()
-
+                        saveMessageToDb(updatedMsg)
+                        
                         chatContainer.removeAllViews()
-                        for (m in messageList) {
-                            addChatBubble(chatContainer, m)
-                        }
-                        chatScrollView.post { chatScrollView.fullScroll(android.widget.ScrollView.FOCUS_DOWN) }
+                        for (m in messageList) { addChatBubble(chatContainer, m) }
                     }
                 }
             }
@@ -128,6 +125,10 @@ class ChatActivity : AppCompatActivity() {
         setContentView(R.layout.activity_chat)
 
         ApiClient.init(applicationContext)
+        
+        // تهيئة قاعدة البيانات
+        val db = AppDatabase.getDatabase(applicationContext)
+        messageDao = db.messageDao()
 
         val masterKey = MasterKey.Builder(this).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build()
         securePrefs = EncryptedSharedPreferences.create(
@@ -147,17 +148,10 @@ class ChatActivity : AppCompatActivity() {
 
         chatContainer = findViewById(R.id.chatContainer)
         chatScrollView = findViewById(R.id.chatScrollView)
-
         imagePreviewContainer = findViewById(R.id.imagePreviewContainer)
         previewListContainer = findViewById(R.id.previewListContainer)
 
-        sharedPreferences = getSharedPreferences("ChatHistory", MODE_PRIVATE)
-        messageList = loadMessages()
-
-        for (msg in messageList) {
-            addChatBubble(chatContainer, msg)
-        }
-        chatScrollView.post { chatScrollView.fullScroll(android.widget.ScrollView.FOCUS_DOWN) }
+        loadMessagesFromDb()
 
         btnSend.isEnabled = false
         btnSend.alpha = 0.5f
@@ -181,12 +175,11 @@ class ChatActivity : AppCompatActivity() {
         btnBack.setOnClickListener { finish() }
 
         btnSettings.setOnClickListener {
-            val intent = Intent(this, SettingsActivity::class.java)
-            startActivity(intent)
+            startActivity(Intent(this, SettingsActivity::class.java))
         }
 
-        btnMic.setOnClickListener { Toast.makeText(this, "تسجيل الصوت قريباً", Toast.LENGTH_SHORT).show() }
-        btnVisionToggle.setOnClickListener { Toast.makeText(this, "الرؤية الحاسوبية قريباً", Toast.LENGTH_SHORT).show() }
+        btnMic.setOnClickListener { Toast.makeText(this, "قريباً", Toast.LENGTH_SHORT).show() }
+        btnVisionToggle.setOnClickListener { Toast.makeText(this, "قريباً", Toast.LENGTH_SHORT).show() }
 
         fun sendMessage() {
             val apiKey = securePrefs.getString("api_key", null)
@@ -208,7 +201,7 @@ class ChatActivity : AppCompatActivity() {
                         colorHex = themeColorHex
                     )
                     messageList.add(userMsg)
-                    saveMessages()
+                    saveMessageToDb(userMsg)
                     addChatBubble(chatContainer, userMsg)
 
                     selectedImageUris.clear()
@@ -220,14 +213,12 @@ class ChatActivity : AppCompatActivity() {
                     val aiMsg = ChatMessage(role = MessageRole.AI, content = "جاري التفكير...", colorHex = "#2A2A2A")
                     messageList.add(aiMsg)
                     val aiMsgIndex = messageList.size - 1 
-                    saveMessages()
                     addChatBubble(chatContainer, aiMsg)
                     
                     chatScrollView.post { chatScrollView.fullScroll(android.widget.ScrollView.FOCUS_DOWN) }
 
                     val apiMessages = mutableListOf<Message>()
                     apiMessages.add(Message(role = "system", content = "أنت Monolith، ذكاء اصطناعي سيادي متقدم."))
-
                     val recentHistory = messageList.takeLast(15)
                     for (msg in recentHistory) {
                         if (msg.role == MessageRole.USER) {
@@ -250,7 +241,7 @@ class ChatActivity : AppCompatActivity() {
                                     val reply = response.body()?.choices?.firstOrNull()?.message?.content ?: "لم يتم استلام رد."
                                     val updatedMsg = aiMsg.copy(content = reply)
                                     messageList[aiMsgIndex] = updatedMsg
-                                    saveMessages()
+                                    saveMessageToDb(updatedMsg)
                                     
                                     chatContainer.removeAllViews()
                                     for (m in messageList) { addChatBubble(chatContainer, m) }
@@ -260,11 +251,8 @@ class ChatActivity : AppCompatActivity() {
                                 }
                             }
                         }
-
                         override fun onFailure(call: Call<ChatResponse>, t: Throwable) {
-                            runOnUiThread {
-                                handleApiError(aiMsgIndex, t.message ?: "خطأ غير معروف")
-                            }
+                            runOnUiThread { handleApiError(aiMsgIndex, t.message ?: "خطأ غير معروف") }
                         }
                     })
                 }
@@ -274,24 +262,68 @@ class ChatActivity : AppCompatActivity() {
         }
 
         btnSend.setOnClickListener { sendMessage() }
-
         etMessage.setOnEditorActionListener { _, actionId, _ ->
-            if (actionId == EditorInfo.IME_ACTION_SEND) {
-                sendMessage()
-                true
-            } else {
-                false
+            if (actionId == EditorInfo.IME_ACTION_SEND) { sendMessage(); true } else { false }
+        }
+    }
+
+    // ==========================================
+    // دوال قاعدة البيانات (Room Database)
+    // ==========================================
+    
+    private fun loadMessagesFromDb() {
+        lifecycleScope.launch {
+            val entities = messageDao.getMessagesForConversation(currentConversationId)
+            messageList = entities.map { it.toChatMessage() }.toMutableList()
+            
+            withContext(Dispatchers.Main) {
+                chatContainer.removeAllViews()
+                for (msg in messageList) { addChatBubble(chatContainer, msg) }
+                chatScrollView.post { chatScrollView.fullScroll(android.widget.ScrollView.FOCUS_DOWN) }
             }
         }
     }
+
+    private fun saveMessageToDb(msg: ChatMessage) {
+        lifecycleScope.launch {
+            messageDao.insertMessage(msg.toMessageEntity(currentConversationId))
+        }
+    }
+
+    // محولات البيانات (Mappers)
+    private fun MessageEntity.toChatMessage(): ChatMessage {
+        return ChatMessage(
+            id = this.id,
+            role = if (this.role == "USER") MessageRole.USER else MessageRole.AI,
+            content = this.content,
+            attachmentUris = this.attachmentUris?.split(",")?.filter { it.isNotEmpty() },
+            colorHex = if (this.role == "USER") "#00FF00" else "#2A2A2A", // تبسيط مؤقت
+            timestamp = this.timestamp
+        )
+    }
+
+    private fun ChatMessage.toMessageEntity(convId: String): MessageEntity {
+        return MessageEntity(
+            id = this.id,
+            conversationId = convId,
+            senderId = if (this.role == MessageRole.USER) "me" else "ai",
+            role = this.role.name,
+            content = this.content,
+            timestamp = this.timestamp,
+            attachmentUris = this.attachmentUris?.joinToString(","),
+            isEncrypted = false
+        )
+    }
+
+    // ==========================================
+    // دوال الواجهة المساعدة
+    // ==========================================
 
     private fun showSetupDialog() {
         AlertDialog.Builder(this)
             .setTitle("المحرك غير متصل")
             .setMessage("مرحباً بك في Monolith. يرجى تهيئة المحرك الذكي (إدخال مفتاح API) للبدء في الدردشة.")
-            .setPositiveButton("الذهاب للإعدادات") { _, _ ->
-                startActivity(Intent(this, SettingsActivity::class.java))
-            }
+            .setPositiveButton("الذهاب للإعدادات") { _, _ -> startActivity(Intent(this, SettingsActivity::class.java)) }
             .setNegativeButton("إلغاء", null)
             .show()
     }
@@ -299,21 +331,15 @@ class ChatActivity : AppCompatActivity() {
     private fun handleApiError(aiMsgIndex: Int, errorMessage: String) {
         if (aiMsgIndex < messageList.size) {
             messageList.removeAt(aiMsgIndex)
-            saveMessages()
             chatContainer.removeAllViews()
             for (m in messageList) { addChatBubble(chatContainer, m) }
         }
-        
         Toast.makeText(this, errorMessage, Toast.LENGTH_LONG).show()
-        
-        if (errorMessage.contains("مصادقة") || errorMessage.contains("مهيأ")) {
-            showSetupDialog()
-        }
+        if (errorMessage.contains("مصادقة") || errorMessage.contains("مهيأ")) { showSetupDialog() }
     }
 
     private fun updatePreviewUi() {
         previewListContainer.removeAllViews()
-
         if (selectedImageUris.isEmpty()) {
             imagePreviewContainer.visibility = LinearLayout.GONE
             btnSend.isEnabled = etMessage.text.isNotEmpty()
@@ -322,7 +348,6 @@ class ChatActivity : AppCompatActivity() {
             imagePreviewContainer.visibility = LinearLayout.VISIBLE
             btnSend.isEnabled = true
             btnSend.alpha = 1.0f
-
             for ((index, uri) in selectedImageUris.withIndex()) {
                 val cardView = MaterialCardView(this)
                 val cardParams = LinearLayout.LayoutParams(dpToPx(50), dpToPx(50))
@@ -332,36 +357,26 @@ class ChatActivity : AppCompatActivity() {
                 cardView.setCardElevation(0f)
 
                 val relativeLayout = android.widget.RelativeLayout(this)
-                relativeLayout.layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-
                 val imageView = ImageView(this)
                 imageView.layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
                 imageView.scaleType = ImageView.ScaleType.CENTER_CROP
-                
-                Glide.with(this)
-                    .load(uri)
-                    .placeholder(android.R.drawable.ic_menu_gallery)
-                    .into(imageView)
-                
+                Glide.with(this).load(uri).into(imageView)
                 relativeLayout.addView(imageView)
 
                 val btnRemove = AppCompatTextView(this)
                 val btnParams = android.widget.RelativeLayout.LayoutParams(dpToPx(18), dpToPx(18))
                 btnParams.addRule(android.widget.RelativeLayout.ALIGN_PARENT_TOP)
                 btnParams.addRule(android.widget.RelativeLayout.ALIGN_PARENT_END)
-                btnParams.setMargins(0, dpToPx(2), dpToPx(2), 0)
                 btnRemove.layoutParams = btnParams
                 btnRemove.text = "X"
                 btnRemove.setTextColor(Color.WHITE)
                 btnRemove.textSize = 10f
                 btnRemove.gravity = Gravity.CENTER
                 btnRemove.setBackgroundResource(R.drawable.bg_circle_dark)
-
                 btnRemove.setOnClickListener {
                     selectedImageUris.removeAt(index)
                     updatePreviewUi()
                 }
-
                 relativeLayout.addView(btnRemove)
                 cardView.addView(relativeLayout)
                 previewListContainer.addView(cardView)
@@ -369,32 +384,7 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    private fun dpToPx(dp: Int): Int {
-        return (dp * resources.displayMetrics.density).toInt()
-    }
-
-    private fun saveMessages() {
-        try {
-            val json = gson.toJson(messageList)
-            sharedPreferences.edit().putString("messages", json).apply()
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    private fun loadMessages(): MutableList<ChatMessage> {
-        val json = sharedPreferences.getString("messages", null)
-        return if (json != null) {
-            try {
-                val type = object : TypeToken<MutableList<ChatMessage>>() {}.type
-                gson.fromJson<MutableList<ChatMessage>>(json, type) ?: mutableListOf()
-            } catch (e: Exception) {
-                mutableListOf()
-            }
-        } else {
-            mutableListOf()
-        }
-    }
+    private fun dpToPx(dp: Int): Int = (dp * resources.displayMetrics.density).toInt()
 
     private fun showAttachBottomSheet() {
         val bottomSheetDialog = BottomSheetDialog(this)
@@ -402,33 +392,15 @@ class ChatActivity : AppCompatActivity() {
         bottomSheetDialog.setContentView(bottomSheetView)
 
         bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionImage)?.setOnClickListener {
-            bottomSheetDialog.dismiss()
-            pickImagesLauncher.launch("image/*")
+            bottomSheetDialog.dismiss(); pickImagesLauncher.launch("image/*")
         }
-        
         bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionDocument)?.setOnClickListener {
-            bottomSheetDialog.dismiss()
-            // فلترة الملفات لتشمل النصوص فقط
-            pickDocumentLauncher.launch(arrayOf("text/plain", "text/*", "application/json", "application/xml")) 
+            bottomSheetDialog.dismiss(); pickDocumentLauncher.launch(arrayOf("text/plain", "text/*", "application/json"))
         }
-
-        bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionAudio)?.setOnClickListener {
-            bottomSheetDialog.dismiss()
-            Toast.makeText(this, "قريباً", Toast.LENGTH_SHORT).show()
-        }
-        bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionSearch)?.setOnClickListener {
-            bottomSheetDialog.dismiss()
-            Toast.makeText(this, "قريباً: البحث الذكي", Toast.LENGTH_SHORT).show()
-        }
-        bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionCamera)?.setOnClickListener {
-            bottomSheetDialog.dismiss()
-            Toast.makeText(this, "قريباً", Toast.LENGTH_SHORT).show()
-        }
-        
-        bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionAI)?.setOnClickListener {
-            bottomSheetDialog.dismiss()
-            Toast.makeText(this, "قريباً: وكيل الذكاء الاصطناعي", Toast.LENGTH_SHORT).show()
-        }
+        bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionAudio)?.setOnClickListener { bottomSheetDialog.dismiss() }
+        bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionSearch)?.setOnClickListener { bottomSheetDialog.dismiss() }
+        bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionCamera)?.setOnClickListener { bottomSheetDialog.dismiss() }
+        bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionAI)?.setOnClickListener { bottomSheetDialog.dismiss() }
 
         bottomSheetDialog.show()
     }
@@ -455,101 +427,68 @@ class ChatActivity : AppCompatActivity() {
         try {
             val settingsPrefs = getSharedPreferences("Settings", MODE_PRIVATE)
             val rootLayout = findViewById<LinearLayout>(R.id.rootLayout)
-
             themeColorHex = settingsPrefs.getString("AppThemeColor", "#00FF00") ?: "#00FF00"
             val themeColor = Color.parseColor(themeColorHex)
 
             tvAppTitle.setTextColor(themeColor)
             btnSend.setColorFilter(themeColor, PorterDuff.Mode.SRC_IN)
-
-            val btnAttach = findViewById<ImageButton>(R.id.btnAttach)
-            btnAttach.setColorFilter(themeColor, PorterDuff.Mode.SRC_IN)
+            findViewById<ImageButton>(R.id.btnAttach).setColorFilter(themeColor, PorterDuff.Mode.SRC_IN)
 
             val imageUriString = settingsPrefs.getString("AppBackgroundImage", null)
-
             if (imageUriString != null) {
                 try {
                     val uri = Uri.parse(imageUriString)
                     val inputStream = contentResolver.openInputStream(uri)
-                    val options = BitmapFactory.Options()
-                    options.inSampleSize = 2
-                    val bitmap = BitmapFactory.decodeStream(inputStream, null, options)
-                    rootLayout.background = BitmapDrawable(resources, bitmap)
-
+                    val options = BitmapFactory.Options().apply { inSampleSize = 2 }
+                    rootLayout.background = BitmapDrawable(resources, BitmapFactory.decodeStream(inputStream, null, options))
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                         rootLayout.foreground = android.graphics.drawable.ColorDrawable(Color.parseColor("#99000000"))
                     }
-                } catch (e: Exception) {
-                    applyColorBackground(settingsPrefs, rootLayout)
-                }
+                } catch (e: Exception) { applyColorBackground(settingsPrefs, rootLayout) }
             } else {
                 applyColorBackground(settingsPrefs, rootLayout)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    rootLayout.foreground = null
-                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) rootLayout.foreground = null
             }
 
             val savedColor = settingsPrefs.getString("AppBackground", "#0A0A0A") ?: "#0A0A0A"
-            val btnBack = findViewById<ImageButton>(R.id.btnBack)
-            val btnSettings = findViewById<ImageButton>(R.id.btnSettings)
-            val btnVisionToggle = findViewById<ImageButton>(R.id.btnVisionToggle)
-
             if (savedColor == "#FFFFFF" && imageUriString == null) {
-                etMessage.setTextColor(Color.BLACK)
-                etMessage.setHintTextColor(Color.GRAY)
-                btnBack.setColorFilter(Color.BLACK, PorterDuff.Mode.SRC_IN)
-                btnSettings.setColorFilter(Color.BLACK, PorterDuff.Mode.SRC_IN)
-                btnVisionToggle.setColorFilter(Color.BLACK, PorterDuff.Mode.SRC_IN)
+                etMessage.setTextColor(Color.BLACK); etMessage.setHintTextColor(Color.GRAY)
+                findViewById<ImageButton>(R.id.btnBack).setColorFilter(Color.BLACK, PorterDuff.Mode.SRC_IN)
+                findViewById<ImageButton>(R.id.btnSettings).setColorFilter(Color.BLACK, PorterDuff.Mode.SRC_IN)
+                findViewById<ImageButton>(R.id.btnVisionToggle).setColorFilter(Color.BLACK, PorterDuff.Mode.SRC_IN)
             } else {
-                etMessage.setTextColor(Color.WHITE)
-                etMessage.setHintTextColor(Color.parseColor("#666666"))
-                btnBack.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN)
-                btnSettings.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN)
-                btnVisionToggle.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN)
+                etMessage.setTextColor(Color.WHITE); etMessage.setHintTextColor(Color.parseColor("#666666"))
+                findViewById<ImageButton>(R.id.btnBack).setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN)
+                findViewById<ImageButton>(R.id.btnSettings).setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN)
+                findViewById<ImageButton>(R.id.btnVisionToggle).setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN)
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+        } catch (e: Exception) { e.printStackTrace() }
     }
 
     private fun applyColorBackground(sharedPreferences: SharedPreferences, rootLayout: LinearLayout) {
-        val savedColor = sharedPreferences.getString("AppBackground", "#0A0A0A") ?: "#0A0A0A"
-        rootLayout.setBackgroundColor(Color.parseColor(savedColor))
+        rootLayout.setBackgroundColor(Color.parseColor(sharedPreferences.getString("AppBackground", "#0A0A0A") ?: "#0A0A0A"))
     }
 
     private fun addChatBubble(container: LinearLayout, msg: ChatMessage) {
-        val messageLayout = LinearLayout(this)
-        messageLayout.orientation = LinearLayout.VERTICAL
-        messageLayout.layoutParams = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        )
+        val messageLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        }
 
         if (!msg.attachmentUris.isNullOrEmpty()) {
             val scrollView = android.widget.HorizontalScrollView(this)
-            val imageContainer = LinearLayout(this)
-            imageContainer.orientation = LinearLayout.HORIZONTAL
-
+            val imageContainer = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             val imageSizePx = dpToPx(180)
 
             for ((index, uriString) in msg.attachmentUris.withIndex()) {
-                val imageView = ImageView(this)
-                val params = LinearLayout.LayoutParams(imageSizePx, imageSizePx)
-                params.setMargins(0, 0, 16, 16)
-                imageView.layoutParams = params
-                imageView.scaleType = ImageView.ScaleType.CENTER_CROP
-
-                val clip = GradientDrawable()
-                clip.cornerRadius = dpToPx(16).toFloat()
-                clip.setColor(Color.TRANSPARENT)
-                imageView.background = clip
-                imageView.clipToOutline = true
-
-                Glide.with(this)
-                    .load(uriString)
-                    .placeholder(android.R.drawable.ic_menu_gallery)
-                    .into(imageView)
-
+                val imageView = ImageView(this).apply {
+                    layoutParams = LinearLayout.LayoutParams(imageSizePx, imageSizePx).apply { setMargins(0, 0, 16, 16) }
+                    scaleType = ImageView.ScaleType.CENTER_CROP
+                    val clip = GradientDrawable().apply { cornerRadius = dpToPx(16).toFloat(); setColor(Color.TRANSPARENT) }
+                    background = clip
+                    clipToOutline = true
+                }
+                Glide.with(this).load(uriString).into(imageView)
                 imageView.setOnClickListener {
                     val intent = Intent(this, ImageViewerActivity::class.java)
                     intent.putExtra("image_uri", uriString)
@@ -558,7 +497,6 @@ class ChatActivity : AppCompatActivity() {
                     intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     imageViewerLauncher.launch(intent)
                 }
-
                 imageContainer.addView(imageView)
             }
             scrollView.addView(imageContainer)
@@ -566,22 +504,17 @@ class ChatActivity : AppCompatActivity() {
         }
 
         if (msg.content.isNotEmpty()) {
-            val textBubble = LinearLayout(this)
-            textBubble.setPadding(32, 24, 32, 24)
-
-            val background = GradientDrawable()
-            background.setColor(Color.parseColor(msg.colorHex))
-            background.cornerRadius = 40f
-            textBubble.background = background
-
-            val textView = TextView(this)
-            textView.text = msg.content
-            textView.textSize = 16f
-            textView.setTextColor(if (msg.role == MessageRole.USER) Color.BLACK else Color.WHITE)
-
-            textView.textDirection = if (msg.role == MessageRole.USER) TextView.TEXT_DIRECTION_RTL else TextView.TEXT_DIRECTION_LOCALE
-            textView.textAlignment = TextView.TEXT_ALIGNMENT_VIEW_START
-
+            val textBubble = LinearLayout(this).apply {
+                setPadding(32, 24, 32, 24)
+                background = GradientDrawable().apply { setColor(Color.parseColor(msg.colorHex)); cornerRadius = 40f }
+            }
+            val textView = TextView(this).apply {
+                text = msg.content
+                textSize = 16f
+                setTextColor(if (msg.role == MessageRole.USER) Color.BLACK else Color.WHITE)
+                textDirection = if (msg.role == MessageRole.USER) TextView.TEXT_DIRECTION_RTL else TextView.TEXT_DIRECTION_LOCALE
+                textAlignment = TextView.TEXT_ALIGNMENT_VIEW_START
+            }
             textBubble.addView(textView)
             messageLayout.addView(textBubble)
         }
@@ -593,7 +526,6 @@ class ChatActivity : AppCompatActivity() {
             messageLayout.gravity = Gravity.START
             messageLayout.setPadding(0, dpToPx(8), 0, dpToPx(8))
         }
-
         container.addView(messageLayout)
     }
 }
