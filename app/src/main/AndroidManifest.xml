@@ -2,6 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
 
     <application
         android:allowBackup="true"
@@ -26,6 +27,11 @@
 
         <!-- شاشة الإعدادات -->
         <activity android:name=".SettingsActivity" />
+
+        <!-- شاشة عرض الصور الجديدة -->
+        <activity 
+            android:name=".ImageViewerActivity"
+            android:theme="@style/Theme.AppCompat.NoActionBar" />
 
     </application>
 
