@@ -362,22 +362,25 @@ class ChatActivity : AppCompatActivity() {
         rootLayout.setBackgroundColor(Color.parseColor(savedColor))
     }
 
+    // ==========================================
+    // الدالة المعدلة: فصل الصور عن النص وإزالة الإطار الأخضر
+    // ==========================================
     private fun addChatBubble(container: LinearLayout, msg: ChatMessage) {
-        val bubbleLayout = LinearLayout(this)
-        bubbleLayout.orientation = LinearLayout.VERTICAL
-        bubbleLayout.setPadding(32, 24, 32, 24)
-        
-        val background = GradientDrawable()
-        background.setColor(Color.parseColor(msg.colorHex))
-        background.cornerRadius = 40f
-        bubbleLayout.background = background
+        // الحاوية الرئيسية للرسالة بأكملها (عمودية)
+        val messageLayout = LinearLayout(this)
+        messageLayout.orientation = LinearLayout.VERTICAL
+        messageLayout.layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        )
 
+        // 1. إضافة الصور (بدون خلفية خضراء)
         if (!msg.attachmentUris.isNullOrEmpty()) {
             val scrollView = android.widget.HorizontalScrollView(this)
             val imageContainer = LinearLayout(this)
             imageContainer.orientation = LinearLayout.HORIZONTAL
             
-            val imageSizePx = dpToPx(150)
+            val imageSizePx = dpToPx(180) // حجم الصورة أصبح 180dp (أكبر قليلاً وأوضح)
             
             for (uriString in msg.attachmentUris) {
                 val imageView = ImageView(this)
@@ -386,11 +389,17 @@ class ChatActivity : AppCompatActivity() {
                 imageView.layoutParams = params
                 imageView.scaleType = ImageView.ScaleType.CENTER_CROP
                 
+                // إضافة حواف دائرية للصورة نفسها
+                val clip = GradientDrawable()
+                clip.cornerRadius = dpToPx(16).toFloat()
+                clip.setColor(Color.TRANSPARENT)
+                imageView.background = clip
+                imageView.clipToOutline = true
+                
                 try {
                     val imageUri = Uri.parse(uriString)
                     imageView.setImageURI(imageUri)
                     
-                    // التعديل هنا: فتح ImageViewerActivity بدلاً من الشاشة السوداء القديمة
                     imageView.setOnClickListener { 
                         val intent = Intent(this, ImageViewerActivity::class.java)
                         intent.putExtra("image_uri", uriString)
@@ -401,10 +410,19 @@ class ChatActivity : AppCompatActivity() {
                 imageContainer.addView(imageView)
             }
             scrollView.addView(imageContainer)
-            bubbleLayout.addView(scrollView)
+            messageLayout.addView(scrollView)
         }
 
+        // 2. إضافة النص (داخل فقاعة ملونة)
         if (msg.content.isNotEmpty()) {
+            val textBubble = LinearLayout(this)
+            textBubble.setPadding(32, 24, 32, 24)
+            
+            val background = GradientDrawable()
+            background.setColor(Color.parseColor(msg.colorHex))
+            background.cornerRadius = 40f
+            textBubble.background = background
+            
             val textView = TextView(this)
             textView.text = msg.content
             textView.textSize = 16f
@@ -413,23 +431,19 @@ class ChatActivity : AppCompatActivity() {
             textView.textDirection = if (msg.role == MessageRole.USER) TextView.TEXT_DIRECTION_RTL else TextView.TEXT_DIRECTION_LOCALE
             textView.textAlignment = TextView.TEXT_ALIGNMENT_VIEW_START
             
-            bubbleLayout.addView(textView)
+            textBubble.addView(textView)
+            messageLayout.addView(textBubble)
         }
 
-        val params = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        )
-        
+        // 3. تحديد موقع الرسالة (يمين أو يسار)
         if (msg.role == MessageRole.USER) {
-            params.gravity = Gravity.END
-            params.setMargins(80, 12, 0, 12)
+            messageLayout.gravity = Gravity.END
+            messageLayout.setPadding(0, dpToPx(8), 0, dpToPx(8))
         } else {
-            params.gravity = Gravity.START
-            params.setMargins(0, 12, 80, 12)
+            messageLayout.gravity = Gravity.START
+            messageLayout.setPadding(0, dpToPx(8), 0, dpToPx(8))
         }
         
-        bubbleLayout.layoutParams = params
-        container.addView(bubbleLayout)
+        container.addView(messageLayout)
     }
 }
