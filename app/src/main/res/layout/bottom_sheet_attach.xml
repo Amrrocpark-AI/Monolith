@@ -1,21 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:background="#1E1E1E"
-    android:paddingTop="8dp"
-    android:paddingBottom="24dp"
-    android:paddingStart="16dp"
-    android:paddingEnd="16dp">
-
-    <View
-        android:layout_width="40dp"
-        android:layout_height="4dp"
-        android:background="#555555"
-        android:layout_gravity="center"
-        android:layout_marginBottom="16dp" />
+    android:padding="16dp">
 
     <TextView
         android:layout_width="match_parent"
@@ -42,22 +31,20 @@
             android:orientation="vertical"
             android:gravity="center"
             android:padding="8dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
             android:clickable="true"
             android:focusable="true">
             <ImageView
-                android:layout_width="56dp"
-                android:layout_height="56dp"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
                 android:src="@android:drawable/ic_menu_gallery"
-                android:background="@drawable/bg_circle_dark"
-                android:padding="12dp"
-                app:tint="#00FF00" />
+                android:background="#333333"
+                android:padding="8dp"
+                android:tint="#00FF00" />
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="صورة"
                 android:textColor="#FFFFFF"
-                android:textSize="12sp"
                 android:layout_marginTop="8dp" />
         </LinearLayout>
 
@@ -69,22 +56,20 @@
             android:orientation="vertical"
             android:gravity="center"
             android:padding="8dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
             android:clickable="true"
             android:focusable="true">
             <ImageView
-                android:layout_width="56dp"
-                android:layout_height="56dp"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
                 android:src="@android:drawable/ic_menu_agenda"
-                android:background="@drawable/bg_circle_dark"
-                android:padding="12dp"
-                app:tint="#FFFFFF" />
+                android:background="#333333"
+                android:padding="8dp"
+                android:tint="#FFFFFF" />
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="مستند"
                 android:textColor="#FFFFFF"
-                android:textSize="12sp"
                 android:layout_marginTop="8dp" />
         </LinearLayout>
 
@@ -96,22 +81,20 @@
             android:orientation="vertical"
             android:gravity="center"
             android:padding="8dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
             android:clickable="true"
             android:focusable="true">
             <ImageView
-                android:layout_width="56dp"
-                android:layout_height="56dp"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
                 android:src="@android:drawable/ic_btn_speak_now"
-                android:background="@drawable/bg_circle_dark"
-                android:padding="12dp"
-                app:tint="#FFFFFF" />
+                android:background="#333333"
+                android:padding="8dp"
+                android:tint="#FFFFFF" />
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="صوت"
                 android:textColor="#FFFFFF"
-                android:textSize="12sp"
                 android:layout_marginTop="8dp" />
         </LinearLayout>
     </LinearLayout>
@@ -132,22 +115,20 @@
             android:orientation="vertical"
             android:gravity="center"
             android:padding="8dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
             android:clickable="true"
             android:focusable="true">
             <ImageView
-                android:layout_width="56dp"
-                android:layout_height="56dp"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
                 android:src="@android:drawable/ic_menu_search"
-                android:background="@drawable/bg_circle_dark"
-                android:padding="12dp"
-                app:tint="#FFFFFF" />
+                android:background="#333333"
+                android:padding="8dp"
+                android:tint="#FFFFFF" />
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="بحث"
                 android:textColor="#FFFFFF"
-                android:textSize="12sp"
                 android:layout_marginTop="8dp" />
         </LinearLayout>
 
@@ -159,22 +140,20 @@
             android:orientation="vertical"
             android:gravity="center"
             android:padding="8dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
             android:clickable="true"
             android:focusable="true">
             <ImageView
-                android:layout_width="56dp"
-                android:layout_height="56dp"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
                 android:src="@android:drawable/ic_menu_camera"
-                android:background="@drawable/bg_circle_dark"
-                android:padding="12dp"
-                app:tint="#FFFFFF" />
+                android:background="#333333"
+                android:padding="8dp"
+                android:tint="#FFFFFF" />
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="كاميرا"
                 android:textColor="#FFFFFF"
-                android:textSize="12sp"
                 android:layout_marginTop="8dp" />
         </LinearLayout>
 
@@ -186,23 +165,20 @@
             android:orientation="vertical"
             android:gravity="center"
             android:padding="8dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
             android:clickable="true"
             android:focusable="true">
             <ImageView
-                android:layout_width="56dp"
-                android:layout_height="56dp"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
                 android:src="@android:drawable/ic_menu_compass"
-                android:background="@drawable/bg_circle_dark"
-                android:padding="12dp"
-                app:tint="#00FF00" />
+                android:background="#333333"
+                android:padding="8dp"
+                android:tint="#00FF00" />
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="ذكاء AI"
                 android:textColor="#00FF00"
-                android:textSize="12sp"
-                android:textStyle="bold"
                 android:layout_marginTop="8dp" />
         </LinearLayout>
     </LinearLayout>
