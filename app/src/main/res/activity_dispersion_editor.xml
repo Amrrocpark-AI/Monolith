@@ -1,0 +1,168 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#050505">
+
+    <!-- الشريط العلوي -->
+    <LinearLayout
+        android:id="@+id/topBarDispersion"
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="8dp"
+        android:background="#111111"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <ImageButton
+            android:id="@+id/btnCloseDispersion"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_close_clear_cancel"
+            app:tint="#FFFFFF" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="أداة التشتت"
+            android:textColor="#00D4FF"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:gravity="center"/>
+
+        <ImageButton
+            android:id="@+id/btnUndoDispersion"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_revert"
+            app:tint="#FFFFFF" />
+
+        <ImageButton
+            android:id="@+id/btnRedoDispersion"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_rotate"
+            app:tint="#FFFFFF" />
+
+        <Button
+            android:id="@+id/btnApplyDispersion"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:text="تطبيق"
+            android:textColor="#000000"
+            android:backgroundTint="#00D4FF"
+            android:textStyle="bold"
+            android:layout_marginStart="8dp"/>
+    </LinearLayout>
+
+    <!-- منطقة الصورة والرسم -->
+    <FrameLayout
+        android:id="@+id/imageContainerDispersion"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        app:layout_constraintTop_toBottomOf="@+id/topBarDispersion"
+        app:layout_constraintBottom_toTopOf="@+id/bottomPanelDispersion">
+
+        <ImageView
+            android:id="@+id/ivDispersionImage"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="fitCenter"
+            android:background="#000000" />
+
+        <!-- شاشة الرسم المخصصة (التي سنبرمجها لاحقاً) -->
+        <com.monolith.MaskDrawingView
+            android:id="@+id/maskDrawingView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+            
+        <Button
+            android:id="@+id/btnPickImageForDispersion"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="اختر صورة للتشتيت"
+            android:textColor="#000000"
+            android:backgroundTint="#00D4FF"
+            android:layout_gravity="center" />
+    </FrameLayout>
+
+    <!-- لوحة التحكم السفلية -->
+    <LinearLayout
+        android:id="@+id/bottomPanelDispersion"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#111111"
+        app:layout_constraintBottom_toBottomOf="parent">
+
+        <!-- أدوات الرسم: فرشاة / ممحاة -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:padding="8dp">
+
+            <Button
+                android:id="@+id/btnBrushTool"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="40dp"
+                android:text="فرشاة"
+                android:backgroundTint="#00D4FF"
+                android:textColor="#000000"/>
+
+            <Button
+                android:id="@+id/btnEraserTool"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="40dp"
+                android:layout_marginStart="8dp"
+                android:text="ممحاة"
+                android:backgroundTint="#333333"
+                android:textColor="#FFFFFF"/>
+        </LinearLayout>
+
+        <!-- اختيار شكل الشظايا -->
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:scrollbars="none"
+            android:background="#1A1A1A">
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:padding="8dp">
+                
+                <TextView android:id="@+id/shapeTriangle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="مثلث" android:textColor="#00D4FF" android:textStyle="bold" android:padding="12dp" android:background="?attr/selectableItemBackground"/>
+                <TextView android:id="@+id/shapeSquare" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="مربع" android:textColor="#666666" android:padding="12dp"/>
+                <TextView android:id="@+id/shapeCircle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="دائرة" android:textColor="#666666" android:padding="12dp"/>
+                <TextView android:id="@+id/shapeStar" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="نجمة" android:textColor="#666666" android:padding="12dp"/>
+                <TextView android:id="@+id/shapeCustom" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="شعار/صورة" android:textColor="#666666" android:padding="12dp"/>
+            </LinearLayout>
+        </HorizontalScrollView>
+
+        <!-- أشرطة التحكم في التأثير -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="شدة التشتت (Dispersion)" android:textColor="#FFFFFF" android:textSize="14sp" />
+            <SeekBar android:id="@+id/sbDispersionAmount" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" android:progress="50" android:progressTint="#00D4FF" />
+
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="حجم الشظايا (Size)" android:textColor="#FFFFFF" android:textSize="14sp" android:layout_marginTop="8dp"/>
+            <SeekBar android:id="@+id/sbParticleSize" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" android:progress="20" android:progressTint="#00D4FF" />
+
+        </LinearLayout>
+    </LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>
