@@ -60,7 +60,7 @@
             android:tint="#FFFFFF" />
     </LinearLayout>
 
-    <!-- شريط الأدوات السفلي -->
+    <!-- شريط الأدوات السفلي (6 أزرار) -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -68,7 +68,7 @@
         android:layout_marginBottom="20dp"
         android:orientation="horizontal"
         android:background="#99000000"
-        android:padding="8dp"
+        android:padding="4dp"
         android:gravity="center">
 
         <ImageButton
@@ -86,6 +86,16 @@
             android:layout_height="48dp"
             android:layout_weight="1"
             android:src="@android:drawable/ic_menu_rotate"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:tint="#FFFFFF" />
+
+        <!-- زر التسمية الذي كان مفقوداً -->
+        <ImageButton
+            android:id="@+id/btnRename"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:src="@android:drawable/ic_menu_edit"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:tint="#FFFFFF" />
 
@@ -117,7 +127,6 @@
             android:tint="#FFFFFF" />
     </LinearLayout>
 
-    <!-- شريط التحميل (يظهر فقط أثناء معالجة البيانات) -->
     <ProgressBar
         android:id="@+id/progressBar"
         android:layout_width="wrap_content"
