@@ -1,0 +1,255 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#050505">
+
+    <!-- 1. الشريط العلوي (Top Bar) -->
+    <LinearLayout
+        android:id="@+id/topBarEditor"
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="8dp"
+        android:background="#111111"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <ImageButton
+            android:id="@+id/btnCloseEditor"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_close_clear_cancel"
+            app:tint="#FFFFFF" />
+
+        <TextView
+            android:id="@+id/tvEditorTimer"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="جاهز"
+            android:textColor="#00D4FF"
+            android:textSize="14sp"
+            android:gravity="center"
+            android:textStyle="italic"/>
+
+        <ImageButton
+            android:id="@+id/btnUndo"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_revert"
+            app:tint="#666666" />
+
+        <ImageButton
+            android:id="@+id/btnRedo"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_rotate"
+            app:tint="#666666" />
+
+        <Button
+            android:id="@+id/btnSaveImage"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:text="حفظ"
+            android:textColor="#000000"
+            android:backgroundTint="#00D4FF"
+            android:textStyle="bold"
+            android:layout_marginStart="8dp"/>
+    </LinearLayout>
+
+    <!-- 2. منطقة الصورة -->
+    <FrameLayout
+        android:id="@+id/imageContainer"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        app:layout_constraintTop_toBottomOf="@+id/topBarEditor"
+        app:layout_constraintBottom_toTopOf="@+id/bottomPanel">
+
+        <ImageView
+            android:id="@+id/ivEditorImage"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="fitCenter"
+            android:background="#000000" />
+
+        <!-- نص التلميح للمقارنة (قبل/بعد) -->
+        <TextView
+            android:id="@+id/tvCompareHint"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="اضغط مطولاً للمقارنة مع الأصل"
+            android:textColor="#88FFFFFF"
+            android:textSize="12sp"
+            android:layout_gravity="bottom|center_horizontal"
+            android:layout_marginBottom="16dp"/>
+
+        <Button
+            android:id="@+id/btnPickImageForEdit"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="اختر صورة لتحريرها"
+            android:textColor="#000000"
+            android:backgroundTint="#00D4FF"
+            android:layout_gravity="center" />
+    </FrameLayout>
+
+    <!-- 3. لوحة التحكم السفلية (Bottom Panel) -->
+    <LinearLayout
+        android:id="@+id/bottomPanel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#111111"
+        app:layout_constraintBottom_toBottomOf="parent">
+
+        <!-- شريط التبويبات (للأدوات المستقبلية) -->
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:scrollbars="none"
+            android:background="#1A1A1A">
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:padding="8dp">
+                
+                <TextView
+                    android:id="@+id/tabColor"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="الألوان"
+                    android:textColor="#00D4FF"
+                    android:textStyle="bold"
+                    android:padding="12dp"
+                    android:background="?attr/selectableItemBackground"/>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="القص"
+                    android:textColor="#666666"
+                    android:padding="12dp"/>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="النصوص"
+                    android:textColor="#666666"
+                    android:padding="12dp"/>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="الطبقات"
+                    android:textColor="#666666"
+                    android:padding="12dp"/>
+            </LinearLayout>
+        </HorizontalScrollView>
+
+        <!-- أدوات التحكم بالألوان -->
+        <LinearLayout
+            android:id="@+id/layoutColorTools"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <!-- السطوع -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="السطوع"
+                    android:textColor="#FFFFFF"
+                    android:textSize="14sp" />
+                <ImageButton
+                    android:id="@+id/btnResetBrightness"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:src="@android:drawable/ic_menu_revert"
+                    app:tint="#666666" />
+            </LinearLayout>
+            <SeekBar
+                android:id="@+id/sbBrightness"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="100"
+                android:progress="50"
+                android:progressTint="#00D4FF" />
+
+            <!-- التباين -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="8dp">
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="التباين"
+                    android:textColor="#FFFFFF"
+                    android:textSize="14sp" />
+                <ImageButton
+                    android:id="@+id/btnResetContrast"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:src="@android:drawable/ic_menu_revert"
+                    app:tint="#666666" />
+            </LinearLayout>
+            <SeekBar
+                android:id="@+id/sbContrast"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="100"
+                android:progress="50"
+                android:progressTint="#00D4FF" />
+
+            <!-- التشبع -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="8dp">
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="التشبع"
+                    android:textColor="#FFFFFF"
+                    android:textSize="14sp" />
+                <ImageButton
+                    android:id="@+id/btnResetSaturation"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:src="@android:drawable/ic_menu_revert"
+                    app:tint="#666666" />
+            </LinearLayout>
+            <SeekBar
+                android:id="@+id/sbSaturation"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="100"
+                android:progress="50"
+                android:progressTint="#00D4FF" />
+
+        </LinearLayout>
+    </LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>
