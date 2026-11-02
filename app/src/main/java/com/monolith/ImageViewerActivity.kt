@@ -12,12 +12,14 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
+import android.text.InputType
 import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -54,8 +56,8 @@ class ImageViewerActivity : AppCompatActivity() {
         val btnShare = findViewById<ImageButton>(R.id.btnShare)
         val btnCrop = findViewById<ImageButton>(R.id.btnCrop)
         val btnRotate = findViewById<ImageButton>(R.id.btnRotate)
+        val btnEditExif = findViewById<ImageButton>(R.id.btnEditExif)
         val btnDownload = findViewById<ImageButton>(R.id.btnDownload)
-        val btnRename = findViewById<ImageButton>(R.id.btnRename)
         val btnInfo = findViewById<ImageButton>(R.id.btnInfo)
 
         val uriString = intent.getStringExtra("image_uri")
@@ -125,8 +127,114 @@ class ImageViewerActivity : AppCompatActivity() {
 
         btnRotate.setOnClickListener { rotateImage() }
         btnDownload.setOnClickListener { saveImageToGallery() }
-        btnRename.setOnClickListener { showRenameDialog() }
         btnInfo.setOnClickListener { showImageInfoWithExif() }
+        
+        // زر محرر البيانات الوصفية
+        btnEditExif.setOnClickListener { showEditExifDialog() }
+    }
+
+    // دالة نافذة تزوير/تعديل البيانات
+    private fun showEditExifDialog() {
+        if (imageUri == null) return
+
+        val builder = AlertDialog.Builder(this)
+        builder.setTitle("تعديل بيانات الصورة (EXIF)")
+        
+        val layout = LinearLayout(this)
+        layout.orientation = LinearLayout.VERTICAL
+        layout.setPadding(32, 16, 32, 16)
+
+        val etModel = EditText(this).apply {
+            hint = "اسم الكاميرا (مثال: Canon EOS 5D)"
+            inputType = InputType.TYPE_CLASS_TEXT
+        }
+        val etDate = EditText(this).apply {
+            hint = "التاريخ (YYYY:MM:DD HH:MM:SS)"
+            inputType = InputType.TYPE_CLASS_TEXT
+        }
+        val etLat = EditText(this).apply {
+            hint = "خط العرض (مثال: 34.0522)"
+            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL or InputType.TYPE_NUMBER_FLAG_SIGNED
+        }
+        val etLong = EditText(this).apply {
+            hint = "خط الطول (مثال: -118.2437)"
+            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL or InputType.TYPE_NUMBER_FLAG_SIGNED
+        }
+
+        layout.addView(etModel)
+        layout.addView(etDate)
+        layout.addView(etLat)
+        layout.addView(etLong)
+        builder.setView(layout)
+
+        builder.setPositiveButton("حقن البيانات") { _, _ ->
+            val model = etModel.text.toString()
+            val date = etDate.text.toString()
+            val latStr = etLat.text.toString()
+            val longStr = etLong.text.toString()
+            
+            applyExifData(model, date, latStr, longStr)
+        }
+        builder.setNegativeButton("إلغاء") { dialog, _ -> dialog.cancel() }
+        builder.show()
+    }
+
+    // دالة كتابة البيانات وحقنها في الصورة
+    private fun applyExifData(model: String, date: String, latStr: String, longStr: String) {
+        try {
+            // 1. نسخ الصورة الأصلية إلى ملف جديد في الكاش
+            val sourceUri = imageUri!!
+            val file = File(cacheDir, "exif_edited_${System.currentTimeMillis()}.jpg")
+            val inputStream = contentResolver.openInputStream(sourceUri)
+            val outputStream = FileOutputStream(file)
+            inputStream?.copyTo(outputStream)
+            outputStream.close()
+            inputStream?.close()
+
+            // 2. فتح الملف الجديد وكتابة البيانات الوصفية
+            val exif = ExifInterface(file.absolutePath)
+            
+            if (model.isNotEmpty()) {
+                exif.setAttribute(ExifInterface.TAG_MODEL, model)
+                exif.setAttribute(ExifInterface.TAG_MAKE, "Monolith Studio") // اسم مصنع وهمي
+            }
+            if (date.isNotEmpty()) {
+                exif.setAttribute(ExifInterface.TAG_DATETIME, date)
+            }
+            if (latStr.isNotEmpty() && longStr.isNotEmpty()) {
+                try {
+                    val lat = latStr.toDouble()
+                    val long = longStr.toDouble()
+                    // كتابة الموقع بدقة
+                    exif.setAttribute(ExifInterface.TAG_GPS_LATITUDE, convertToDegreeMinuteSec(lat))
+                    exif.setAttribute(ExifInterface.TAG_GPS_LATITUDE_REF, if (lat >= 0) "N" else "S")
+                    exif.setAttribute(ExifInterface.TAG_GPS_LONGITUDE, convertToDegreeMinuteSec(long))
+                    exif.setAttribute(ExifInterface.TAG_GPS_LONGITUDE_REF, if (long >= 0) "E" else "W")
+                } catch (e: Exception) {
+                    // تجاهل إذا كان الإدخال خاطئاً
+                }
+            }
+            
+            exif.saveAttributes()
+
+            // 3. تحديث الصورة المعروضة
+            imageUri = FileProvider.getUriForFile(this, "com.monolith.fileprovider", file)
+            fullImageView.setImageURI(imageUri)
+            closeAndReturn() // تحديث الدردشة
+            Toast.makeText(this, "تم حقن البيانات بنجاح!", Toast.LENGTH_SHORT).show()
+            
+        } catch (e: Exception) {
+            Toast.makeText(this, "فشل الحقن: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // دالة مساعدة لتحويل الإحداثيات إلى الصيغة التي يفهمها EXIF
+    private fun convertToDegreeMinuteSec(coord: Double): String {
+        val absCoord = Math.abs(coord)
+        val degree = absCoord.toInt()
+        val minute = ((absCoord - degree) * 60).toInt()
+        val second = ((absCoord - degree - (minute / 60.0)) * 3600)
+        return "$degree/1,$minute/1,${second.toInt()}/1"
     }
 
     private fun getSanitizedUri(sourceUri: Uri): Uri {
@@ -158,8 +266,6 @@ class ImageViewerActivity : AppCompatActivity() {
             try {
                 contentResolver.openInputStream(imageUri!!)?.use { stream ->
                     val exif = ExifInterface(stream)
-                    
-                    // الإصلاح: استخدام دالة getLatLong للمكتبة القديمة
                     val latLong = FloatArray(2)
                     val hasLatLong = exif.getLatLong(latLong)
                     
@@ -237,20 +343,6 @@ class ImageViewerActivity : AppCompatActivity() {
         } catch (e: Exception) {
             Toast.makeText(this, "فشل التدوير: ${e.message}", Toast.LENGTH_SHORT).show()
         }
-    }
-
-    private fun showRenameDialog() {
-        if (imageUri == null) return
-        val builder = AlertDialog.Builder(this)
-        builder.setTitle("إعادة تسمية الصورة")
-        val input = EditText(this)
-        input.setText(imageUri!!.lastPathSegment)
-        builder.setView(input)
-        builder.setPositiveButton("حفظ") { _, _ ->
-            Toast.makeText(this, "تمت التسمية إلى: ${input.text}", Toast.LENGTH_SHORT).show()
-        }
-        builder.setNegativeButton("إلغاء") { dialog, _ -> dialog.cancel() }
-        builder.show()
     }
 
     private fun closeAndReturn() {
