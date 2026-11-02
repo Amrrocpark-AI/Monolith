@@ -5,7 +5,6 @@
     android:layout_height="match_parent"
     android:background="#050505">
 
-    <!-- 1. الشريط العلوي (Top Bar) -->
     <LinearLayout
         android:id="@+id/topBarEditor"
         android:layout_width="match_parent"
@@ -62,7 +61,6 @@
             android:layout_marginStart="8dp"/>
     </LinearLayout>
 
-    <!-- 2. منطقة الصورة -->
     <FrameLayout
         android:id="@+id/imageContainer"
         android:layout_width="match_parent"
@@ -77,7 +75,6 @@
             android:scaleType="fitCenter"
             android:background="#000000" />
 
-        <!-- نص التلميح للمقارنة (قبل/بعد) -->
         <TextView
             android:id="@+id/tvCompareHint"
             android:layout_width="wrap_content"
@@ -98,7 +95,6 @@
             android:layout_gravity="center" />
     </FrameLayout>
 
-    <!-- 3. لوحة التحكم السفلية (Bottom Panel) -->
     <LinearLayout
         android:id="@+id/bottomPanel"
         android:layout_width="match_parent"
@@ -107,7 +103,6 @@
         android:background="#111111"
         app:layout_constraintBottom_toBottomOf="parent">
 
-        <!-- شريط التبويبات (للأدوات المستقبلية) -->
         <HorizontalScrollView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -128,31 +123,9 @@
                     android:textStyle="bold"
                     android:padding="12dp"
                     android:background="?attr/selectableItemBackground"/>
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="القص"
-                    android:textColor="#666666"
-                    android:padding="12dp"/>
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="النصوص"
-                    android:textColor="#666666"
-                    android:padding="12dp"/>
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="الطبقات"
-                    android:textColor="#666666"
-                    android:padding="12dp"/>
             </LinearLayout>
         </HorizontalScrollView>
 
-        <!-- أدوات التحكم بالألوان -->
         <LinearLayout
             android:id="@+id/layoutColorTools"
             android:layout_width="match_parent"
@@ -160,94 +133,23 @@
             android:orientation="vertical"
             android:padding="16dp">
 
-            <!-- السطوع -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical">
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="السطوع"
-                    android:textColor="#FFFFFF"
-                    android:textSize="14sp" />
-                <ImageButton
-                    android:id="@+id/btnResetBrightness"
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:src="@android:drawable/ic_menu_revert"
-                    app:tint="#666666" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
+                <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="السطوع" android:textColor="#FFFFFF" android:textSize="14sp" />
+                <ImageButton android:id="@+id/btnResetBrightness" android:layout_width="24dp" android:layout_height="24dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@android:drawable/ic_menu_revert" app:tint="#666666" />
             </LinearLayout>
-            <SeekBar
-                android:id="@+id/sbBrightness"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:max="100"
-                android:progress="50"
-                android:progressTint="#00D4FF" />
+            <SeekBar android:id="@+id/sbBrightness" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" android:progress="50" android:progressTint="#00D4FF" />
 
-            <!-- التباين -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginTop="8dp">
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="التباين"
-                    android:textColor="#FFFFFF"
-                    android:textSize="14sp" />
-                <ImageButton
-                    android:id="@+id/btnResetContrast"
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:src="@android:drawable/ic_menu_revert"
-                    app:tint="#666666" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginTop="8dp">
+                <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="التباين" android:textColor="#FFFFFF" android:textSize="14sp" />
+                <ImageButton android:id="@+id/btnResetContrast" android:layout_width="24dp" android:layout_height="24dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@android:drawable/ic_menu_revert" app:tint="#666666" />
             </LinearLayout>
-            <SeekBar
-                android:id="@+id/sbContrast"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:max="100"
-                android:progress="50"
-                android:progressTint="#00D4FF" />
+            <SeekBar android:id="@+id/sbContrast" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" android:progress="50" android:progressTint="#00D4FF" />
 
-            <!-- التشبع -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginTop="8dp">
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="التشبع"
-                    android:textColor="#FFFFFF"
-                    android:textSize="14sp" />
-                <ImageButton
-                    android:id="@+id/btnResetSaturation"
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:src="@android:drawable/ic_menu_revert"
-                    app:tint="#666666" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginTop="8dp">
+                <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="التشبع" android:textColor="#FFFFFF" android:textSize="14sp" />
+                <ImageButton android:id="@+id/btnResetSaturation" android:layout_width="24dp" android:layout_height="24dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@android:drawable/ic_menu_revert" app:tint="#666666" />
             </LinearLayout>
-            <SeekBar
-                android:id="@+id/sbSaturation"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:max="100"
-                android:progress="50"
-                android:progressTint="#00D4FF" />
+            <SeekBar android:id="@+id/sbSaturation" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" android:progress="50" android:progressTint="#00D4FF" />
 
         </LinearLayout>
     </LinearLayout>
