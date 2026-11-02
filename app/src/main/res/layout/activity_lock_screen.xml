@@ -1,1 +1,95 @@
 
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#050505">
+
+    <!-- عنوان الشاشة (أصغر وأكثر أناقة) -->
+    <TextView
+        android:id="@+id/tvLockTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="MONOLITH VAULT"
+        android:textColor="#00FF00"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:letterSpacing="0.4"
+        android:layout_marginTop="64dp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- حاوية البصمة (تتوسط الشاشة) -->
+    <FrameLayout
+        android:id="@+id/fingerprintContainer"
+        android:layout_width="180dp"
+        android:layout_height="180dp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <!-- مؤشر الطاقة الدائري (سيظهر أثناء الفحص) -->
+        <com.google.android.material.progressindicator.CircularProgressIndicator
+            android:id="@+id/progressIndicator"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:indeterminate="true"
+            android:visibility="invisible"
+            app:indicatorColor="#00FF00"
+            app:trackColor="#1A1A1A"
+            app:trackThickness="4dp"
+            app:indicatorSize="180dp" />
+
+        <!-- الدائرة الزجاجية التي تحتوي على أيقونة البصمة -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardFingerprint"
+            android:layout_width="140dp"
+            android:layout_height="140dp"
+            android:layout_gravity="center"
+            app:cardCornerRadius="70dp"
+            app:cardBackgroundColor="#111111"
+            app:strokeColor="#333333"
+            app:strokeWidth="1dp"
+            app:cardElevation="10dp"
+            app:rippleColor="#3300FF00">
+
+            <ImageView
+                android:id="@+id/ivFingerprintIcon"
+                android:layout_width="60dp"
+                android:layout_height="60dp"
+                android:layout_gravity="center"
+                android:src="@android:drawable/ic_lock_idle_lock"
+                app:tint="#00FF00" />
+        </com.google.android.material.card.MaterialCardView>
+    </FrameLayout>
+
+    <!-- نص التوجيه (يتغير ديناميكياً حسب الحالة) -->
+    <TextView
+        android:id="@+id/tvLockSubtitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="المس الدائرة للتحقق من الهوية"
+        android:textColor="#AAAAAA"
+        android:textSize="16sp"
+        android:layout_marginTop="32dp"
+        app:layout_constraintTop_toBottomOf="@+id/fingerprintContainer"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- زر كلمة المرور الاحتياطي (يظهر فقط عند الحاجة) -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnUsePassword"
+        style="@style/Widget.MaterialComponents.Button.TextButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="استخدام كلمة المرور"
+        android:textColor="#00FF00"
+        android:layout_marginBottom="48dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>
