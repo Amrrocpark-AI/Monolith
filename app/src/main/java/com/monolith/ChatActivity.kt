@@ -35,7 +35,6 @@ import androidx.security.crypto.MasterKey
 import com.bumptech.glide.Glide
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.card.MaterialCardView
-import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -47,8 +46,6 @@ import java.io.InputStream
 class ChatActivity : AppCompatActivity() {
 
     private val selectedImageUris = mutableListOf<Uri>()
-    private var selectedDocumentText: String = ""
-
     private lateinit var etMessage: EditText
     private lateinit var btnSend: ImageButton
     private lateinit var imagePreviewContainer: android.widget.HorizontalScrollView
@@ -57,14 +54,12 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var chatScrollView: android.widget.ScrollView
     private lateinit var tvAppTitle: TextView
 
-    private var themeColorHex = "#00FF00"
+    // *** اللون الأزرق الكهربائي الجديد ***
+    private var themeColorHex = "#00D4FF" 
 
     private lateinit var securePrefs: SharedPreferences
     private lateinit var messageDao: MessageDao
-    private val gson = Gson()
     private var messageList: MutableList<ChatMessage> = mutableListOf()
-    
-    // معرف مؤقت للمحادثة الحالية (سنطوره لاحقاً للمجموعات)
     private val currentConversationId = "main_chat" 
 
     private val pickImagesLauncher = registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris: List<Uri> ->
@@ -126,7 +121,6 @@ class ChatActivity : AppCompatActivity() {
 
         ApiClient.init(applicationContext)
         
-        // تهيئة قاعدة البيانات
         val db = AppDatabase.getDatabase(applicationContext)
         messageDao = db.messageDao()
 
@@ -173,11 +167,7 @@ class ChatActivity : AppCompatActivity() {
         }
 
         btnBack.setOnClickListener { finish() }
-
-        btnSettings.setOnClickListener {
-            startActivity(Intent(this, SettingsActivity::class.java))
-        }
-
+        btnSettings.setOnClickListener { startActivity(Intent(this, SettingsActivity::class.java)) }
         btnMic.setOnClickListener { Toast.makeText(this, "قريباً", Toast.LENGTH_SHORT).show() }
         btnVisionToggle.setOnClickListener { Toast.makeText(this, "قريباً", Toast.LENGTH_SHORT).show() }
 
@@ -205,7 +195,6 @@ class ChatActivity : AppCompatActivity() {
                     addChatBubble(chatContainer, userMsg)
 
                     selectedImageUris.clear()
-                    selectedDocumentText = ""
                     updatePreviewUi()
                     etMessage.text.clear()
                     hideKeyboard()
@@ -267,37 +256,39 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    // ==========================================
-    // دوال قاعدة البيانات (Room Database)
-    // ==========================================
-    
     private fun loadMessagesFromDb() {
         lifecycleScope.launch {
-            val entities = messageDao.getMessagesForConversation(currentConversationId)
-            messageList = entities.map { it.toChatMessage() }.toMutableList()
-            
-            withContext(Dispatchers.Main) {
-                chatContainer.removeAllViews()
-                for (msg in messageList) { addChatBubble(chatContainer, msg) }
-                chatScrollView.post { chatScrollView.fullScroll(android.widget.ScrollView.FOCUS_DOWN) }
+            try {
+                val entities = messageDao.getMessagesForConversation(currentConversationId)
+                messageList = entities.map { it.toChatMessage() }.toMutableList()
+                withContext(Dispatchers.Main) {
+                    chatContainer.removeAllViews()
+                    for (msg in messageList) { addChatBubble(chatContainer, msg) }
+                    chatScrollView.post { chatScrollView.fullScroll(android.widget.ScrollView.FOCUS_DOWN) }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
         }
     }
 
     private fun saveMessageToDb(msg: ChatMessage) {
         lifecycleScope.launch {
-            messageDao.insertMessage(msg.toMessageEntity(currentConversationId))
+            try {
+                messageDao.insertMessage(msg.toMessageEntity(currentConversationId))
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
 
-    // محولات البيانات (Mappers)
     private fun MessageEntity.toChatMessage(): ChatMessage {
         return ChatMessage(
             id = this.id,
             role = if (this.role == "USER") MessageRole.USER else MessageRole.AI,
             content = this.content,
             attachmentUris = this.attachmentUris?.split(",")?.filter { it.isNotEmpty() },
-            colorHex = if (this.role == "USER") "#00FF00" else "#2A2A2A", // تبسيط مؤقت
+            colorHex = if (this.role == "USER") themeColorHex else "#2A2A2A",
             timestamp = this.timestamp
         )
     }
@@ -315,14 +306,10 @@ class ChatActivity : AppCompatActivity() {
         )
     }
 
-    // ==========================================
-    // دوال الواجهة المساعدة
-    // ==========================================
-
     private fun showSetupDialog() {
         AlertDialog.Builder(this)
             .setTitle("المحرك غير متصل")
-            .setMessage("مرحباً بك في Monolith. يرجى تهيئة المحرك الذكي (إدخال مفتاح API) للبدء في الدردشة.")
+            .setMessage("مرحباً بك في Monolith. يرجى تهيئة المحرك الذكي للبدء.")
             .setPositiveButton("الذهاب للإعدادات") { _, _ -> startActivity(Intent(this, SettingsActivity::class.java)) }
             .setNegativeButton("إلغاء", null)
             .show()
@@ -427,7 +414,8 @@ class ChatActivity : AppCompatActivity() {
         try {
             val settingsPrefs = getSharedPreferences("Settings", MODE_PRIVATE)
             val rootLayout = findViewById<LinearLayout>(R.id.rootLayout)
-            themeColorHex = settingsPrefs.getString("AppThemeColor", "#00FF00") ?: "#00FF00"
+            // اللون الافتراضي أصبح أزرق كهربائي
+            themeColorHex = settingsPrefs.getString("AppThemeColor", "#00D4FF") ?: "#00D4FF"
             val themeColor = Color.parseColor(themeColorHex)
 
             tvAppTitle.setTextColor(themeColor)
