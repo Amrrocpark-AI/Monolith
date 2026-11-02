@@ -69,20 +69,23 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    // *** ميزة اختيار الملفات (Text, PDF, Code) الجديدة ***
+    // *** قارئ الملفات النصية فقط ***
     private val pickDocumentLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) {
             try {
-                // قراءة الملف النصي
-                val inputStream: InputStream? = contentResolver.openInputStream(uri)
-                val text = inputStream?.bufferedReader()?.use { it.readText() } ?: ""
-                
-                if (text.isNotEmpty()) {
-                    selectedDocumentText = text
-                    etMessage.setText("تم إرفاق ملف يحتوي على: $text") // عرض النص في مربع الكتابة
-                    Toast.makeText(this, "تم قراءة الملف بنجاح!", Toast.LENGTH_SHORT).show()
+                val mimeType = contentResolver.getType(uri)
+                // التحقق من أن الملف نصي
+                if (mimeType != null && (mimeType.startsWith("text/") || mimeType.contains("json") || mimeType.contains("xml"))) {
+                    val inputStream: InputStream? = contentResolver.openInputStream(uri)
+                    val text = inputStream?.bufferedReader()?.use { it.readText() } ?: ""
+                    
+                    if (text.isNotEmpty()) {
+                        selectedDocumentText = text
+                        etMessage.setText("محتوى الملف:\n$text") // عرض النص في مربع الكتابة
+                        Toast.makeText(this, "تم قراءة الملف النصي بنجاح!", Toast.LENGTH_SHORT).show()
+                    }
                 } else {
-                    Toast.makeText(this, "الملف فارغ أو غير مدعوم حالياً (يدعم حالياً Text فقط)", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "عذراً، التطبيق يدعم حالياً الملفات النصية فقط (Text, JSON).", Toast.LENGTH_LONG).show()
                 }
             } catch (e: Exception) {
                 Toast.makeText(this, "حدث خطأ أثناء قراءة الملف", Toast.LENGTH_SHORT).show()
@@ -403,11 +406,10 @@ class ChatActivity : AppCompatActivity() {
             pickImagesLauncher.launch("image/*")
         }
         
-        // *** ربط زر المستند بقراءة الملفات ***
         bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionDocument)?.setOnClickListener {
             bottomSheetDialog.dismiss()
-            // فتح مستكشف الملفات لاختيار أي نوع (نص، PDF، إلخ)
-            pickDocumentLauncher.launch(arrayOf("*/*")) 
+            // فلترة الملفات لتشمل النصوص فقط
+            pickDocumentLauncher.launch(arrayOf("text/plain", "text/*", "application/json", "application/xml")) 
         }
 
         bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionAudio)?.setOnClickListener {
@@ -423,7 +425,6 @@ class ChatActivity : AppCompatActivity() {
             Toast.makeText(this, "قريباً", Toast.LENGTH_SHORT).show()
         }
         
-        // *** إصلاح الخطأ: تحديث الاسم إلى btnOptionAI ***
         bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionAI)?.setOnClickListener {
             bottomSheetDialog.dismiss()
             Toast.makeText(this, "قريباً: وكيل الذكاء الاصطناعي", Toast.LENGTH_SHORT).show()
