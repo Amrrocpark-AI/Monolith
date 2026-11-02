@@ -1,6 +1,5 @@
 package com.monolith
 
-import android.app.Dialog
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -18,7 +17,6 @@ import android.text.Editable
 import android.text.TextWatcher
 import android.view.Gravity
 import android.view.ViewGroup
-import android.view.Window
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
@@ -135,7 +133,7 @@ class ChatActivity : AppCompatActivity() {
                     addChatBubble(chatContainer, userMsg)
 
                     selectedImageUris.clear()
-                    updatePreviewUi() // تحديث المعاينة (ستختفي لأن القائمة فارغة)
+                    updatePreviewUi()
                     etMessage.text.clear()
                     hideKeyboard()
                     
@@ -163,7 +161,6 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    // دالة تحديث واجهة المعاينة (تعرض كل الصور المختارة)
     private fun updatePreviewUi() {
         previewListContainer.removeAllViews()
         
@@ -176,11 +173,10 @@ class ChatActivity : AppCompatActivity() {
             btnSend.isEnabled = true
             btnSend.alpha = 1.0f
 
-            // إنشاء مربع صغير لكل صورة
             for ((index, uri) in selectedImageUris.withIndex()) {
                 val cardView = MaterialCardView(this)
                 val cardParams = LinearLayout.LayoutParams(dpToPx(50), dpToPx(50))
-                cardParams.setMargins(0, 0, dpToPx(8), 0) // مسافة بين الصور
+                cardParams.setMargins(0, 0, dpToPx(8), 0)
                 cardView.layoutParams = cardParams
                 cardView.radius = dpToPx(8).toFloat()
                 cardView.setCardElevation(0f)
@@ -206,10 +202,9 @@ class ChatActivity : AppCompatActivity() {
                 btnRemove.gravity = Gravity.CENTER
                 btnRemove.setBackgroundResource(R.drawable.bg_circle_dark)
                 
-                // عند الضغط على X، يتم حذف هذه الصورة فقط
                 btnRemove.setOnClickListener {
                     selectedImageUris.removeAt(index)
-                    updatePreviewUi() // إعادة رسم المعاينة
+                    updatePreviewUi()
                 }
                 
                 relativeLayout.addView(btnRemove)
@@ -221,18 +216,6 @@ class ChatActivity : AppCompatActivity() {
 
     private fun dpToPx(dp: Int): Int {
         return (dp * resources.displayMetrics.density).toInt()
-    }
-
-    private fun showFullScreenImage(uri: Uri) {
-        val dialog = Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
-        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
-        val imageView = ImageView(this)
-        imageView.layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-        imageView.scaleType = ImageView.ScaleType.FIT_CENTER
-        imageView.setImageURI(uri)
-        imageView.setOnClickListener { dialog.dismiss() }
-        dialog.setContentView(imageView)
-        dialog.show()
     }
 
     private fun saveMessages() {
@@ -406,7 +389,13 @@ class ChatActivity : AppCompatActivity() {
                 try {
                     val imageUri = Uri.parse(uriString)
                     imageView.setImageURI(imageUri)
-                    imageView.setOnClickListener { showFullScreenImage(imageUri) }
+                    
+                    // التعديل هنا: فتح ImageViewerActivity بدلاً من الشاشة السوداء القديمة
+                    imageView.setOnClickListener { 
+                        val intent = Intent(this, ImageViewerActivity::class.java)
+                        intent.putExtra("image_uri", uriString)
+                        startActivity(intent)
+                    }
                 } catch (e: Exception) {}
                 
                 imageContainer.addView(imageView)
