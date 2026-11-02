@@ -9,7 +9,6 @@
     android:paddingStart="16dp"
     android:paddingEnd="16dp">
 
-    <!-- مقبض السحب (Drag Handle) -->
     <View
         android:layout_width="40dp"
         android:layout_height="4dp"
@@ -27,28 +26,24 @@
         android:gravity="center"
         android:layout_marginBottom="24dp"/>
 
-    <!-- شبكة الأيقونات (3 أعمدة) -->
-    <GridLayout
+    <!-- الصف الأول -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:columnCount="3"
-        android:rowCount="2"
-        android:alignmentMode="alignMargins"
-        android:useDefaultMargins="true">
+        android:orientation="horizontal"
+        android:weightSum="3">
 
-        <!-- 1. الصور -->
         <LinearLayout
             android:id="@+id/btnOptionImage"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_columnWeight="1"
+            android:layout_weight="1"
             android:orientation="vertical"
             android:gravity="center"
             android:padding="8dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:clickable="true"
             android:focusable="true">
-            
             <ImageView
                 android:layout_width="56dp"
                 android:layout_height="56dp"
@@ -65,19 +60,17 @@
                 android:layout_marginTop="8dp" />
         </LinearLayout>
 
-        <!-- 2. المستندات -->
         <LinearLayout
             android:id="@+id/btnOptionDocument"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_columnWeight="1"
+            android:layout_weight="1"
             android:orientation="vertical"
             android:gravity="center"
             android:padding="8dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:clickable="true"
             android:focusable="true">
-            
             <ImageView
                 android:layout_width="56dp"
                 android:layout_height="56dp"
@@ -94,19 +87,17 @@
                 android:layout_marginTop="8dp" />
         </LinearLayout>
 
-        <!-- 3. الصوت -->
         <LinearLayout
             android:id="@+id/btnOptionAudio"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_columnWeight="1"
+            android:layout_weight="1"
             android:orientation="vertical"
             android:gravity="center"
             android:padding="8dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:clickable="true"
             android:focusable="true">
-            
             <ImageView
                 android:layout_width="56dp"
                 android:layout_height="56dp"
@@ -122,20 +113,27 @@
                 android:textSize="12sp"
                 android:layout_marginTop="8dp" />
         </LinearLayout>
+    </LinearLayout>
 
-        <!-- 4. البحث -->
+    <!-- الصف الثاني -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:weightSum="3"
+        android:layout_marginTop="16dp">
+
         <LinearLayout
             android:id="@+id/btnOptionSearch"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_columnWeight="1"
+            android:layout_weight="1"
             android:orientation="vertical"
             android:gravity="center"
             android:padding="8dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:clickable="true"
             android:focusable="true">
-            
             <ImageView
                 android:layout_width="56dp"
                 android:layout_height="56dp"
@@ -152,19 +150,17 @@
                 android:layout_marginTop="8dp" />
         </LinearLayout>
 
-        <!-- 5. الكاميرا (لإضافة صورة مباشرة) -->
         <LinearLayout
             android:id="@+id/btnOptionCamera"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_columnWeight="1"
+            android:layout_weight="1"
             android:orientation="vertical"
             android:gravity="center"
             android:padding="8dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:clickable="true"
             android:focusable="true">
-            
             <ImageView
                 android:layout_width="56dp"
                 android:layout_height="56dp"
@@ -181,19 +177,17 @@
                 android:layout_marginTop="8dp" />
         </LinearLayout>
 
-        <!-- 6. تحليل AI -->
         <LinearLayout
             android:id="@+id/btnOptionAI"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_columnWeight="1"
+            android:layout_weight="1"
             android:orientation="vertical"
             android:gravity="center"
             android:padding="8dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:clickable="true"
             android:focusable="true">
-            
             <ImageView
                 android:layout_width="56dp"
                 android:layout_height="56dp"
@@ -210,6 +204,5 @@
                 android:textStyle="bold"
                 android:layout_marginTop="8dp" />
         </LinearLayout>
-
-    </GridLayout>
+    </LinearLayout>
 </LinearLayout>
