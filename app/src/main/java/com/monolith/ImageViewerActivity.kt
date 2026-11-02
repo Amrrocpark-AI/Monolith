@@ -11,6 +11,8 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.Handler
+import android.os.Looper
 import android.provider.MediaStore
 import android.text.InputType
 import android.view.GestureDetector
@@ -20,6 +22,7 @@ import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -35,6 +38,7 @@ class ImageViewerActivity : AppCompatActivity() {
 
     private var imageUri: Uri? = null
     private lateinit var fullImageView: ImageView
+    private lateinit var progressBar: ProgressBar
     private var messageId: String? = null
     private var imageIndex: Int = -1
     
@@ -50,6 +54,8 @@ class ImageViewerActivity : AppCompatActivity() {
         setContentView(R.layout.activity_image_viewer)
 
         fullImageView = findViewById(R.id.fullImageView)
+        progressBar = findViewById(R.id.progressBar)
+        
         val btnClose = findViewById<ImageButton>(R.id.btnCloseViewer)
         val btnPrivacyShield = findViewById<ImageButton>(R.id.btnPrivacyShield)
         val btnAnalyze = findViewById<TextView>(R.id.btnAnalyze)
@@ -128,12 +134,9 @@ class ImageViewerActivity : AppCompatActivity() {
         btnRotate.setOnClickListener { rotateImage() }
         btnDownload.setOnClickListener { saveImageToGallery() }
         btnInfo.setOnClickListener { showImageInfoWithExif() }
-        
-        // زر محرر البيانات الوصفية
         btnEditExif.setOnClickListener { showEditExifDialog() }
     }
 
-    // دالة نافذة تزوير/تعديل البيانات
     private fun showEditExifDialog() {
         if (imageUri == null) return
 
@@ -179,56 +182,61 @@ class ImageViewerActivity : AppCompatActivity() {
         builder.show()
     }
 
-    // دالة كتابة البيانات وحقنها في الصورة
     private fun applyExifData(model: String, date: String, latStr: String, longStr: String) {
-        try {
-            // 1. نسخ الصورة الأصلية إلى ملف جديد في الكاش
-            val sourceUri = imageUri!!
-            val file = File(cacheDir, "exif_edited_${System.currentTimeMillis()}.jpg")
-            val inputStream = contentResolver.openInputStream(sourceUri)
-            val outputStream = FileOutputStream(file)
-            inputStream?.copyTo(outputStream)
-            outputStream.close()
-            inputStream?.close()
+        // إظهار شريط التحميل وتعطيل الأزرار مؤقتاً
+        progressBar.visibility = android.view.View.VISIBLE
+        
+        // تشغيل العملية في الخلفية لتجنب تجميد الواجهة
+        Thread {
+            try {
+                val sourceUri = imageUri!!
+                val file = File(cacheDir, "exif_edited_${System.currentTimeMillis()}.jpg")
+                val inputStream = contentResolver.openInputStream(sourceUri)
+                val outputStream = FileOutputStream(file)
+                inputStream?.copyTo(outputStream)
+                outputStream.close()
+                inputStream?.close()
 
-            // 2. فتح الملف الجديد وكتابة البيانات الوصفية
-            val exif = ExifInterface(file.absolutePath)
-            
-            if (model.isNotEmpty()) {
-                exif.setAttribute(ExifInterface.TAG_MODEL, model)
-                exif.setAttribute(ExifInterface.TAG_MAKE, "Monolith Studio") // اسم مصنع وهمي
-            }
-            if (date.isNotEmpty()) {
-                exif.setAttribute(ExifInterface.TAG_DATETIME, date)
-            }
-            if (latStr.isNotEmpty() && longStr.isNotEmpty()) {
-                try {
-                    val lat = latStr.toDouble()
-                    val long = longStr.toDouble()
-                    // كتابة الموقع بدقة
-                    exif.setAttribute(ExifInterface.TAG_GPS_LATITUDE, convertToDegreeMinuteSec(lat))
-                    exif.setAttribute(ExifInterface.TAG_GPS_LATITUDE_REF, if (lat >= 0) "N" else "S")
-                    exif.setAttribute(ExifInterface.TAG_GPS_LONGITUDE, convertToDegreeMinuteSec(long))
-                    exif.setAttribute(ExifInterface.TAG_GPS_LONGITUDE_REF, if (long >= 0) "E" else "W")
-                } catch (e: Exception) {
-                    // تجاهل إذا كان الإدخال خاطئاً
+                val exif = ExifInterface(file.absolutePath)
+                
+                if (model.isNotEmpty()) {
+                    exif.setAttribute(ExifInterface.TAG_MODEL, model)
+                    exif.setAttribute(ExifInterface.TAG_MAKE, "Monolith Studio")
+                }
+                if (date.isNotEmpty()) {
+                    exif.setAttribute(ExifInterface.TAG_DATETIME, date)
+                }
+                if (latStr.isNotEmpty() && longStr.isNotEmpty()) {
+                    try {
+                        val lat = latStr.toDouble()
+                        val long = longStr.toDouble()
+                        exif.setAttribute(ExifInterface.TAG_GPS_LATITUDE, convertToDegreeMinuteSec(lat))
+                        exif.setAttribute(ExifInterface.TAG_GPS_LATITUDE_REF, if (lat >= 0) "N" else "S")
+                        exif.setAttribute(ExifInterface.TAG_GPS_LONGITUDE, convertToDegreeMinuteSec(long))
+                        exif.setAttribute(ExifInterface.TAG_GPS_LONGITUDE_REF, if (long >= 0) "E" else "W")
+                    } catch (e: Exception) {}
+                }
+                
+                exif.saveAttributes()
+
+                // العودة للواجهة الرئيسية لتحديث الصورة وإخفاء التحميل
+                Handler(Looper.getMainLooper()).post {
+                    imageUri = FileProvider.getUriForFile(this, "com.monolith.fileprovider", file)
+                    fullImageView.setImageURI(imageUri)
+                    progressBar.visibility = android.view.View.GONE
+                    Toast.makeText(this, "تم تعديل البيانات وحفظها بنجاح!", Toast.LENGTH_LONG).show()
+                    // لاحظ: لا نستدعي closeAndReturn() هنا لكي نبقى في الشاشة!
+                }
+                
+            } catch (e: Exception) {
+                Handler(Looper.getMainLooper()).post {
+                    progressBar.visibility = android.view.View.GONE
+                    Toast.makeText(this, "فشل الحقن: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
             }
-            
-            exif.saveAttributes()
-
-            // 3. تحديث الصورة المعروضة
-            imageUri = FileProvider.getUriForFile(this, "com.monolith.fileprovider", file)
-            fullImageView.setImageURI(imageUri)
-            closeAndReturn() // تحديث الدردشة
-            Toast.makeText(this, "تم حقن البيانات بنجاح!", Toast.LENGTH_SHORT).show()
-            
-        } catch (e: Exception) {
-            Toast.makeText(this, "فشل الحقن: ${e.message}", Toast.LENGTH_SHORT).show()
-        }
+        }.start()
     }
 
-    // دالة مساعدة لتحويل الإحداثيات إلى الصيغة التي يفهمها EXIF
     private fun convertToDegreeMinuteSec(coord: Double): String {
         val absCoord = Math.abs(coord)
         val degree = absCoord.toInt()
@@ -325,6 +333,7 @@ class ImageViewerActivity : AppCompatActivity() {
 
     private fun rotateImage() {
         if (imageUri == null) return
+        progressBar.visibility = android.view.View.VISIBLE
         try {
             val inputStream = contentResolver.openInputStream(imageUri!!)
             val originalBitmap = BitmapFactory.decodeStream(inputStream)
@@ -339,8 +348,10 @@ class ImageViewerActivity : AppCompatActivity() {
             
             imageUri = FileProvider.getUriForFile(this, "com.monolith.fileprovider", file)
             fullImageView.setImageURI(imageUri)
-            closeAndReturn()
+            progressBar.visibility = android.view.View.GONE
+            Toast.makeText(this, "تم التدوير بنجاح", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
+            progressBar.visibility = android.view.View.GONE
             Toast.makeText(this, "فشل التدوير: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
@@ -356,6 +367,7 @@ class ImageViewerActivity : AppCompatActivity() {
 
     private fun saveImageToGallery() {
         if (imageUri == null) return
+        progressBar.visibility = android.view.View.VISIBLE
         try {
             val uriToSave = if (isPrivacyShieldEnabled) getSanitizedUri(imageUri!!) else imageUri!!
             
@@ -383,9 +395,11 @@ class ImageViewerActivity : AppCompatActivity() {
             if (outputStream != null) {
                 bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
                 outputStream.close()
+                progressBar.visibility = android.view.View.GONE
                 Toast.makeText(this, "تم الحفظ في مجلد Monolith", Toast.LENGTH_SHORT).show()
             }
         } catch (e: Exception) {
+            progressBar.visibility = android.view.View.GONE
             Toast.makeText(this, "خطأ أثناء الحفظ: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
