@@ -6,6 +6,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
+import android.media.ExifInterface
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -22,10 +23,13 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
 import com.yalantis.ucrop.UCrop
+import com.yalantis.ucrop.UCropActivity
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
 import java.io.OutputStream
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 class ImageViewerActivity : AppCompatActivity() {
 
@@ -34,6 +38,9 @@ class ImageViewerActivity : AppCompatActivity() {
     private var messageId: String? = null
     private var imageIndex: Int = -1
     
+    // متغير درع الخصوصية (مفعل افتراضياً لحمايتك)
+    private var isPrivacyShieldEnabled = true
+
     private lateinit var scaleGestureDetector: ScaleGestureDetector
     private lateinit var gestureDetector: GestureDetector
     private var scaleFactor = 1.0f
@@ -45,6 +52,7 @@ class ImageViewerActivity : AppCompatActivity() {
 
         fullImageView = findViewById(R.id.fullImageView)
         val btnClose = findViewById<ImageButton>(R.id.btnCloseViewer)
+        val btnPrivacyShield = findViewById<ImageButton>(R.id.btnPrivacyShield)
         val btnAnalyze = findViewById<TextView>(R.id.btnAnalyze)
         val btnShare = findViewById<ImageButton>(R.id.btnShare)
         val btnCrop = findViewById<ImageButton>(R.id.btnCrop)
@@ -65,12 +73,30 @@ class ImageViewerActivity : AppCompatActivity() {
         setupZoomAndPan()
 
         btnClose.setOnClickListener { closeAndReturn() }
-        btnAnalyze.setOnClickListener { Toast.makeText(this, "تحليل AI قريباً", Toast.LENGTH_SHORT).show() }
+
+        // زر درع الخصوصية: يغير حالته بين تفعيل/تعطيل
+        btnPrivacyShield.setOnClickListener {
+            isPrivacyShieldEnabled = !isPrivacyShieldEnabled
+            if (isPrivacyShieldEnabled) {
+                btnPrivacyShield.setColorFilter(android.graphics.Color.parseColor("#00FF00"))
+                Toast.makeText(this, "درع الخصوصية: مفعل (سيتم مسح بيانات الموقع)", Toast.LENGTH_SHORT).show()
+            } else {
+                btnPrivacyShield.setColorFilter(android.graphics.Color.WHITE)
+                Toast.makeText(this, "درع الخصوصية: معطل (سيتم الاحتفاظ بالبيانات)", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        btnAnalyze.setOnClickListener {
+            Toast.makeText(this, "تحليل AI قريباً", Toast.LENGTH_SHORT).show()
+        }
+
         btnShare.setOnClickListener {
             if (imageUri != null) {
+                // مشاركة الصورة (مع أو بدون بيانات حسب درع الخصوصية)
+                val uriToShare = if (isPrivacyShieldEnabled) getSanitizedUri(imageUri!!) else imageUri!!
                 val intent = Intent(Intent.ACTION_SEND).apply {
                     type = "image/*"
-                    putExtra(Intent.EXTRA_STREAM, imageUri)
+                    putExtra(Intent.EXTRA_STREAM, uriToShare)
                 }
                 startActivity(Intent.createChooser(intent, "مشاركة الصورة"))
             }
@@ -81,10 +107,23 @@ class ImageViewerActivity : AppCompatActivity() {
                 try {
                     val file = File(cacheDir, "cropped_${System.currentTimeMillis()}.jpg")
                     val destinationUri = FileProvider.getUriForFile(this, "com.monolith.fileprovider", file)
-                    val uCrop = UCrop.of(imageUri!!, destinationUri).withMaxResultSize(1080, 1080)
+                    
+                    val options = UCrop.Options()
+                    options.setCompressionFormat(Bitmap.CompressFormat.JPEG)
+                    options.setCompressionQuality(100)
+                    options.setHideBottomControls(false)
+                    options.setFreeStyleCropEnabled(true)
+                    options.setShowCropGrid(true)
+                    options.setToolbarTitle("محرر مونوليث")
+                    options.setAllowedGestures(UCropActivity.SCALE, UCropActivity.ROTATE, UCropActivity.ALL)
+
+                    val uCrop = UCrop.of(imageUri!!, destinationUri)
+                        .withOptions(options)
+                        .withMaxResultSize(2048, 2048)
+
                     uCrop.start(this)
                 } catch (e: Exception) {
-                    Toast.makeText(this, "خطأ: ${e.message}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "خطأ في الإعداد: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -92,7 +131,72 @@ class ImageViewerActivity : AppCompatActivity() {
         btnRotate.setOnClickListener { rotateImage() }
         btnDownload.setOnClickListener { saveImageToGallery() }
         btnRename.setOnClickListener { showRenameDialog() }
-        btnInfo.setOnClickListener { showImageInfo() }
+        
+        // زر المعلومات الذكي
+        btnInfo.setOnClickListener { showImageInfoWithExif() }
+    }
+
+    // دالة مسح البيانات الوصفية وإنشاء نسخة نظيفة
+    private fun getSanitizedUri(sourceUri: Uri): Uri {
+        return try {
+            val inputStream = contentResolver.openInputStream(sourceUri)
+            val bitmap = BitmapFactory.decodeStream(inputStream)
+            // إعادة ضغط الصورة يمسح كل البيانات الوصفية (EXIF)
+            val file = File(cacheDir, "sanitized_${System.currentTimeMillis()}.jpg")
+            val outputStream = FileOutputStream(file)
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
+            outputStream.close()
+            
+            FileProvider.getUriForFile(this, "com.monolith.fileprovider", file)
+        } catch (e: Exception) {
+            sourceUri // في حال فشل المسح، نرجع الأصل
+        }
+    }
+
+    // دالة عرض المعلومات مع قراءة EXIF
+    private fun showImageInfoWithExif() {
+        if (imageUri == null) return
+        try {
+            val options = BitmapFactory.Options()
+            options.inJustDecodeBounds = true
+            contentResolver.openInputStream(imageUri!!)?.use {
+                BitmapFactory.decodeStream(it, null, options)
+            }
+            val width = options.outWidth
+            val height = options.outHeight
+
+            var exifInfo = "لا توجد بيانات وصفية\n"
+            try {
+                contentResolver.openInputStream(imageUri!!)?.use { stream ->
+                    val exif = ExifInterface(stream)
+                    
+                    val latLong = exif.latLong
+                    val model = exif.getAttribute(ExifInterface.TAG_MODEL) ?: "غير معروف"
+                    val make = exif.getAttribute(ExifInterface.TAG_MAKE) ?: "غير معروف"
+                    val dateTime = exif.getAttribute(ExifInterface.TAG_DATETIME) ?: "غير معروف"
+                    
+                    exifInfo = "الكاميرا: $make $model\n"
+                    exifInfo += "التاريخ: $dateTime\n"
+                    if (latLong != null) {
+                        exifInfo += "الموقع (GPS): ${latLong[0]}, ${latLong[1]}\n"
+                    } else {
+                        exifInfo += "الموقع (GPS): غير متوفر\n"
+                    }
+                }
+            } catch (e: Exception) {
+                exifInfo = "تعذر قراءة البيانات الوصفية\n"
+            }
+
+            val info = "الأبعاد: $width x $height\n\n$exifInfo"
+            
+            AlertDialog.Builder(this)
+                .setTitle("معلومات الصورة")
+                .setMessage(info)
+                .setPositiveButton("حسناً", null)
+                .show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "تعذر قراءة المعلومات", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun setupZoomAndPan() {
@@ -156,27 +260,6 @@ class ImageViewerActivity : AppCompatActivity() {
         builder.show()
     }
 
-    private fun showImageInfo() {
-        if (imageUri == null) return
-        try {
-            val options = BitmapFactory.Options()
-            options.inJustDecodeBounds = true
-            contentResolver.openInputStream(imageUri!!)?.use {
-                BitmapFactory.decodeStream(it, null, options)
-            }
-            val width = options.outWidth
-            val height = options.outHeight
-            val info = "الأبعاد: $width x $height"
-            AlertDialog.Builder(this)
-                .setTitle("معلومات الصورة")
-                .setMessage(info)
-                .setPositiveButton("حسناً", null)
-                .show()
-        } catch (e: Exception) {
-            Toast.makeText(this, "تعذر قراءة المعلومات", Toast.LENGTH_SHORT).show()
-        }
-    }
-
     private fun closeAndReturn() {
         val resultIntent = Intent()
         resultIntent.putExtra("new_image_uri", imageUri.toString())
@@ -189,7 +272,10 @@ class ImageViewerActivity : AppCompatActivity() {
     private fun saveImageToGallery() {
         if (imageUri == null) return
         try {
-            val inputStream = contentResolver.openInputStream(imageUri!!)
+            // استخدام النسخة المنظفة إذا كان درع الخصوصية مفعلاً
+            val uriToSave = if (isPrivacyShieldEnabled) getSanitizedUri(imageUri!!) else imageUri!!
+            
+            val inputStream = contentResolver.openInputStream(uriToSave)
             val bitmap = BitmapFactory.decodeStream(inputStream)
             val filename = "Monolith_${System.currentTimeMillis()}.jpg"
             var outputStream: OutputStream? = null
@@ -229,6 +315,9 @@ class ImageViewerActivity : AppCompatActivity() {
                 fullImageView.setImageURI(imageUri)
                 closeAndReturn()
             }
+        } else if (resultCode == UCrop.RESULT_ERROR) {
+            val cropError = UCrop.getError(data!!)
+            Toast.makeText(this, "فشل القص: ${cropError?.message}", Toast.LENGTH_SHORT).show()
         }
     }
 }
