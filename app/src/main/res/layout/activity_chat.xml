@@ -67,53 +67,24 @@
             android:orientation="vertical" />
     </ScrollView>
 
-    <!-- شريط معاينة المرفقات (تصميم مصغر فوق شريط الإدخال) -->
-    <LinearLayout
+    <!-- شريط معاينة المرفقات (يدعم عدة صور) -->
+    <HorizontalScrollView
         android:id="@+id/imagePreviewContainer"
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
         android:visibility="gone"
         android:padding="4dp"
         android:background="#1A1A1A"
         android:layout_marginTop="4dp"
-        android:layout_marginStart="8dp"
-        android:gravity="start|center_vertical">
+        android:scrollbars="none">
 
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="50dp"
-            android:layout_height="50dp"
-            app:cardCornerRadius="8dp"
-            app:cardElevation="0dp"
-            app:strokeWidth="0dp">
+        <LinearLayout
+            android:id="@+id/previewListContainer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal" />
 
-            <RelativeLayout
-                android:layout_width="match_parent"
-                android:layout_height="match_parent">
-
-                <ImageView
-                    android:id="@+id/ivPreviewImage"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:scaleType="centerCrop"
-                    android:background="#333333" />
-
-                <!-- زر الحذف الصغير جداً -->
-                <TextView
-                    android:id="@+id/btnRemoveImage"
-                    android:layout_width="18dp"
-                    android:layout_height="18dp"
-                    android:text="✕"
-                    android:textColor="#FFFFFF"
-                    android:textSize="10sp"
-                    android:gravity="center"
-                    android:background="@drawable/bg_circle_dark"
-                    android:layout_alignParentTop="true"
-                    android:layout_alignParentEnd="true"
-                    android:layout_margin="1dp"/>
-            </RelativeLayout>
-        </com.google.android.material.card.MaterialCardView>
-    </LinearLayout>
+    </HorizontalScrollView>
 
     <!-- شريط الإدخال الكبسولة -->
     <com.google.android.material.card.MaterialCardView
