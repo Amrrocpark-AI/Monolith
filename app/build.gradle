@@ -13,6 +13,9 @@ android {
         targetSdk 34
         versionCode 1
         versionName "1.0"
+        
+        // ميزة الخبراء: تجهيز رابط الخادم هنا لسهولة تغييره لاحقاً
+        buildConfigField "String", "API_BASE_URL", "\"https://api.groq.com/openai/\""
     }
 
     buildTypes {
@@ -21,12 +24,31 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
+    
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+    
     kotlinOptions {
         jvmTarget = '17'
+    }
+    
+    // ميزة الخبراء: تفعيل قراءة الإعدادات (BuildConfig)
+    buildFeatures {
+        buildConfig true
+    }
+
+    // ميزة الخبراء: منع تعارض المكتبات (حماية من فشل البناء مستقبلاً)
+    packagingOptions {
+        resources {
+            excludes += '/META-INF/{AL2.0,LGPL2.1}'
+            excludes += '/META-INF/DEPENDENCIES'
+            excludes += '/META-INF/LICENSE'
+            excludes += '/META-INF/LICENSE.txt'
+            excludes += '/META-INF/NOTICE'
+            excludes += '/META-INF/NOTICE.txt'
+        }
     }
 }
 
@@ -37,4 +59,9 @@ dependencies {
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
     implementation 'com.google.code.gson:gson:2.10.1'
     implementation 'com.github.yalantis:ucrop:2.2.8'
+    
+    // مكتبات الذكاء الاصطناعي
+    implementation 'com.squareup.retrofit2:retrofit:2.11.0'
+    implementation 'com.squareup.retrofit2:converter-gson:2.11.0'
+    implementation 'com.squareup.okhttp3:logging-interceptor:4.12.0'
 }
