@@ -12,19 +12,22 @@ class MainActivity : AppCompatActivity() {
 
         val cardChat = findViewById<MaterialCardView>(R.id.cardChat)
         val cardFileManager = findViewById<MaterialCardView>(R.id.cardFileManager)
+        val cardImageEditor = findViewById<MaterialCardView>(R.id.cardImageEditor)
         val cardSettings = findViewById<MaterialCardView>(R.id.cardSettings)
 
-        // الانتقال إلى شاشة الدردشة
         cardChat.setOnClickListener {
             startActivity(Intent(this, ChatActivity::class.java))
         }
 
-        // الانتقال إلى مدير الملفات
         cardFileManager.setOnClickListener {
             startActivity(Intent(this, FileManagerActivity::class.java))
         }
 
-        // الانتقال إلى الإعدادات
+        // *** الانتقال إلى محرر الصور ***
+        cardImageEditor.setOnClickListener {
+            startActivity(Intent(this, ImageEditorActivity::class.java))
+        }
+
         cardSettings.setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
