@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000">
+
+    <!-- عرض الصورة بملء الشاشة -->
+    <ImageView
+        android:id="@+id/fullImageView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitCenter" />
+
+    <!-- زر الإغلاق (الرجوع) أعلى اليسار -->
+    <ImageButton
+        android:id="@+id/btnCloseViewer"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_alignParentTop="true"
+        android:layout_alignParentStart="true"
+        android:layout_margin="16dp"
+        android:src="@drawable/ic_back"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:tint="#FFFFFF" />
+
+    <!-- شريط الأدوات السفلي -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:orientation="horizontal"
+        android:background="#99000000"
+        android:padding="16dp"
+        android:gravity="center">
+
+        <!-- زر القص -->
+        <ImageButton
+            android:id="@+id/btnCrop"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:src="@android:drawable/ic_menu_crop"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:tint="#FFFFFF" />
+
+        <!-- زر التحميل -->
+        <ImageButton
+            android:id="@+id/btnDownload"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:src="@android:drawable/ic_menu_save"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:tint="#FFFFFF" />
+
+        <!-- زر إعادة التسمية -->
+        <ImageButton
+            android:id="@+id/btnRename"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:src="@android:drawable/ic_menu_edit"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:tint="#FFFFFF" />
+
+        <!-- زر المعلومات -->
+        <ImageButton
+            android:id="@+id/btnInfo"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:src="@android:drawable/ic_menu_info_details"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:tint="#FFFFFF" />
+    </LinearLayout>
+
+</RelativeLayout>
