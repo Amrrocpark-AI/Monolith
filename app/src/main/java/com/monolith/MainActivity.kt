@@ -2,20 +2,31 @@ package com.monolith
 
 import android.content.Intent
 import android.os.Bundle
-import android.widget.Button
 import androidx.appcompat.app.AppCompatActivity
+import com.google.android.material.card.MaterialCardView
 
 class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        val btnStart = findViewById<Button>(R.id.btnStart)
-        
-        btnStart.setOnClickListener {
-            // الانتقال إلى شاشة الدردشة
-            val intent = Intent(this, ChatActivity::class.java)
-            startActivity(intent)
+        val cardChat = findViewById<MaterialCardView>(R.id.cardChat)
+        val cardFileManager = findViewById<MaterialCardView>(R.id.cardFileManager)
+        val cardSettings = findViewById<MaterialCardView>(R.id.cardSettings)
+
+        // الانتقال إلى شاشة الدردشة
+        cardChat.setOnClickListener {
+            startActivity(Intent(this, ChatActivity::class.java))
+        }
+
+        // الانتقال إلى مدير الملفات
+        cardFileManager.setOnClickListener {
+            startActivity(Intent(this, FileManagerActivity::class.java))
+        }
+
+        // الانتقال إلى الإعدادات
+        cardSettings.setOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java))
         }
     }
 }
