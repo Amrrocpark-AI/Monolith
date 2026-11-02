@@ -10,6 +10,77 @@
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
+        <!-- ========================================== -->
+        <!-- الإضافة الجديدة: قسم المحرك الذكي -->
+        <!-- ========================================== -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="إعدادات المحرك الذكي"
+            android:textColor="#00FF00"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="16dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="مزود الخدمة"
+            android:textColor="#FFFFFF"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <Spinner
+            android:id="@+id/providerSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="50dp"
+            android:layout_marginTop="8dp"
+            android:backgroundTint="#00FF00" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="مفتاح API"
+            android:textColor="#FFFFFF"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:layout_marginTop="16dp"/>
+
+        <EditText
+            android:id="@+id/etApiKey"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="gsk_..."
+            android:textColor="#FFFFFF"
+            android:textColorHint="#666666"
+            android:inputType="textPassword"
+            android:background="#1E1E1E"
+            android:padding="16dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="16dp"/>
+
+        <Button
+            android:id="@+id/btnTestAndSave"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="اختبار وحفظ المفتاح"
+            android:backgroundTint="#00FF00"
+            android:textColor="#000000"
+            android:textStyle="bold" />
+
+        <!-- خط فاصل -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#333333"
+            android:layout_marginTop="32dp"
+            android:layout_marginBottom="32dp" />
+
+        <!-- ========================================== -->
+        <!-- تصميمك الأصلي (بدون أي تغيير) -->
+        <!-- ========================================== -->
+        
         <!-- العنوان -->
         <TextView
             android:layout_width="wrap_content"
@@ -108,7 +179,7 @@
             android:layout_marginTop="32dp"
             android:layout_marginBottom="32dp" />
 
-        <!-- قسم لون التطبيق (الحرية المطلقة) -->
+        <!-- قسم لون التطبيق -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
