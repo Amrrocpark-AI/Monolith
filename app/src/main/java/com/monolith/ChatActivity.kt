@@ -1,8 +1,10 @@
 package com.monolith
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.PorterDuff
@@ -28,6 +30,7 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.AppCompatTextView
+import androidx.core.content.ContextCompat
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.card.MaterialCardView
 import com.google.gson.Gson
@@ -53,6 +56,15 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var sharedPreferences: SharedPreferences
     private val gson = Gson()
     private var messageList: MutableList<ChatMessage> = mutableListOf()
+
+    // طلب أذونات الصور (لأندرويد الحديث)
+    private val requestPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
+        if (isGranted) {
+            pickImagesLauncher.launch("image/*")
+        } else {
+            Toast.makeText(this, "نحتاج إذن الوصول للصور لإرفاقها.", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     private val pickImagesLauncher = registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris: List<Uri> ->
         if (uris.isNotEmpty()) {
@@ -181,18 +193,13 @@ class ChatActivity : AppCompatActivity() {
                     
                     chatScrollView.post { chatScrollView.fullScroll(android.widget.ScrollView.FOCUS_DOWN) }
 
-                    // ==========================================
-                    // بناء السياق (الذاكرة) - الأفكار العبقرية
-                    // ==========================================
+                    // بناء السياق والذاكرة
                     val apiMessages = mutableListOf<Message>()
-                    
-                    // 1. شخصية التطبيق (System Prompt)
                     apiMessages.add(Message(
                         role = "system", 
                         content = "أنت Monolith، ذكاء اصطناعي سيادي متقدم. تجيب بدقة واحترافية، وتتحدث باللغة التي يستخدمها المستخدم."
                     ))
 
-                    // 2. إرسال آخر 15 رسالة لكي يتذكر المحادثة
                     val recentHistory = messageList.takeLast(15)
                     for (msg in recentHistory) {
                         if (msg.role == MessageRole.USER) {
@@ -202,7 +209,6 @@ class ChatActivity : AppCompatActivity() {
                         }
                     }
 
-                    // 3. استخدام كلاس ChatRequest المتطور الخاص بك
                     val request = ChatRequest(
                         model = "llama3-8b-8192", 
                         messages = apiMessages,
@@ -260,6 +266,20 @@ class ChatActivity : AppCompatActivity() {
             } else {
                 false
             }
+        }
+    }
+
+    private fun checkAndPickImage() {
+        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Manifest.permission.READ_MEDIA_IMAGES
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+
+        if (ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED) {
+            pickImagesLauncher.launch("image/*")
+        } else {
+            requestPermissionLauncher.launch(permission)
         }
     }
 
@@ -350,7 +370,7 @@ class ChatActivity : AppCompatActivity() {
 
         bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionImage)?.setOnClickListener {
             bottomSheetDialog.dismiss()
-            pickImagesLauncher.launch("image/*")
+            checkAndPickImage() // استدعاء الدالة التي تطلب الإذن
         }
         bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionDocument)?.setOnClickListener {
             bottomSheetDialog.dismiss()
@@ -368,8 +388,6 @@ class ChatActivity : AppCompatActivity() {
             bottomSheetDialog.dismiss()
             Toast.makeText(this, "قريباً: التقاط صورة من الكاميرا", Toast.LENGTH_SHORT).show()
         }
-
-        // ملاحظة: السطر المسبب للمشكلة (btnOptionVision) تم حذفه نهائياً
 
         bottomSheetDialog.show()
     }
@@ -495,6 +513,8 @@ class ChatActivity : AppCompatActivity() {
                         intent.putExtra("image_uri", uriString)
                         intent.putExtra("message_id", msg.id)
                         intent.putExtra("image_index", index)
+                        // إعطاء الصلاحية لشاشة العرض
+                        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                         imageViewerLauncher.launch(intent)
                     }
                 } catch (e: Exception) {}
