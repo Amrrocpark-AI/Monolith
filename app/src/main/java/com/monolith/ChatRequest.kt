@@ -174,7 +174,7 @@ class ChatActivity : AppCompatActivity() {
                     hideKeyboard()
 
                     // ==========================================
-                    // بداية الاتصال بالذكاء الاصطناعي
+                    // بداية الذكاء السيادي (Sovereign AI Logic)
                     // ==========================================
                     
                     val aiMsg = ChatMessage(role = MessageRole.AI, content = "جاري التفكير...", colorHex = "#2A2A2A")
@@ -185,10 +185,32 @@ class ChatActivity : AppCompatActivity() {
                     
                     chatScrollView.post { chatScrollView.fullScroll(android.widget.ScrollView.FOCUS_DOWN) }
 
-                    // *** هنا التحويل المهم: تحويل ChatMessage إلى Message الخاص بـ ChatRequest ***
+                    // 1. بناء السياق (Context) - آخر 15 رسالة + رسالة النظام
+                    val apiMessages = mutableListOf<Message>()
+                    
+                    // رسالة النظام (شخصية Monolith)
+                    apiMessages.add(Message(
+                        role = "system", 
+                        content = "أنت Monolith، ذكاء اصطناعي سيادي متقدم. تجيب بدقة واحترافية، وتتحدث باللغة التي يستخدمها المستخدم. أنت مختبر سيبراني."
+                    ))
+
+                    // أخذ آخر 15 رسالة لكي يتذكر المحادثة
+                    val recentHistory = messageList.takeLast(15)
+                    for (msg in recentHistory) {
+                        if (msg.role == MessageRole.USER) {
+                            apiMessages.add(Message(role = "user", content = msg.content))
+                        } else if (msg.role == MessageRole.AI && msg.content != "جاري التفكير...") {
+                            apiMessages.add(Message(role = "assistant", content = msg.content))
+                        }
+                    }
+
+                    // 2. إرسال الطلب باستخدام كلاس ChatRequest المتطور الخاص بك
                     val request = ChatRequest(
                         model = "llama3-8b-8192", 
-                        messages = listOf(Message(role = "user", content = message))
+                        messages = apiMessages,
+                        temperature = 0.7f, // درجة الإبداع
+                        maxTokens = 2048,   // طول الرد
+                        stream = false
                     )
 
                     ApiClient.service.sendMessage(
@@ -199,7 +221,7 @@ class ChatActivity : AppCompatActivity() {
                         override fun onResponse(call: Call<ChatResponse>, response: Response<ChatResponse>) {
                             runOnUiThread {
                                 val reply = if (response.isSuccessful) {
-                                    // ملاحظة: سنراجع ChatResponse.kt لاحقاً إذا كان مختلفاً
+                                    // استخراج الرد
                                     response.body()?.choices?.firstOrNull()?.message?.content ?: "لم يتم استلام رد."
                                 } else {
                                     "خطأ من الخادم: ${response.code()}"
@@ -226,9 +248,6 @@ class ChatActivity : AppCompatActivity() {
                             }
                         }
                     })
-                    // ==========================================
-                    // نهاية الإضافة
-                    // ==========================================
 
                 }
             } catch (e: Exception) {
@@ -353,8 +372,6 @@ class ChatActivity : AppCompatActivity() {
             bottomSheetDialog.dismiss()
             Toast.makeText(this, "قريباً: التقاط صورة من الكاميرا", Toast.LENGTH_SHORT).show()
         }
-        
-        // تم إزالة سطر btnOptionVision لأنه غير موجود في واجهتك ويسبب خطأ
 
         bottomSheetDialog.show()
     }
