@@ -39,10 +39,12 @@ import com.google.gson.reflect.TypeToken
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
+import java.io.InputStream
 
 class ChatActivity : AppCompatActivity() {
 
     private val selectedImageUris = mutableListOf<Uri>()
+    private var selectedDocumentText: String = "" // لتخزين نص الملف المختار
 
     private lateinit var etMessage: EditText
     private lateinit var btnSend: ImageButton
@@ -59,11 +61,32 @@ class ChatActivity : AppCompatActivity() {
     private val gson = Gson()
     private var messageList: MutableList<ChatMessage> = mutableListOf()
 
+    // ميزة اختيار الصور (تراكمي)
     private val pickImagesLauncher = registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris: List<Uri> ->
         if (uris.isNotEmpty()) {
-            // الميزة الجديدة: إضافة تراكمية للصور (لا تمسح القديم)
             selectedImageUris.addAll(uris)
             updatePreviewUi()
+        }
+    }
+
+    // *** ميزة اختيار الملفات (Text, PDF, Code) الجديدة ***
+    private val pickDocumentLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri != null) {
+            try {
+                // قراءة الملف النصي
+                val inputStream: InputStream? = contentResolver.openInputStream(uri)
+                val text = inputStream?.bufferedReader()?.use { it.readText() } ?: ""
+                
+                if (text.isNotEmpty()) {
+                    selectedDocumentText = text
+                    etMessage.setText("تم إرفاق ملف يحتوي على: $text") // عرض النص في مربع الكتابة
+                    Toast.makeText(this, "تم قراءة الملف بنجاح!", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this, "الملف فارغ أو غير مدعوم حالياً (يدعم حالياً Text فقط)", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(this, "حدث خطأ أثناء قراءة الملف", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
@@ -163,7 +186,6 @@ class ChatActivity : AppCompatActivity() {
         btnVisionToggle.setOnClickListener { Toast.makeText(this, "الرؤية الحاسوبية قريباً", Toast.LENGTH_SHORT).show() }
 
         fun sendMessage() {
-            // الحاجز الأول: التحقق من وجود مفتاح قبل الإرسال
             val apiKey = securePrefs.getString("api_key", null)
             if (apiKey.isNullOrEmpty()) {
                 showSetupDialog()
@@ -187,6 +209,7 @@ class ChatActivity : AppCompatActivity() {
                     addChatBubble(chatContainer, userMsg)
 
                     selectedImageUris.clear()
+                    selectedDocumentText = ""
                     updatePreviewUi()
                     etMessage.text.clear()
                     hideKeyboard()
@@ -379,21 +402,31 @@ class ChatActivity : AppCompatActivity() {
             bottomSheetDialog.dismiss()
             pickImagesLauncher.launch("image/*")
         }
+        
+        // *** ربط زر المستند بقراءة الملفات ***
         bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionDocument)?.setOnClickListener {
             bottomSheetDialog.dismiss()
-            Toast.makeText(this, "قريباً", Toast.LENGTH_SHORT).show()
+            // فتح مستكشف الملفات لاختيار أي نوع (نص، PDF، إلخ)
+            pickDocumentLauncher.launch(arrayOf("*/*")) 
         }
+
         bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionAudio)?.setOnClickListener {
             bottomSheetDialog.dismiss()
             Toast.makeText(this, "قريباً", Toast.LENGTH_SHORT).show()
         }
         bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionSearch)?.setOnClickListener {
             bottomSheetDialog.dismiss()
-            Toast.makeText(this, "قريباً", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "قريباً: البحث الذكي", Toast.LENGTH_SHORT).show()
         }
         bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionCamera)?.setOnClickListener {
             bottomSheetDialog.dismiss()
             Toast.makeText(this, "قريباً", Toast.LENGTH_SHORT).show()
+        }
+        
+        // *** إصلاح الخطأ: تحديث الاسم إلى btnOptionAI ***
+        bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionAI)?.setOnClickListener {
+            bottomSheetDialog.dismiss()
+            Toast.makeText(this, "قريباً: وكيل الذكاء الاصطناعي", Toast.LENGTH_SHORT).show()
         }
 
         bottomSheetDialog.show()
