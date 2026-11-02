@@ -32,7 +32,9 @@ import com.google.gson.reflect.TypeToken
 
 class ChatActivity : AppCompatActivity() {
     
-    private var selectedImageUri: Uri? = null
+    // قائمة لحفظ الصور التي تم اختيارها
+    private val selectedImageUris = mutableListOf<Uri>()
+    
     private lateinit var etMessage: EditText
     private lateinit var btnSend: ImageButton
     private lateinit var imagePreviewContainer: LinearLayout
@@ -47,10 +49,12 @@ class ChatActivity : AppCompatActivity() {
     private val gson = Gson()
     private var messageList: MutableList<ChatMessage> = mutableListOf()
 
-    private val pickImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        if (uri != null) {
-            selectedImageUri = uri
-            showImagePreview(uri)
+    // فتح المعرض لاختيار عدة صور
+    private val pickImagesLauncher = registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris: List<Uri> ->
+        if (uris.isNotEmpty()) {
+            selectedImageUris.clear()
+            selectedImageUris.addAll(uris)
+            showImagePreview(uris)
         }
     }
 
@@ -77,8 +81,9 @@ class ChatActivity : AppCompatActivity() {
         sharedPreferences = getSharedPreferences("ChatHistory", MODE_PRIVATE)
         messageList = loadMessages()
 
+        // استعادة الرسائل السابقة وعرضها (بما فيها الصور)
         for (msg in messageList) {
-            addChatBubble(chatContainer, msg.content, msg.role == MessageRole.USER, msg.colorHex)
+            addChatBubble(chatContainer, msg)
         }
         chatScrollView.post { chatScrollView.fullScroll(android.widget.ScrollView.FOCUS_DOWN) }
 
@@ -89,7 +94,7 @@ class ChatActivity : AppCompatActivity() {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 val hasText = !s.isNullOrEmpty()
-                val hasImage = selectedImageUri != null
+                val hasImage = selectedImageUris.isNotEmpty()
                 btnSend.isEnabled = hasText || hasImage
                 btnSend.alpha = if (hasText || hasImage) 1.0f else 0.5f
             }
@@ -102,7 +107,7 @@ class ChatActivity : AppCompatActivity() {
         }
 
         btnRemoveImage.setOnClickListener {
-            selectedImageUri = null
+            selectedImageUris.clear()
             imagePreviewContainer.visibility = LinearLayout.GONE
             ivPreviewImage.setImageDrawable(null)
             btnSend.isEnabled = etMessage.text.isNotEmpty()
@@ -122,21 +127,21 @@ class ChatActivity : AppCompatActivity() {
         fun sendMessage() {
             try {
                 val message = etMessage.text.toString().trim()
-                if (message.isNotEmpty() || selectedImageUri != null) {
+                if (message.isNotEmpty() || selectedImageUris.isNotEmpty()) {
                     
                     vibratePhone() 
                     
                     val userMsg = ChatMessage(
                         role = MessageRole.USER,
-                        content = if(selectedImageUri != null) "📷 [صورة مرفقة] $message" else message,
-                        attachmentUri = selectedImageUri?.toString(),
+                        content = message, 
+                        attachmentUris = selectedImageUris.map { it.toString() }, 
                         colorHex = themeColorHex 
                     )
                     messageList.add(userMsg)
                     saveMessages()
-                    addChatBubble(chatContainer, userMsg.content, isUser = true, colorHex = userMsg.colorHex)
+                    addChatBubble(chatContainer, userMsg)
 
-                    selectedImageUri = null
+                    selectedImageUris.clear()
                     imagePreviewContainer.visibility = LinearLayout.GONE
                     ivPreviewImage.setImageDrawable(null)
                     etMessage.text.clear()
@@ -145,7 +150,7 @@ class ChatActivity : AppCompatActivity() {
                     val aiMsg = ChatMessage(role = MessageRole.AI, content = "جاري الاتصال بالنموذج المحلي...", colorHex = "#2A2A2A")
                     messageList.add(aiMsg)
                     saveMessages()
-                    addChatBubble(chatContainer, aiMsg.content, isUser = false, colorHex = aiMsg.colorHex)
+                    addChatBubble(chatContainer, aiMsg)
                     
                     chatScrollView.post { chatScrollView.fullScroll(android.widget.ScrollView.FOCUS_DOWN) }
                 }
@@ -202,7 +207,7 @@ class ChatActivity : AppCompatActivity() {
         btnOptionImage.setOnClickListener {
             bottomSheetDialog.dismiss()
             try {
-                pickImageLauncher.launch("image/*")
+                pickImagesLauncher.launch("image/*")
             } catch (e: Exception) {
                 Toast.makeText(this, "لا يمكن فتح المعرض", Toast.LENGTH_SHORT).show()
             }
@@ -226,10 +231,10 @@ class ChatActivity : AppCompatActivity() {
         bottomSheetDialog.show()
     }
 
-    private fun showImagePreview(uri: Uri) {
+    private fun showImagePreview(uris: List<Uri>) {
         try {
             imagePreviewContainer.visibility = LinearLayout.VISIBLE
-            ivPreviewImage.setImageURI(uri)
+            ivPreviewImage.setImageURI(uris[0]) // معاينة الصورة الأولى فقط
             btnSend.isEnabled = true
             btnSend.alpha = 1.0f
         } catch (e: Exception) {
@@ -321,32 +326,63 @@ class ChatActivity : AppCompatActivity() {
         rootLayout.setBackgroundColor(Color.parseColor(savedColor))
     }
 
-    private fun addChatBubble(container: LinearLayout, text: String, isUser: Boolean, colorHex: String) {
-        val textView = TextView(this)
-        textView.text = text
-        textView.textSize = 16f
+    // الدالة السحرية: تبني الفقاعة ديناميكياً وتدعم الصور المتعددة
+    private fun addChatBubble(container: LinearLayout, msg: ChatMessage) {
+        val bubbleLayout = LinearLayout(this)
+        bubbleLayout.orientation = LinearLayout.VERTICAL
+        bubbleLayout.setPadding(32, 24, 32, 24)
         
-        // إصلاح: جعل لون النص أبيض أو أسود
-        textView.setTextColor(if (isUser) Color.BLACK else Color.WHITE)
-        
-        // إصلاح: مساحات داخلية مريحة (Padding) مثل ChatGPT
-        textView.setPadding(40, 24, 40, 24)
-        
-        // إصلاح: محاذاة النص لليمين (للعربية) وليس المنتصف
-        textView.textDirection = if (isUser) TextView.TEXT_DIRECTION_RTL else TextView.TEXT_DIRECTION_LOCALE
-        textView.textAlignment = TextView.TEXT_ALIGNMENT_VIEW_START
-
         val background = GradientDrawable()
-        background.setColor(Color.parseColor(colorHex)) 
+        background.setColor(Color.parseColor(msg.colorHex))
         background.cornerRadius = 40f
-        textView.background = background
+        bubbleLayout.background = background
 
+        // 1. إضافة الصور الحقيقية (إذا وجدت)
+        if (!msg.attachmentUris.isNullOrEmpty()) {
+            val scrollView = android.widget.HorizontalScrollView(this)
+            val imageContainer = LinearLayout(this)
+            imageContainer.orientation = LinearLayout.HORIZONTAL
+            
+            for (uriString in msg.attachmentUris) {
+                val imageView = ImageView(this)
+                // حجم الصورة (مربع 600x600)
+                val params = LinearLayout.LayoutParams(600, 600) 
+                params.setMargins(0, 0, 16, 16)
+                imageView.layoutParams = params
+                imageView.scaleType = ImageView.ScaleType.CENTER_CROP
+                
+                try {
+                    imageView.setImageURI(Uri.parse(uriString))
+                } catch (e: Exception) {}
+                
+                imageContainer.addView(imageView)
+            }
+            scrollView.addView(imageContainer)
+            bubbleLayout.addView(scrollView)
+        }
+
+        // 2. إضافة النص (إذا وجد)
+        if (msg.content.isNotEmpty()) {
+            val textView = TextView(this)
+            textView.text = msg.content
+            textView.textSize = 16f
+            
+            textView.setTextColor(if (msg.role == MessageRole.USER) Color.BLACK else Color.WHITE)
+            
+            // إصلاح شكل "البيضة": محاذاة النص لليسار/اليمين وليس المنتصف
+            textView.textDirection = if (msg.role == MessageRole.USER) TextView.TEXT_DIRECTION_RTL else TextView.TEXT_DIRECTION_LOCALE
+            textView.textAlignment = TextView.TEXT_ALIGNMENT_VIEW_START
+            
+            bubbleLayout.addView(textView)
+        }
+
+        // 3. تحديد موقع الفقاعة على الشاشة
         val params = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
         )
         
-        if (isUser) {
+        if (msg.role == MessageRole.USER) {
             params.gravity = Gravity.END
             params.setMargins(80, 12, 0, 12)
         } else {
@@ -354,7 +390,7 @@ class ChatActivity : AppCompatActivity() {
             params.setMargins(0, 12, 80, 12)
         }
         
-        textView.layoutParams = params
-        container.addView(textView)
+        bubbleLayout.layoutParams = params
+        container.addView(bubbleLayout)
     }
 }
