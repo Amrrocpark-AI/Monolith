@@ -32,11 +32,14 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.card.MaterialCardView
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import retrofit2.Call
+import retrofit2.Callback
+import retrofit2.Response
 
 class ChatActivity : AppCompatActivity() {
-    
+
     private val selectedImageUris = mutableListOf<Uri>()
-    
+
     private lateinit var etMessage: EditText
     private lateinit var btnSend: ImageButton
     private lateinit var imagePreviewContainer: android.widget.HorizontalScrollView
@@ -44,7 +47,7 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var chatContainer: LinearLayout
     private lateinit var chatScrollView: android.widget.ScrollView
     private lateinit var tvAppTitle: TextView
-    
+
     private var themeColorHex = "#00FF00"
 
     private lateinit var sharedPreferences: SharedPreferences
@@ -71,7 +74,7 @@ class ChatActivity : AppCompatActivity() {
                 if (msgIndex != -1) {
                     val msg = messageList[msgIndex]
                     val newUris = msg.attachmentUris?.toMutableList()
-                    
+
                     if (newUris != null && imgIndex < newUris.size) {
                         newUris[imgIndex] = newImageUri
                         val updatedMsg = msg.copy(attachmentUris = newUris)
@@ -101,10 +104,10 @@ class ChatActivity : AppCompatActivity() {
         val btnMic = findViewById<ImageButton>(R.id.btnMic)
         val btnVisionToggle = findViewById<ImageButton>(R.id.btnVisionToggle)
         tvAppTitle = findViewById(R.id.tvAppTitle)
-        
+
         chatContainer = findViewById(R.id.chatContainer)
         chatScrollView = findViewById(R.id.chatScrollView)
-        
+
         imagePreviewContainer = findViewById(R.id.imagePreviewContainer)
         previewListContainer = findViewById(R.id.previewListContainer)
 
@@ -149,14 +152,14 @@ class ChatActivity : AppCompatActivity() {
             try {
                 val message = etMessage.text.toString().trim()
                 if (message.isNotEmpty() || selectedImageUris.isNotEmpty()) {
-                    
-                    vibratePhone() 
-                    
+
+                    vibratePhone()
+
                     val userMsg = ChatMessage(
                         role = MessageRole.USER,
-                        content = message, 
-                        attachmentUris = selectedImageUris.map { it.toString() }, 
-                        colorHex = themeColorHex 
+                        content = message,
+                        attachmentUris = selectedImageUris.map { it.toString() },
+                        colorHex = themeColorHex
                     )
                     messageList.add(userMsg)
                     saveMessages()
@@ -166,13 +169,64 @@ class ChatActivity : AppCompatActivity() {
                     updatePreviewUi()
                     etMessage.text.clear()
                     hideKeyboard()
+
+                    // ==========================================
+                    // بداية الاتصال بالذكاء الاصطناعي (الإضافة الجديدة)
+                    // ==========================================
                     
-                    val aiMsg = ChatMessage(role = MessageRole.AI, content = "جاري الاتصال بالنموذج المحلي...", colorHex = "#2A2A2A")
+                    val aiMsg = ChatMessage(role = MessageRole.AI, content = "جاري التفكير...", colorHex = "#2A2A2A")
                     messageList.add(aiMsg)
+                    val aiMsgIndex = messageList.size - 1 // تثبيت مكان الرسالة
                     saveMessages()
                     addChatBubble(chatContainer, aiMsg)
                     
                     chatScrollView.post { chatScrollView.fullScroll(android.widget.ScrollView.FOCUS_DOWN) }
+
+                    // تجهيز الطلب
+                    val request = ChatRequest(
+                        model = "llama3-8b-8192", 
+                        messages = listOf(ChatMessage(role = MessageRole.USER, content = message))
+                    )
+
+                    // إرسال الطلب (نستخدم emptyMap لأن ApiClient سيقوم بحقن المفتاح تلقائياً)
+                    ApiClient.service.sendMessage(
+                        url = "v1/chat/completions", 
+                        headers = emptyMap(), 
+                        request = request
+                    ).enqueue(object : Callback<ChatResponse> {
+                        override fun onResponse(call: Call<ChatResponse>, response: Response<ChatResponse>) {
+                            runOnUiThread {
+                                val reply = if (response.isSuccessful) {
+                                    response.body()?.choices?.firstOrNull()?.message?.content ?: "لم يتم استلام رد."
+                                } else {
+                                    "خطأ من الخادم: ${response.code()}"
+                                }
+                                
+                                val updatedMsg = aiMsg.copy(content = reply)
+                                messageList[aiMsgIndex] = updatedMsg
+                                saveMessages()
+                                
+                                chatContainer.removeAllViews()
+                                for (m in messageList) { addChatBubble(chatContainer, m) }
+                                chatScrollView.post { chatScrollView.fullScroll(android.widget.ScrollView.FOCUS_DOWN) }
+                            }
+                        }
+
+                        override fun onFailure(call: Call<ChatResponse>, t: Throwable) {
+                            runOnUiThread {
+                                val errorMsg = aiMsg.copy(content = "فشل الاتصال: ${t.message}")
+                                messageList[aiMsgIndex] = errorMsg
+                                saveMessages()
+                                
+                                chatContainer.removeAllViews()
+                                for (m in messageList) { addChatBubble(chatContainer, m) }
+                            }
+                        }
+                    })
+                    // ==========================================
+                    // نهاية الإضافة
+                    // ==========================================
+
                 }
             } catch (e: Exception) {
                 Toast.makeText(this, "حدث خطأ: ${e.message}", Toast.LENGTH_LONG).show()
@@ -193,7 +247,7 @@ class ChatActivity : AppCompatActivity() {
 
     private fun updatePreviewUi() {
         previewListContainer.removeAllViews()
-        
+
         if (selectedImageUris.isEmpty()) {
             imagePreviewContainer.visibility = LinearLayout.GONE
             btnSend.isEnabled = etMessage.text.isNotEmpty()
@@ -226,17 +280,17 @@ class ChatActivity : AppCompatActivity() {
                 btnParams.addRule(android.widget.RelativeLayout.ALIGN_PARENT_END)
                 btnParams.setMargins(0, dpToPx(2), dpToPx(2), 0)
                 btnRemove.layoutParams = btnParams
-                btnRemove.text = "✕"
+                btnRemove.text = "X"
                 btnRemove.setTextColor(Color.WHITE)
                 btnRemove.textSize = 10f
                 btnRemove.gravity = Gravity.CENTER
                 btnRemove.setBackgroundResource(R.drawable.bg_circle_dark)
-                
+
                 btnRemove.setOnClickListener {
                     selectedImageUris.removeAt(index)
                     updatePreviewUi()
                 }
-                
+
                 relativeLayout.addView(btnRemove)
                 cardView.addView(relativeLayout)
                 previewListContainer.addView(cardView)
@@ -276,43 +330,27 @@ class ChatActivity : AppCompatActivity() {
         val bottomSheetView = layoutInflater.inflate(R.layout.bottom_sheet_attach, null)
         bottomSheetDialog.setContentView(bottomSheetView)
 
-        val btnOptionImage = bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionImage)
-        val btnOptionDocument = bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionDocument)
-        val btnOptionAudio = bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionAudio)
-        val btnOptionSearch = bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionSearch)
-        val btnOptionCamera = bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionCamera)
-        val btnOptionAI = bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionAI)
-
-        btnOptionImage.setOnClickListener {
+        bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionImage)?.setOnClickListener {
             bottomSheetDialog.dismiss()
-            try {
-                pickImagesLauncher.launch("image/*")
-            } catch (e: Exception) {
-                Toast.makeText(this, "لا يمكن فتح المعرض", Toast.LENGTH_SHORT).show()
-            }
+            pickImagesLauncher.launch("image/*")
         }
-
-        btnOptionDocument.setOnClickListener {
+        bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionDocument)?.setOnClickListener {
             bottomSheetDialog.dismiss()
-            Toast.makeText(this, "قريباً: اختيار ملفات TXT و PDF", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "قريباً: اختيار ملفات PDF و TXT", Toast.LENGTH_SHORT).show()
         }
-
-        btnOptionAudio.setOnClickListener {
+        bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionAudio)?.setOnClickListener {
             bottomSheetDialog.dismiss()
             Toast.makeText(this, "قريباً: اختيار ملفات صوتية", Toast.LENGTH_SHORT).show()
         }
-
-        btnOptionSearch.setOnClickListener {
+        bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionSearch)?.setOnClickListener {
             bottomSheetDialog.dismiss()
             Toast.makeText(this, "قريباً: البحث الشامل في الملفات", Toast.LENGTH_SHORT).show()
         }
-        
-        btnOptionCamera.setOnClickListener {
+        bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionCamera)?.setOnClickListener {
             bottomSheetDialog.dismiss()
             Toast.makeText(this, "قريباً: التقاط صورة من الكاميرا", Toast.LENGTH_SHORT).show()
         }
-        
-        btnOptionAI.setOnClickListener {
+        bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionVision)?.setOnClickListener {
             bottomSheetDialog.dismiss()
             Toast.makeText(this, "قريباً: تحليل الصور بالذكاء الاصطناعي", Toast.LENGTH_SHORT).show()
         }
@@ -345,24 +383,24 @@ class ChatActivity : AppCompatActivity() {
 
             themeColorHex = settingsPrefs.getString("AppThemeColor", "#00FF00") ?: "#00FF00"
             val themeColor = Color.parseColor(themeColorHex)
-            
+
             tvAppTitle.setTextColor(themeColor)
             btnSend.setColorFilter(themeColor, PorterDuff.Mode.SRC_IN)
-            
+
             val btnAttach = findViewById<ImageButton>(R.id.btnAttach)
             btnAttach.setColorFilter(themeColor, PorterDuff.Mode.SRC_IN)
 
             val imageUriString = settingsPrefs.getString("AppBackgroundImage", null)
-            
+
             if (imageUriString != null) {
                 try {
                     val uri = Uri.parse(imageUriString)
                     val inputStream = contentResolver.openInputStream(uri)
                     val options = BitmapFactory.Options()
-                    options.inSampleSize = 2 
+                    options.inSampleSize = 2
                     val bitmap = BitmapFactory.decodeStream(inputStream, null, options)
                     rootLayout.background = BitmapDrawable(resources, bitmap)
-                    
+
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                         rootLayout.foreground = android.graphics.drawable.ColorDrawable(Color.parseColor("#99000000"))
                     }
@@ -380,7 +418,7 @@ class ChatActivity : AppCompatActivity() {
             val btnBack = findViewById<ImageButton>(R.id.btnBack)
             val btnSettings = findViewById<ImageButton>(R.id.btnSettings)
             val btnVisionToggle = findViewById<ImageButton>(R.id.btnVisionToggle)
-            
+
             if (savedColor == "#FFFFFF" && imageUriString == null) {
                 etMessage.setTextColor(Color.BLACK)
                 etMessage.setHintTextColor(Color.GRAY)
@@ -416,27 +454,27 @@ class ChatActivity : AppCompatActivity() {
             val scrollView = android.widget.HorizontalScrollView(this)
             val imageContainer = LinearLayout(this)
             imageContainer.orientation = LinearLayout.HORIZONTAL
-            
+
             val imageSizePx = dpToPx(180)
-            
+
             for ((index, uriString) in msg.attachmentUris.withIndex()) {
                 val imageView = ImageView(this)
-                val params = LinearLayout.LayoutParams(imageSizePx, imageSizePx) 
+                val params = LinearLayout.LayoutParams(imageSizePx, imageSizePx)
                 params.setMargins(0, 0, 16, 16)
                 imageView.layoutParams = params
                 imageView.scaleType = ImageView.ScaleType.CENTER_CROP
-                
+
                 val clip = GradientDrawable()
                 clip.cornerRadius = dpToPx(16).toFloat()
                 clip.setColor(Color.TRANSPARENT)
                 imageView.background = clip
                 imageView.clipToOutline = true
-                
+
                 try {
                     val imageUri = Uri.parse(uriString)
                     imageView.setImageURI(imageUri)
-                    
-                    imageView.setOnClickListener { 
+
+                    imageView.setOnClickListener {
                         val intent = Intent(this, ImageViewerActivity::class.java)
                         intent.putExtra("image_uri", uriString)
                         intent.putExtra("message_id", msg.id)
@@ -444,7 +482,7 @@ class ChatActivity : AppCompatActivity() {
                         imageViewerLauncher.launch(intent)
                     }
                 } catch (e: Exception) {}
-                
+
                 imageContainer.addView(imageView)
             }
             scrollView.addView(imageContainer)
@@ -454,20 +492,20 @@ class ChatActivity : AppCompatActivity() {
         if (msg.content.isNotEmpty()) {
             val textBubble = LinearLayout(this)
             textBubble.setPadding(32, 24, 32, 24)
-            
+
             val background = GradientDrawable()
             background.setColor(Color.parseColor(msg.colorHex))
             background.cornerRadius = 40f
             textBubble.background = background
-            
+
             val textView = TextView(this)
             textView.text = msg.content
             textView.textSize = 16f
             textView.setTextColor(if (msg.role == MessageRole.USER) Color.BLACK else Color.WHITE)
-            
+
             textView.textDirection = if (msg.role == MessageRole.USER) TextView.TEXT_DIRECTION_RTL else TextView.TEXT_DIRECTION_LOCALE
             textView.textAlignment = TextView.TEXT_ALIGNMENT_VIEW_START
-            
+
             textBubble.addView(textView)
             messageLayout.addView(textBubble)
         }
@@ -479,7 +517,7 @@ class ChatActivity : AppCompatActivity() {
             messageLayout.gravity = Gravity.START
             messageLayout.setPadding(0, dpToPx(8), 0, dpToPx(8))
         }
-        
+
         container.addView(messageLayout)
     }
 }
