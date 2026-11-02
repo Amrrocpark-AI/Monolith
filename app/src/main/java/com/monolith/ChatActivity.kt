@@ -59,33 +59,25 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    // مستقبل نتيجة العودة من شاشة عرض الصور
     private val imageViewerLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == RESULT_OK) {
             val data = result.data
             val newImageUri = data?.getStringExtra("new_image_uri")
             val msgId = data?.getStringExtra("message_id")
-            
-            // الإصلاح هنا: استخدام ?: -1 لضمان أن المتغير ليس فارغاً
             val imgIndex = data?.getIntExtra("image_index", -1) ?: -1
 
             if (newImageUri != null && msgId != null && imgIndex != -1) {
-                // البحث عن الرسالة التي تحتوي على الصورة المعدلة
                 val msgIndex = messageList.indexOfFirst { it.id == msgId }
                 if (msgIndex != -1) {
                     val msg = messageList[msgIndex]
                     val newUris = msg.attachmentUris?.toMutableList()
                     
                     if (newUris != null && imgIndex < newUris.size) {
-                        // استبدال رابط الصورة القديم بالجديد
                         newUris[imgIndex] = newImageUri
-                        
-                        // تحديث الرسالة في القائمة
                         val updatedMsg = msg.copy(attachmentUris = newUris)
                         messageList[msgIndex] = updatedMsg
                         saveMessages()
 
-                        // إعادة رسم الدردشة بالكامل لتحديث الصورة
                         chatContainer.removeAllViews()
                         for (m in messageList) {
                             addChatBubble(chatContainer, m)
@@ -279,15 +271,20 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
+    // ==========================================
+    // الدالة المحدثة للقائمة السفلية (تطابق التصميم الجديد)
+    // ==========================================
     private fun showAttachBottomSheet() {
         val bottomSheetDialog = BottomSheetDialog(this)
         val bottomSheetView = layoutInflater.inflate(R.layout.bottom_sheet_attach, null)
         bottomSheetDialog.setContentView(bottomSheetView)
 
-        val btnOptionImage = bottomSheetView.findViewById<TextView>(R.id.btnOptionImage)
-        val btnOptionDocument = bottomSheetView.findViewById<TextView>(R.id.btnOptionDocument)
-        val btnOptionAudio = bottomSheetView.findViewById<TextView>(R.id.btnOptionAudio)
-        val btnOptionSearch = bottomSheetView.findViewById<TextView>(R.id.btnOptionSearch)
+        val btnOptionImage = bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionImage)
+        val btnOptionDocument = bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionDocument)
+        val btnOptionAudio = bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionAudio)
+        val btnOptionSearch = bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionSearch)
+        val btnOptionCamera = bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionCamera)
+        val btnOptionAI = bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionAI)
 
         btnOptionImage.setOnClickListener {
             bottomSheetDialog.dismiss()
@@ -311,6 +308,16 @@ class ChatActivity : AppCompatActivity() {
         btnOptionSearch.setOnClickListener {
             bottomSheetDialog.dismiss()
             Toast.makeText(this, "قريباً: البحث الشامل في الملفات", Toast.LENGTH_SHORT).show()
+        }
+        
+        btnOptionCamera.setOnClickListener {
+            bottomSheetDialog.dismiss()
+            Toast.makeText(this, "قريباً: التقاط صورة من الكاميرا", Toast.LENGTH_SHORT).show()
+        }
+        
+        btnOptionAI.setOnClickListener {
+            bottomSheetDialog.dismiss()
+            Toast.makeText(this, "قريباً: تحليل الصور بالذكاء الاصطناعي", Toast.LENGTH_SHORT).show()
         }
 
         bottomSheetDialog.show()
