@@ -1,5 +1,6 @@
 package com.monolith
 
+import android.app.Dialog
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -16,6 +17,8 @@ import android.os.Vibrator
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.Gravity
+import android.view.ViewGroup
+import android.view.Window
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
@@ -32,7 +35,6 @@ import com.google.gson.reflect.TypeToken
 
 class ChatActivity : AppCompatActivity() {
     
-    // قائمة لحفظ الصور التي تم اختيارها
     private val selectedImageUris = mutableListOf<Uri>()
     
     private lateinit var etMessage: EditText
@@ -49,7 +51,6 @@ class ChatActivity : AppCompatActivity() {
     private val gson = Gson()
     private var messageList: MutableList<ChatMessage> = mutableListOf()
 
-    // فتح المعرض لاختيار عدة صور
     private val pickImagesLauncher = registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris: List<Uri> ->
         if (uris.isNotEmpty()) {
             selectedImageUris.clear()
@@ -81,7 +82,6 @@ class ChatActivity : AppCompatActivity() {
         sharedPreferences = getSharedPreferences("ChatHistory", MODE_PRIVATE)
         messageList = loadMessages()
 
-        // استعادة الرسائل السابقة وعرضها (بما فيها الصور)
         for (msg in messageList) {
             addChatBubble(chatContainer, msg)
         }
@@ -171,6 +171,23 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
+    // دالة مساعدة لتحويل البكسل إلى dp (لضمان حجم مناسب على كل الشاشات)
+    private fun dpToPx(dp: Int): Int {
+        return (dp * resources.displayMetrics.density).toInt()
+    }
+
+    private fun showFullScreenImage(uri: Uri) {
+        val dialog = Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+        val imageView = ImageView(this)
+        imageView.layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        imageView.scaleType = ImageView.ScaleType.FIT_CENTER
+        imageView.setImageURI(uri)
+        imageView.setOnClickListener { dialog.dismiss() } // إغلاق عند الضغط
+        dialog.setContentView(imageView)
+        dialog.show()
+    }
+
     private fun saveMessages() {
         try {
             val json = gson.toJson(messageList)
@@ -234,7 +251,7 @@ class ChatActivity : AppCompatActivity() {
     private fun showImagePreview(uris: List<Uri>) {
         try {
             imagePreviewContainer.visibility = LinearLayout.VISIBLE
-            ivPreviewImage.setImageURI(uris[0]) // معاينة الصورة الأولى فقط
+            ivPreviewImage.setImageURI(uris[0]) 
             btnSend.isEnabled = true
             btnSend.alpha = 1.0f
         } catch (e: Exception) {
@@ -326,7 +343,6 @@ class ChatActivity : AppCompatActivity() {
         rootLayout.setBackgroundColor(Color.parseColor(savedColor))
     }
 
-    // الدالة السحرية: تبني الفقاعة ديناميكياً وتدعم الصور المتعددة
     private fun addChatBubble(container: LinearLayout, msg: ChatMessage) {
         val bubbleLayout = LinearLayout(this)
         bubbleLayout.orientation = LinearLayout.VERTICAL
@@ -337,22 +353,26 @@ class ChatActivity : AppCompatActivity() {
         background.cornerRadius = 40f
         bubbleLayout.background = background
 
-        // 1. إضافة الصور الحقيقية (إذا وجدت)
         if (!msg.attachmentUris.isNullOrEmpty()) {
             val scrollView = android.widget.HorizontalScrollView(this)
             val imageContainer = LinearLayout(this)
             imageContainer.orientation = LinearLayout.HORIZONTAL
             
+            // تحويل 150dp إلى بكسل لضمان حجم مثالي على الشاشة
+            val imageSizePx = dpToPx(150)
+            
             for (uriString in msg.attachmentUris) {
                 val imageView = ImageView(this)
-                // حجم الصورة (مربع 600x600)
-                val params = LinearLayout.LayoutParams(600, 600) 
+                val params = LinearLayout.LayoutParams(imageSizePx, imageSizePx) 
                 params.setMargins(0, 0, 16, 16)
                 imageView.layoutParams = params
                 imageView.scaleType = ImageView.ScaleType.CENTER_CROP
                 
                 try {
-                    imageView.setImageURI(Uri.parse(uriString))
+                    val imageUri = Uri.parse(uriString)
+                    imageView.setImageURI(imageUri)
+                    // إضافة ميزة الضغط للتكبير
+                    imageView.setOnClickListener { showFullScreenImage(imageUri) }
                 } catch (e: Exception) {}
                 
                 imageContainer.addView(imageView)
@@ -361,22 +381,18 @@ class ChatActivity : AppCompatActivity() {
             bubbleLayout.addView(scrollView)
         }
 
-        // 2. إضافة النص (إذا وجد)
         if (msg.content.isNotEmpty()) {
             val textView = TextView(this)
             textView.text = msg.content
             textView.textSize = 16f
-            
             textView.setTextColor(if (msg.role == MessageRole.USER) Color.BLACK else Color.WHITE)
             
-            // إصلاح شكل "البيضة": محاذاة النص لليسار/اليمين وليس المنتصف
             textView.textDirection = if (msg.role == MessageRole.USER) TextView.TEXT_DIRECTION_RTL else TextView.TEXT_DIRECTION_LOCALE
             textView.textAlignment = TextView.TEXT_ALIGNMENT_VIEW_START
             
             bubbleLayout.addView(textView)
         }
 
-        // 3. تحديد موقع الفقاعة على الشاشة
         val params = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
