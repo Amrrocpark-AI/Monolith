@@ -96,6 +96,13 @@ class ChatActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_chat)
 
+        // ==========================================
+        // [الإضافة الجديدة] تهيئة المحرك ووضع المفتاح
+        // ==========================================
+        ApiClient.init(applicationContext)
+        ApiClient.setApiKey("YOUR_GROQ_API_KEY_HERE") // <--- ضع مفتاحك هنا قبل الحفظ
+
+
         etMessage = findViewById(R.id.etMessage)
         btnSend = findViewById(R.id.btnSend)
         val btnSettings = findViewById<ImageButton>(R.id.btnSettings)
@@ -171,24 +178,22 @@ class ChatActivity : AppCompatActivity() {
                     hideKeyboard()
 
                     // ==========================================
-                    // بداية الاتصال بالذكاء الاصطناعي (الإضافة الجديدة)
+                    // بداية الاتصال بالذكاء الاصطناعي
                     // ==========================================
                     
                     val aiMsg = ChatMessage(role = MessageRole.AI, content = "جاري التفكير...", colorHex = "#2A2A2A")
                     messageList.add(aiMsg)
-                    val aiMsgIndex = messageList.size - 1 // تثبيت مكان الرسالة
+                    val aiMsgIndex = messageList.size - 1
                     saveMessages()
                     addChatBubble(chatContainer, aiMsg)
                     
                     chatScrollView.post { chatScrollView.fullScroll(android.widget.ScrollView.FOCUS_DOWN) }
 
-                    // تجهيز الطلب
                     val request = ChatRequest(
                         model = "llama3-8b-8192", 
                         messages = listOf(ChatMessage(role = MessageRole.USER, content = message))
                     )
 
-                    // إرسال الطلب (نستخدم emptyMap لأن ApiClient سيقوم بحقن المفتاح تلقائياً)
                     ApiClient.service.sendMessage(
                         url = "v1/chat/completions", 
                         headers = emptyMap(), 
@@ -223,9 +228,6 @@ class ChatActivity : AppCompatActivity() {
                             }
                         }
                     })
-                    // ==========================================
-                    // نهاية الإضافة
-                    // ==========================================
 
                 }
             } catch (e: Exception) {
