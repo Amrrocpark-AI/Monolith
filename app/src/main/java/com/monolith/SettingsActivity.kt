@@ -1,12 +1,18 @@
 package com.monolith
 
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.VibrationEffect
+import android.os.Vibrator
 import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.Button
+import android.widget.EditText
 import android.widget.RadioGroup
 import android.widget.SeekBar
 import android.widget.Spinner
@@ -15,18 +21,108 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
+import androidx.lifecycle.lifecycleScope
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
 
 class SettingsActivity : AppCompatActivity() {
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
 
+        // ==========================================
+        // 1. التخزين المشفر (لحماية المفتاح)
+        // ==========================================
+        val masterKey = MasterKey.Builder(this)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
+
+        val securePrefs = EncryptedSharedPreferences.create(
+            this,
+            "SecureSettings",
+            masterKey,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+        )
+
+        // ==========================================
+        // 2. المحرك الذكي (المفتاح والاختبار)
+        // ==========================================
+        val providerSpinner = findViewById<Spinner>(R.id.providerSpinner)
+        val etApiKey = findViewById<EditText>(R.id.etApiKey)
+        val btnTestAndSave = findViewById<Button>(R.id.btnTestAndSave)
+
+        val providers = arrayOf("Groq (سريع ومجاني)", "OpenAI (مدفوع)", "Custom (محلي)")
+        val providerAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, providers)
+        providerSpinner.adapter = providerAdapter
+
+        val savedKey = securePrefs.getString("api_key", "")
+        if (!savedKey.isNullOrEmpty()) {
+            etApiKey.setText(savedKey)
+        }
+
+        btnTestAndSave.setOnClickListener {
+            val apiKey = etApiKey.text.toString().trim()
+            if (apiKey.isEmpty()) {
+                Toast.makeText(this, "الرجاء إدخال المفتاح أولاً", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            btnTestAndSave.isEnabled = false
+            btnTestAndSave.text = "جاري الفحص..."
+            btnTestAndSave.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#666666"))
+
+            lifecycleScope.launch {
+                val isSuccess = testApiKey(apiKey)
+                withContext(Dispatchers.Main) {
+                    val dynamicShape = GradientDrawable()
+                    dynamicShape.cornerRadius = 50f
+
+                    if (isSuccess) {
+                        securePrefs.edit().putString("api_key", apiKey).apply()
+                        btnTestAndSave.text = "تم الاتصال بنجاح"
+                        dynamicShape.setColor(Color.parseColor("#00FF00"))
+                        btnTestAndSave.background = dynamicShape
+                        btnTestAndSave.setTextColor(Color.BLACK)
+                        
+                        val vibrator = getSystemService(VIBRATOR_SERVICE) as Vibrator
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            vibrator.vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE))
+                        } else {
+                            @Suppress("DEPRECATION")
+                            vibrator.vibrate(50)
+                        }
+                    } else {
+                        btnTestAndSave.text = "فشل الاتصال، تحقق من المفتاح"
+                        dynamicShape.setColor(Color.parseColor("#FF0000"))
+                        btnTestAndSave.background = dynamicShape
+                        btnTestAndSave.setTextColor(Color.WHITE)
+                    }
+                    
+                    btnTestAndSave.postDelayed({
+                        btnTestAndSave.isEnabled = true
+                        btnTestAndSave.text = "اختبار وحفظ المفتاح"
+                        btnTestAndSave.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#00FF00"))
+                        btnTestAndSave.setTextColor(Color.BLACK)
+                    }, 3000)
+                }
+            }
+        }
+
+        // ==========================================
+        // 3. كودك الأصلي (اللغة، الخلفية، الألوان)
+        // ==========================================
         val spinner = findViewById<Spinner>(R.id.languageSpinner)
         val btnApplyLanguage = findViewById<Button>(R.id.btnApplyLanguage)
         val backgroundGroup = findViewById<RadioGroup>(R.id.backgroundGroup)
         val btnPickImage = findViewById<Button>(R.id.btnPickImage)
 
-        // عناصر الألوان
         val sbRed = findViewById<SeekBar>(R.id.sbRed)
         val sbGreen = findViewById<SeekBar>(R.id.sbGreen)
         val sbBlue = findViewById<SeekBar>(R.id.sbBlue)
@@ -35,13 +131,11 @@ class SettingsActivity : AppCompatActivity() {
 
         val sharedPreferences = getSharedPreferences("Settings", MODE_PRIVATE)
 
-        // قائمة اللغات
         val languages = arrayOf("English", "العربية", "Français", "Español", "日本語", "فارسی", "Türkçe", "Bahasa Indonesia", "中文", "ⵜⴰⵎⴰⵣⵉⵖⵜ", "한국어")
         val languageCodes = arrayOf("en", "ar", "fr", "es", "ja", "fa", "tr", "id", "zh", "zgh", "ko")
         val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, languages)
         spinner.adapter = adapter
 
-        // تطبيق اللغة
         btnApplyLanguage.setOnClickListener {
             val selectedPosition = spinner.selectedItemPosition
             val langCode = languageCodes[selectedPosition]
@@ -54,7 +148,6 @@ class SettingsActivity : AppCompatActivity() {
             finish()
         }
 
-        // حفظ خيار الخلفية
         backgroundGroup.setOnCheckedChangeListener { _, checkedId ->
             val editor = sharedPreferences.edit()
             when (checkedId) {
@@ -65,11 +158,9 @@ class SettingsActivity : AppCompatActivity() {
             editor.apply()
         }
 
-        // اختيار صورة الخلفية (بإذن دائم)
         val pickImageLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
             if (uri != null) {
                 try {
-                    // طلب إذن دائم للوصول للصورة
                     val takeFlags: Int = Intent.FLAG_GRANT_READ_URI_PERMISSION
                     contentResolver.takePersistableUriPermission(uri, takeFlags)
                     
@@ -82,14 +173,9 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         btnPickImage.setOnClickListener {
-            // استخدام المصفوفة لأن OpenDocument يتطلب ذلك
             pickImageLauncher.launch(arrayOf("image/*"))
         }
 
-        // ==========================================
-        // منطق شرائح الألوان (RGB)
-        // ==========================================
-        
         val updateColorPreview = {
             val r = sbRed.progress
             val g = sbGreen.progress
@@ -114,7 +200,6 @@ class SettingsActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
         })
 
-        // زر حفظ اللون
         btnSaveColor.setOnClickListener {
             val r = sbRed.progress
             val g = sbGreen.progress
@@ -125,7 +210,6 @@ class SettingsActivity : AppCompatActivity() {
             Toast.makeText(this, "تم حفظ اللون: $colorHex", Toast.LENGTH_SHORT).show()
         }
 
-        // استعادة اللون المحفوظ
         val savedColorHex = sharedPreferences.getString("AppThemeColor", "#00FF00")
         if (savedColorHex != null) {
             try {
@@ -135,6 +219,19 @@ class SettingsActivity : AppCompatActivity() {
                 sbBlue.progress = Color.blue(savedColor)
                 viewColorPreview.setBackgroundColor(savedColor)
             } catch (e: Exception) {}
+        }
+    }
+
+    private suspend fun testApiKey(apiKey: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                val client = OkHttpClient.Builder().build()
+                val request = Request.Builder()
+                    .url("https://api.groq.com/openai/v1/models")
+                    .addHeader("Authorization", "Bearer $apiKey")
+                    .build()
+                client.newCall(request).execute().isSuccessful
+            } catch (e: Exception) { false }
         }
     }
 }
