@@ -28,8 +28,6 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
 import java.io.OutputStream
-import java.text.SimpleDateFormat
-import java.util.Locale
 
 class ImageViewerActivity : AppCompatActivity() {
 
@@ -38,7 +36,6 @@ class ImageViewerActivity : AppCompatActivity() {
     private var messageId: String? = null
     private var imageIndex: Int = -1
     
-    // متغير درع الخصوصية (مفعل افتراضياً لحمايتك)
     private var isPrivacyShieldEnabled = true
 
     private lateinit var scaleGestureDetector: ScaleGestureDetector
@@ -74,15 +71,14 @@ class ImageViewerActivity : AppCompatActivity() {
 
         btnClose.setOnClickListener { closeAndReturn() }
 
-        // زر درع الخصوصية: يغير حالته بين تفعيل/تعطيل
         btnPrivacyShield.setOnClickListener {
             isPrivacyShieldEnabled = !isPrivacyShieldEnabled
             if (isPrivacyShieldEnabled) {
                 btnPrivacyShield.setColorFilter(android.graphics.Color.parseColor("#00FF00"))
-                Toast.makeText(this, "درع الخصوصية: مفعل (سيتم مسح بيانات الموقع)", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "درع الخصوصية: مفعل", Toast.LENGTH_SHORT).show()
             } else {
                 btnPrivacyShield.setColorFilter(android.graphics.Color.WHITE)
-                Toast.makeText(this, "درع الخصوصية: معطل (سيتم الاحتفاظ بالبيانات)", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "درع الخصوصية: معطل", Toast.LENGTH_SHORT).show()
             }
         }
 
@@ -92,7 +88,6 @@ class ImageViewerActivity : AppCompatActivity() {
 
         btnShare.setOnClickListener {
             if (imageUri != null) {
-                // مشاركة الصورة (مع أو بدون بيانات حسب درع الخصوصية)
                 val uriToShare = if (isPrivacyShieldEnabled) getSanitizedUri(imageUri!!) else imageUri!!
                 val intent = Intent(Intent.ACTION_SEND).apply {
                     type = "image/*"
@@ -131,29 +126,23 @@ class ImageViewerActivity : AppCompatActivity() {
         btnRotate.setOnClickListener { rotateImage() }
         btnDownload.setOnClickListener { saveImageToGallery() }
         btnRename.setOnClickListener { showRenameDialog() }
-        
-        // زر المعلومات الذكي
         btnInfo.setOnClickListener { showImageInfoWithExif() }
     }
 
-    // دالة مسح البيانات الوصفية وإنشاء نسخة نظيفة
     private fun getSanitizedUri(sourceUri: Uri): Uri {
         return try {
             val inputStream = contentResolver.openInputStream(sourceUri)
             val bitmap = BitmapFactory.decodeStream(inputStream)
-            // إعادة ضغط الصورة يمسح كل البيانات الوصفية (EXIF)
             val file = File(cacheDir, "sanitized_${System.currentTimeMillis()}.jpg")
             val outputStream = FileOutputStream(file)
             bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
             outputStream.close()
-            
             FileProvider.getUriForFile(this, "com.monolith.fileprovider", file)
         } catch (e: Exception) {
-            sourceUri // في حال فشل المسح، نرجع الأصل
+            sourceUri
         }
     }
 
-    // دالة عرض المعلومات مع قراءة EXIF
     private fun showImageInfoWithExif() {
         if (imageUri == null) return
         try {
@@ -170,14 +159,18 @@ class ImageViewerActivity : AppCompatActivity() {
                 contentResolver.openInputStream(imageUri!!)?.use { stream ->
                     val exif = ExifInterface(stream)
                     
-                    val latLong = exif.latLong
+                    // الإصلاح: استخدام دالة getLatLong للمكتبة القديمة
+                    val latLong = FloatArray(2)
+                    val hasLatLong = exif.getLatLong(latLong)
+                    
                     val model = exif.getAttribute(ExifInterface.TAG_MODEL) ?: "غير معروف"
                     val make = exif.getAttribute(ExifInterface.TAG_MAKE) ?: "غير معروف"
                     val dateTime = exif.getAttribute(ExifInterface.TAG_DATETIME) ?: "غير معروف"
                     
                     exifInfo = "الكاميرا: $make $model\n"
                     exifInfo += "التاريخ: $dateTime\n"
-                    if (latLong != null) {
+                    
+                    if (hasLatLong) {
                         exifInfo += "الموقع (GPS): ${latLong[0]}, ${latLong[1]}\n"
                     } else {
                         exifInfo += "الموقع (GPS): غير متوفر\n"
@@ -272,7 +265,6 @@ class ImageViewerActivity : AppCompatActivity() {
     private fun saveImageToGallery() {
         if (imageUri == null) return
         try {
-            // استخدام النسخة المنظفة إذا كان درع الخصوصية مفعلاً
             val uriToSave = if (isPrivacyShieldEnabled) getSanitizedUri(imageUri!!) else imageUri!!
             
             val inputStream = contentResolver.openInputStream(uriToSave)
