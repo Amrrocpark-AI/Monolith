@@ -96,12 +96,8 @@ class ChatActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_chat)
 
-        // ==========================================
-        // [الإضافة الجديدة] تهيئة المحرك ووضع المفتاح
-        // ==========================================
         ApiClient.init(applicationContext)
-        ApiClient.setApiKey("YOUR_GROQ_API_KEY_HERE") // <--- ضع مفتاحك هنا قبل الحفظ
-
+        ApiClient.setApiKey("YOUR_GROQ_API_KEY_HERE") // <--- ضع مفتاحك هنا
 
         etMessage = findViewById(R.id.etMessage)
         btnSend = findViewById(R.id.btnSend)
@@ -177,21 +173,41 @@ class ChatActivity : AppCompatActivity() {
                     etMessage.text.clear()
                     hideKeyboard()
 
-                    // ==========================================
-                    // بداية الاتصال بالذكاء الاصطناعي
-                    // ==========================================
-                    
                     val aiMsg = ChatMessage(role = MessageRole.AI, content = "جاري التفكير...", colorHex = "#2A2A2A")
                     messageList.add(aiMsg)
-                    val aiMsgIndex = messageList.size - 1
+                    val aiMsgIndex = messageList.size - 1 
                     saveMessages()
                     addChatBubble(chatContainer, aiMsg)
                     
                     chatScrollView.post { chatScrollView.fullScroll(android.widget.ScrollView.FOCUS_DOWN) }
 
+                    // ==========================================
+                    // بناء السياق (الذاكرة) - الأفكار العبقرية
+                    // ==========================================
+                    val apiMessages = mutableListOf<Message>()
+                    
+                    // 1. شخصية التطبيق (System Prompt)
+                    apiMessages.add(Message(
+                        role = "system", 
+                        content = "أنت Monolith، ذكاء اصطناعي سيادي متقدم. تجيب بدقة واحترافية، وتتحدث باللغة التي يستخدمها المستخدم."
+                    ))
+
+                    // 2. إرسال آخر 15 رسالة لكي يتذكر المحادثة
+                    val recentHistory = messageList.takeLast(15)
+                    for (msg in recentHistory) {
+                        if (msg.role == MessageRole.USER) {
+                            apiMessages.add(Message(role = "user", content = msg.content))
+                        } else if (msg.role == MessageRole.AI && msg.content != "جاري التفكير...") {
+                            apiMessages.add(Message(role = "assistant", content = msg.content))
+                        }
+                    }
+
+                    // 3. استخدام كلاس ChatRequest المتطور الخاص بك
                     val request = ChatRequest(
                         model = "llama3-8b-8192", 
-                        messages = listOf(ChatMessage(role = MessageRole.USER, content = message))
+                        messages = apiMessages,
+                        temperature = 0.7f,
+                        maxTokens = 2048
                     )
 
                     ApiClient.service.sendMessage(
@@ -352,10 +368,8 @@ class ChatActivity : AppCompatActivity() {
             bottomSheetDialog.dismiss()
             Toast.makeText(this, "قريباً: التقاط صورة من الكاميرا", Toast.LENGTH_SHORT).show()
         }
-        bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionVision)?.setOnClickListener {
-            bottomSheetDialog.dismiss()
-            Toast.makeText(this, "قريباً: تحليل الصور بالذكاء الاصطناعي", Toast.LENGTH_SHORT).show()
-        }
+
+        // ملاحظة: السطر المسبب للمشكلة (btnOptionVision) تم حذفه نهائياً
 
         bottomSheetDialog.show()
     }
