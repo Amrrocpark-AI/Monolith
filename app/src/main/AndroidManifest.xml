@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- إذن استخدام الإنترنت (جديد) -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    
+    <!-- أذونات سابقة -->
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
 
@@ -43,7 +47,7 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
-        <!-- شاشة مكتبة القص (هذا هو السطر السحري الذي سيمنع الانهيار) -->
+        <!-- شاشة مكتبة القص -->
         <activity
             android:name="com.yalantis.ucrop.UCropActivity"
             android:screenOrientation="portrait"
