@@ -1,4 +1,3 @@
-
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -6,7 +5,6 @@
     android:layout_height="match_parent"
     android:background="#050505">
 
-    <!-- عنوان الشاشة (أصغر وأكثر أناقة) -->
     <TextView
         android:id="@+id/tvLockTitle"
         android:layout_width="wrap_content"
@@ -21,7 +19,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
-    <!-- حاوية البصمة (تتوسط الشاشة) -->
     <FrameLayout
         android:id="@+id/fingerprintContainer"
         android:layout_width="180dp"
@@ -31,7 +28,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
-        <!-- مؤشر الطاقة الدائري (سيظهر أثناء الفحص) -->
         <com.google.android.material.progressindicator.CircularProgressIndicator
             android:id="@+id/progressIndicator"
             android:layout_width="match_parent"
@@ -43,7 +39,6 @@
             app:trackThickness="4dp"
             app:indicatorSize="180dp" />
 
-        <!-- الدائرة الزجاجية التي تحتوي على أيقونة البصمة -->
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/cardFingerprint"
             android:layout_width="140dp"
@@ -66,7 +61,6 @@
         </com.google.android.material.card.MaterialCardView>
     </FrameLayout>
 
-    <!-- نص التوجيه (يتغير ديناميكياً حسب الحالة) -->
     <TextView
         android:id="@+id/tvLockSubtitle"
         android:layout_width="wrap_content"
@@ -79,7 +73,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
-    <!-- زر كلمة المرور الاحتياطي (يظهر فقط عند الحاجة) -->
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btnUsePassword"
         style="@style/Widget.MaterialComponents.Button.TextButton"
