@@ -4,64 +4,212 @@
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:background="#1E1E1E"
-    android:padding="16dp">
+    android:paddingTop="8dp"
+    android:paddingBottom="24dp"
+    android:paddingStart="16dp"
+    android:paddingEnd="16dp">
+
+    <!-- مقبض السحب (Drag Handle) -->
+    <View
+        android:layout_width="40dp"
+        android:layout_height="4dp"
+        android:background="#555555"
+        android:layout_gravity="center"
+        android:layout_marginBottom="16dp" />
 
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="خيارات الإرفاق والبحث"
-        android:textColor="#00FF00"
+        android:text="إرفاق"
+        android:textColor="#FFFFFF"
         android:textSize="18sp"
         android:textStyle="bold"
         android:gravity="center"
-        android:layout_marginBottom="16dp"/>
+        android:layout_marginBottom="24dp"/>
 
-    <TextView
-        android:id="@+id/btnOptionImage"
+    <!-- شبكة الأيقونات (3 أعمدة) -->
+    <GridLayout
         android:layout_width="match_parent"
-        android:layout_height="50dp"
-        android:text="▣  اختيار صورة من المعرض"
-        android:textColor="#FFFFFF"
-        android:textSize="16sp"
-        android:gravity="center_vertical"
-        android:paddingStart="16dp"
-        android:background="#2A2A2A"
-        android:layout_marginBottom="8dp"/>
+        android:layout_height="wrap_content"
+        android:columnCount="3"
+        android:rowCount="2"
+        android:alignmentMode="alignMargins"
+        android:useDefaultMargins="true">
 
-    <TextView
-        android:id="@+id/btnOptionDocument"
-        android:layout_width="match_parent"
-        android:layout_height="50dp"
-        android:text="🗎  اختيار مستند (TXT / PDF)"
-        android:textColor="#FFFFFF"
-        android:textSize="16sp"
-        android:gravity="center_vertical"
-        android:paddingStart="16dp"
-        android:background="#2A2A2A"
-        android:layout_marginBottom="8dp"/>
+        <!-- 1. الصور -->
+        <LinearLayout
+            android:id="@+id/btnOptionImage"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_columnWeight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="8dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true">
+            
+            <ImageView
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:src="@drawable/ic_vision"
+                android:background="@drawable/bg_circle_dark"
+                android:padding="12dp"
+                android:tint="#00FF00" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="صورة"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:layout_marginTop="8dp" />
+        </LinearLayout>
 
-    <TextView
-        android:id="@+id/btnOptionAudio"
-        android:layout_width="match_parent"
-        android:layout_height="50dp"
-        android:text="⌁  اختيار ملف صوتي"
-        android:textColor="#FFFFFF"
-        android:textSize="16sp"
-        android:gravity="center_vertical"
-        android:paddingStart="16dp"
-        android:background="#2A2A2A"
-        android:layout_marginBottom="8dp"/>
+        <!-- 2. المستندات -->
+        <LinearLayout
+            android:id="@+id/btnOptionDocument"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_columnWeight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="8dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true">
+            
+            <ImageView
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:src="@drawable/ic_attach"
+                android:background="@drawable/bg_circle_dark"
+                android:padding="12dp"
+                android:tint="#FFFFFF" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="مستند"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:layout_marginTop="8dp" />
+        </LinearLayout>
 
-    <TextView
-        android:id="@+id/btnOptionSearch"
-        android:layout_width="match_parent"
-        android:layout_height="50dp"
-        android:text="⌕  بحث شامل في ملفات الهاتف"
-        android:textColor="#FFFFFF"
-        android:textSize="16sp"
-        android:gravity="center_vertical"
-        android:paddingStart="16dp"
-        android:background="#2A2A2A"
-        android:layout_marginBottom="8dp"/>
+        <!-- 3. الصوت -->
+        <LinearLayout
+            android:id="@+id/btnOptionAudio"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_columnWeight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="8dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true">
+            
+            <ImageView
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:src="@drawable/ic_mic"
+                android:background="@drawable/bg_circle_dark"
+                android:padding="12dp"
+                android:tint="#FFFFFF" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="صوت"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:layout_marginTop="8dp" />
+        </LinearLayout>
 
+        <!-- 4. البحث -->
+        <LinearLayout
+            android:id="@+id/btnOptionSearch"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_columnWeight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="8dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true">
+            
+            <ImageView
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:src="@android:drawable/ic_menu_search"
+                android:background="@drawable/bg_circle_dark"
+                android:padding="12dp"
+                android:tint="#FFFFFF" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="بحث"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:layout_marginTop="8dp" />
+        </LinearLayout>
+
+        <!-- 5. الكاميرا (لإضافة صورة مباشرة) -->
+        <LinearLayout
+            android:id="@+id/btnOptionCamera"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_columnWeight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="8dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true">
+            
+            <ImageView
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:src="@android:drawable/ic_menu_camera"
+                android:background="@drawable/bg_circle_dark"
+                android:padding="12dp"
+                android:tint="#FFFFFF" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="كاميرا"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:layout_marginTop="8dp" />
+        </LinearLayout>
+
+        <!-- 6. تحليل AI -->
+        <LinearLayout
+            android:id="@+id/btnOptionAI"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_columnWeight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="8dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true">
+            
+            <ImageView
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:src="@android:drawable/ic_menu_compass"
+                android:background="@drawable/bg_circle_dark"
+                android:padding="12dp"
+                android:tint="#00FF00" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="ذكاء AI"
+                android:textColor="#00FF00"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:layout_marginTop="8dp" />
+        </LinearLayout>
+
+    </GridLayout>
 </LinearLayout>
