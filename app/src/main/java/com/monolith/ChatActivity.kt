@@ -1,6 +1,7 @@
 package com.monolith
 
 import android.Manifest
+import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -31,6 +32,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.AppCompatTextView
 import androidx.core.content.ContextCompat
+import com.bumptech.glide.Glide
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.card.MaterialCardView
 import com.google.gson.Gson
@@ -57,7 +59,6 @@ class ChatActivity : AppCompatActivity() {
     private val gson = Gson()
     private var messageList: MutableList<ChatMessage> = mutableListOf()
 
-    // طلب أذونات الصور (لأندرويد الحديث)
     private val requestPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
         if (isGranted) {
             pickImagesLauncher.launch("image/*")
@@ -193,11 +194,11 @@ class ChatActivity : AppCompatActivity() {
                     
                     chatScrollView.post { chatScrollView.fullScroll(android.widget.ScrollView.FOCUS_DOWN) }
 
-                    // بناء السياق والذاكرة
+                    // بناء السياق
                     val apiMessages = mutableListOf<Message>()
                     apiMessages.add(Message(
                         role = "system", 
-                        content = "أنت Monolith، ذكاء اصطناعي سيادي متقدم. تجيب بدقة واحترافية، وتتحدث باللغة التي يستخدمها المستخدم."
+                        content = "أنت Monolith، ذكاء اصطناعي سيادي متقدم. تجيب بدقة واحترافية."
                     ))
 
                     val recentHistory = messageList.takeLast(15)
@@ -283,6 +284,29 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
+    // *** الميزة الجديدة: البحث عن صورة بالاسم عبر الإنترنت ***
+    private fun showSearchImageDialog() {
+        val builder = AlertDialog.Builder(this)
+        builder.setTitle("البحث عن صورة بالاسم")
+        
+        val input = EditText(this)
+        input.hint = "مثال: غروب الشمس، قطة، سيارة..."
+        builder.setView(input)
+
+        builder.setPositiveButton("بحث وجلب") { _, _ ->
+            val query = input.text.toString().trim()
+            if (query.isNotEmpty()) {
+                // استخدام خدمة Unsplash لجلب صورة عشوائية بناءً على الكلمة
+                val imageUrl = "https://source.unsplash.com/random/800x600/?${Uri.encode(query)}"
+                selectedImageUris.add(Uri.parse(imageUrl)) // إضافة رابط الصورة كـ Uri
+                updatePreviewUi()
+                Toast.makeText(this, "تم جلب الصورة بنجاح!", Toast.LENGTH_SHORT).show()
+            }
+        }
+        builder.setNegativeButton("إلغاء") { dialog, _ -> dialog.cancel() }
+        builder.show()
+    }
+
     private fun updatePreviewUi() {
         previewListContainer.removeAllViews()
 
@@ -309,7 +333,10 @@ class ChatActivity : AppCompatActivity() {
                 val imageView = ImageView(this)
                 imageView.layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
                 imageView.scaleType = ImageView.ScaleType.CENTER_CROP
-                imageView.setImageURI(uri)
+                
+                // استخدام Glide لعرض الصورة (يدعم الروابط المحلية والسحابية)
+                Glide.with(this).load(uri).into(imageView)
+                
                 relativeLayout.addView(imageView)
 
                 val btnRemove = AppCompatTextView(this)
@@ -370,7 +397,7 @@ class ChatActivity : AppCompatActivity() {
 
         bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionImage)?.setOnClickListener {
             bottomSheetDialog.dismiss()
-            checkAndPickImage() // استدعاء الدالة التي تطلب الإذن
+            checkAndPickImage() 
         }
         bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionDocument)?.setOnClickListener {
             bottomSheetDialog.dismiss()
@@ -380,10 +407,13 @@ class ChatActivity : AppCompatActivity() {
             bottomSheetDialog.dismiss()
             Toast.makeText(this, "قريباً: اختيار ملفات صوتية", Toast.LENGTH_SHORT).show()
         }
+        
+        // *** هنا ربطنا زر البحث بالدالة الجديدة ***
         bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionSearch)?.setOnClickListener {
             bottomSheetDialog.dismiss()
-            Toast.makeText(this, "قريباً: البحث الشامل في الملفات", Toast.LENGTH_SHORT).show()
+            showSearchImageDialog() 
         }
+        
         bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionCamera)?.setOnClickListener {
             bottomSheetDialog.dismiss()
             Toast.makeText(this, "قريباً: التقاط صورة من الكاميرا", Toast.LENGTH_SHORT).show()
@@ -504,20 +534,17 @@ class ChatActivity : AppCompatActivity() {
                 imageView.background = clip
                 imageView.clipToOutline = true
 
-                try {
-                    val imageUri = Uri.parse(uriString)
-                    imageView.setImageURI(imageUri)
+                // استخدام Glide هنا أيضاً
+                Glide.with(this).load(uriString).into(imageView)
 
-                    imageView.setOnClickListener {
-                        val intent = Intent(this, ImageViewerActivity::class.java)
-                        intent.putExtra("image_uri", uriString)
-                        intent.putExtra("message_id", msg.id)
-                        intent.putExtra("image_index", index)
-                        // إعطاء الصلاحية لشاشة العرض
-                        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        imageViewerLauncher.launch(intent)
-                    }
-                } catch (e: Exception) {}
+                imageView.setOnClickListener {
+                    val intent = Intent(this, ImageViewerActivity::class.java)
+                    intent.putExtra("image_uri", uriString)
+                    intent.putExtra("message_id", msg.id)
+                    intent.putExtra("image_index", index)
+                    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    imageViewerLauncher.launch(intent)
+                }
 
                 imageContainer.addView(imageView)
             }
