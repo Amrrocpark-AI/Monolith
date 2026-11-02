@@ -1,17 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:background="#1E1E1E"
-    android:padding="16dp">
+    android:background="#1A1A1A"
+    android:padding="24dp">
 
+    <!-- العنوان -->
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="إرفاق"
         android:textColor="#FFFFFF"
-        android:textSize="18sp"
+        android:textSize="20sp"
         android:textStyle="bold"
         android:gravity="center"
         android:layout_marginBottom="24dp"/>
@@ -23,6 +25,7 @@
         android:orientation="horizontal"
         android:weightSum="3">
 
+        <!-- 1. صورة -->
         <LinearLayout
             android:id="@+id/btnOptionImage"
             android:layout_width="0dp"
@@ -30,24 +33,37 @@
             android:layout_weight="1"
             android:orientation="vertical"
             android:gravity="center"
-            android:padding="8dp"
             android:clickable="true"
-            android:focusable="true">
-            <ImageView
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:src="@android:drawable/ic_menu_gallery"
-                android:background="#333333"
-                android:padding="8dp"
-                android:tint="#00FF00" />
+            android:focusable="true"
+            android:background="?attr/selectableItemBackgroundBorderless">
+            
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="60dp"
+                android:layout_height="60dp"
+                app:cardCornerRadius="30dp"
+                app:cardBackgroundColor="#2A2A2A"
+                app:strokeColor="#00FF00"
+                app:strokeWidth="1dp"
+                app:rippleColor="#3300FF00"
+                app:cardElevation="4dp">
+                <ImageView
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:layout_gravity="center"
+                    android:src="@android:drawable/ic_menu_gallery"
+                    app:tint="#00FF00" />
+            </com.google.android.material.card.MaterialCardView>
+            
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="صورة"
                 android:textColor="#FFFFFF"
+                android:textSize="14sp"
                 android:layout_marginTop="8dp" />
         </LinearLayout>
 
+        <!-- 2. مستند -->
         <LinearLayout
             android:id="@+id/btnOptionDocument"
             android:layout_width="0dp"
@@ -55,24 +71,37 @@
             android:layout_weight="1"
             android:orientation="vertical"
             android:gravity="center"
-            android:padding="8dp"
             android:clickable="true"
-            android:focusable="true">
-            <ImageView
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:src="@android:drawable/ic_menu_agenda"
-                android:background="#333333"
-                android:padding="8dp"
-                android:tint="#FFFFFF" />
+            android:focusable="true"
+            android:background="?attr/selectableItemBackgroundBorderless">
+            
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="60dp"
+                android:layout_height="60dp"
+                app:cardCornerRadius="30dp"
+                app:cardBackgroundColor="#2A2A2A"
+                app:strokeColor="#FFFFFF"
+                app:strokeWidth="1dp"
+                app:rippleColor="#33FFFFFF"
+                app:cardElevation="4dp">
+                <ImageView
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:layout_gravity="center"
+                    android:src="@android:drawable/ic_menu_agenda"
+                    app:tint="#FFFFFF" />
+            </com.google.android.material.card.MaterialCardView>
+
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="مستند"
                 android:textColor="#FFFFFF"
+                android:textSize="14sp"
                 android:layout_marginTop="8dp" />
         </LinearLayout>
 
+        <!-- 3. صوت -->
         <LinearLayout
             android:id="@+id/btnOptionAudio"
             android:layout_width="0dp"
@@ -80,21 +109,33 @@
             android:layout_weight="1"
             android:orientation="vertical"
             android:gravity="center"
-            android:padding="8dp"
             android:clickable="true"
-            android:focusable="true">
-            <ImageView
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:src="@android:drawable/ic_btn_speak_now"
-                android:background="#333333"
-                android:padding="8dp"
-                android:tint="#FFFFFF" />
+            android:focusable="true"
+            android:background="?attr/selectableItemBackgroundBorderless">
+            
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="60dp"
+                android:layout_height="60dp"
+                app:cardCornerRadius="30dp"
+                app:cardBackgroundColor="#2A2A2A"
+                app:strokeColor="#FFFFFF"
+                app:strokeWidth="1dp"
+                app:rippleColor="#33FFFFFF"
+                app:cardElevation="4dp">
+                <ImageView
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:layout_gravity="center"
+                    android:src="@android:drawable/ic_btn_speak_now"
+                    app:tint="#FFFFFF" />
+            </com.google.android.material.card.MaterialCardView>
+
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="صوت"
                 android:textColor="#FFFFFF"
+                android:textSize="14sp"
                 android:layout_marginTop="8dp" />
         </LinearLayout>
     </LinearLayout>
@@ -105,8 +146,9 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:weightSum="3"
-        android:layout_marginTop="16dp">
+        android:layout_marginTop="24dp">
 
+        <!-- 4. بحث -->
         <LinearLayout
             android:id="@+id/btnOptionSearch"
             android:layout_width="0dp"
@@ -114,24 +156,37 @@
             android:layout_weight="1"
             android:orientation="vertical"
             android:gravity="center"
-            android:padding="8dp"
             android:clickable="true"
-            android:focusable="true">
-            <ImageView
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:src="@android:drawable/ic_menu_search"
-                android:background="#333333"
-                android:padding="8dp"
-                android:tint="#FFFFFF" />
+            android:focusable="true"
+            android:background="?attr/selectableItemBackgroundBorderless">
+            
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="60dp"
+                android:layout_height="60dp"
+                app:cardCornerRadius="30dp"
+                app:cardBackgroundColor="#2A2A2A"
+                app:strokeColor="#FFFFFF"
+                app:strokeWidth="1dp"
+                app:rippleColor="#33FFFFFF"
+                app:cardElevation="4dp">
+                <ImageView
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:layout_gravity="center"
+                    android:src="@android:drawable/ic_menu_search"
+                    app:tint="#FFFFFF" />
+            </com.google.android.material.card.MaterialCardView>
+
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="بحث"
                 android:textColor="#FFFFFF"
+                android:textSize="14sp"
                 android:layout_marginTop="8dp" />
         </LinearLayout>
 
+        <!-- 5. كاميرا -->
         <LinearLayout
             android:id="@+id/btnOptionCamera"
             android:layout_width="0dp"
@@ -139,24 +194,37 @@
             android:layout_weight="1"
             android:orientation="vertical"
             android:gravity="center"
-            android:padding="8dp"
             android:clickable="true"
-            android:focusable="true">
-            <ImageView
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:src="@android:drawable/ic_menu_camera"
-                android:background="#333333"
-                android:padding="8dp"
-                android:tint="#FFFFFF" />
+            android:focusable="true"
+            android:background="?attr/selectableItemBackgroundBorderless">
+            
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="60dp"
+                android:layout_height="60dp"
+                app:cardCornerRadius="30dp"
+                app:cardBackgroundColor="#2A2A2A"
+                app:strokeColor="#FFFFFF"
+                app:strokeWidth="1dp"
+                app:rippleColor="#33FFFFFF"
+                app:cardElevation="4dp">
+                <ImageView
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:layout_gravity="center"
+                    android:src="@android:drawable/ic_menu_camera"
+                    app:tint="#FFFFFF" />
+            </com.google.android.material.card.MaterialCardView>
+
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="كاميرا"
                 android:textColor="#FFFFFF"
+                android:textSize="14sp"
                 android:layout_marginTop="8dp" />
         </LinearLayout>
 
+        <!-- 6. ذكاء AI -->
         <LinearLayout
             android:id="@+id/btnOptionAI"
             android:layout_width="0dp"
@@ -164,21 +232,34 @@
             android:layout_weight="1"
             android:orientation="vertical"
             android:gravity="center"
-            android:padding="8dp"
             android:clickable="true"
-            android:focusable="true">
-            <ImageView
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:src="@android:drawable/ic_menu_compass"
-                android:background="#333333"
-                android:padding="8dp"
-                android:tint="#00FF00" />
+            android:focusable="true"
+            android:background="?attr/selectableItemBackgroundBorderless">
+            
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="60dp"
+                android:layout_height="60dp"
+                app:cardCornerRadius="30dp"
+                app:cardBackgroundColor="#2A2A2A"
+                app:strokeColor="#00FF00"
+                app:strokeWidth="1dp"
+                app:rippleColor="#3300FF00"
+                app:cardElevation="4dp">
+                <ImageView
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:layout_gravity="center"
+                    android:src="@android:drawable/ic_menu_compass"
+                    app:tint="#00FF00" />
+            </com.google.android.material.card.MaterialCardView>
+
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="ذكاء AI"
                 android:textColor="#00FF00"
+                android:textSize="14sp"
+                android:textStyle="bold"
                 android:layout_marginTop="8dp" />
         </LinearLayout>
     </LinearLayout>
