@@ -59,6 +59,42 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
+    // مستقبل نتيجة العودة من شاشة عرض الصور
+    private val imageViewerLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == RESULT_OK) {
+            val data = result.data
+            val newImageUri = data?.getStringExtra("new_image_uri")
+            val msgId = data?.getStringExtra("message_id")
+            val imgIndex = data?.getIntExtra("image_index", -1)
+
+            if (newImageUri != null && msgId != null && imgIndex != -1) {
+                // البحث عن الرسالة التي تحتوي على الصورة المعدلة
+                val msgIndex = messageList.indexOfFirst { it.id == msgId }
+                if (msgIndex != -1) {
+                    val msg = messageList[msgIndex]
+                    val newUris = msg.attachmentUris?.toMutableList()
+                    
+                    if (newUris != null && imgIndex < newUris.size) {
+                        // استبدال رابط الصورة القديم بالجديد
+                        newUris[imgIndex] = newImageUri
+                        
+                        // تحديث الرسالة في القائمة
+                        val updatedMsg = msg.copy(attachmentUris = newUris)
+                        messageList[msgIndex] = updatedMsg
+                        saveMessages()
+
+                        // إعادة رسم الدردشة بالكامل لتحديث الصورة
+                        chatContainer.removeAllViews()
+                        for (m in messageList) {
+                            addChatBubble(chatContainer, m)
+                        }
+                        chatScrollView.post { chatScrollView.fullScroll(android.widget.ScrollView.FOCUS_DOWN) }
+                    }
+                }
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_chat)
@@ -362,11 +398,7 @@ class ChatActivity : AppCompatActivity() {
         rootLayout.setBackgroundColor(Color.parseColor(savedColor))
     }
 
-    // ==========================================
-    // الدالة المعدلة: فصل الصور عن النص وإزالة الإطار الأخضر
-    // ==========================================
     private fun addChatBubble(container: LinearLayout, msg: ChatMessage) {
-        // الحاوية الرئيسية للرسالة بأكملها (عمودية)
         val messageLayout = LinearLayout(this)
         messageLayout.orientation = LinearLayout.VERTICAL
         messageLayout.layoutParams = LinearLayout.LayoutParams(
@@ -374,22 +406,21 @@ class ChatActivity : AppCompatActivity() {
             LinearLayout.LayoutParams.WRAP_CONTENT
         )
 
-        // 1. إضافة الصور (بدون خلفية خضراء)
         if (!msg.attachmentUris.isNullOrEmpty()) {
             val scrollView = android.widget.HorizontalScrollView(this)
             val imageContainer = LinearLayout(this)
             imageContainer.orientation = LinearLayout.HORIZONTAL
             
-            val imageSizePx = dpToPx(180) // حجم الصورة أصبح 180dp (أكبر قليلاً وأوضح)
+            val imageSizePx = dpToPx(180)
             
-            for (uriString in msg.attachmentUris) {
+            // استخدمنا withIndex لمعرفة رقم الصورة وتمريره لشاشة العرض
+            for ((index, uriString) in msg.attachmentUris.withIndex()) {
                 val imageView = ImageView(this)
                 val params = LinearLayout.LayoutParams(imageSizePx, imageSizePx) 
                 params.setMargins(0, 0, 16, 16)
                 imageView.layoutParams = params
                 imageView.scaleType = ImageView.ScaleType.CENTER_CROP
                 
-                // إضافة حواف دائرية للصورة نفسها
                 val clip = GradientDrawable()
                 clip.cornerRadius = dpToPx(16).toFloat()
                 clip.setColor(Color.TRANSPARENT)
@@ -400,10 +431,13 @@ class ChatActivity : AppCompatActivity() {
                     val imageUri = Uri.parse(uriString)
                     imageView.setImageURI(imageUri)
                     
+                    // فتح الشاشة مع تمرير بيانات الرسالة والصورة
                     imageView.setOnClickListener { 
                         val intent = Intent(this, ImageViewerActivity::class.java)
                         intent.putExtra("image_uri", uriString)
-                        startActivity(intent)
+                        intent.putExtra("message_id", msg.id)
+                        intent.putExtra("image_index", index)
+                        imageViewerLauncher.launch(intent)
                     }
                 } catch (e: Exception) {}
                 
@@ -413,7 +447,6 @@ class ChatActivity : AppCompatActivity() {
             messageLayout.addView(scrollView)
         }
 
-        // 2. إضافة النص (داخل فقاعة ملونة)
         if (msg.content.isNotEmpty()) {
             val textBubble = LinearLayout(this)
             textBubble.setPadding(32, 24, 32, 24)
@@ -435,7 +468,6 @@ class ChatActivity : AppCompatActivity() {
             messageLayout.addView(textBubble)
         }
 
-        // 3. تحديد موقع الرسالة (يمين أو يسار)
         if (msg.role == MessageRole.USER) {
             messageLayout.gravity = Gravity.END
             messageLayout.setPadding(0, dpToPx(8), 0, dpToPx(8))
