@@ -33,7 +33,6 @@
             android:layout_height="1dp"
             android:layout_weight="1" />
 
-        <!-- زر درع الخصوصية -->
         <ImageButton
             android:id="@+id/btnPrivacyShield"
             android:layout_width="48dp"
@@ -90,21 +89,22 @@
             android:background="?attr/selectableItemBackgroundBorderless"
             android:tint="#FFFFFF" />
 
+        <!-- زر تعديل البيانات الجديد (EXIF) -->
+        <ImageButton
+            android:id="@+id/btnEditExif"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:src="@android:drawable/ic_menu_manage"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:tint="#FFFFFF" />
+
         <ImageButton
             android:id="@+id/btnDownload"
             android:layout_width="48dp"
             android:layout_height="48dp"
             android:layout_weight="1"
             android:src="@android:drawable/ic_menu_save"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:tint="#FFFFFF" />
-
-        <ImageButton
-            android:id="@+id/btnRename"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_weight="1"
-            android:src="@android:drawable/ic_menu_edit"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:tint="#FFFFFF" />
 
