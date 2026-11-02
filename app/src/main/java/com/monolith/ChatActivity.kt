@@ -65,7 +65,9 @@ class ChatActivity : AppCompatActivity() {
             val data = result.data
             val newImageUri = data?.getStringExtra("new_image_uri")
             val msgId = data?.getStringExtra("message_id")
-            val imgIndex = data?.getIntExtra("image_index", -1)
+            
+            // الإصلاح هنا: استخدام ?: -1 لضمان أن المتغير ليس فارغاً
+            val imgIndex = data?.getIntExtra("image_index", -1) ?: -1
 
             if (newImageUri != null && msgId != null && imgIndex != -1) {
                 // البحث عن الرسالة التي تحتوي على الصورة المعدلة
@@ -413,7 +415,6 @@ class ChatActivity : AppCompatActivity() {
             
             val imageSizePx = dpToPx(180)
             
-            // استخدمنا withIndex لمعرفة رقم الصورة وتمريره لشاشة العرض
             for ((index, uriString) in msg.attachmentUris.withIndex()) {
                 val imageView = ImageView(this)
                 val params = LinearLayout.LayoutParams(imageSizePx, imageSizePx) 
@@ -431,7 +432,6 @@ class ChatActivity : AppCompatActivity() {
                     val imageUri = Uri.parse(uriString)
                     imageView.setImageURI(imageUri)
                     
-                    // فتح الشاشة مع تمرير بيانات الرسالة والصورة
                     imageView.setOnClickListener { 
                         val intent = Intent(this, ImageViewerActivity::class.java)
                         intent.putExtra("image_uri", uriString)
