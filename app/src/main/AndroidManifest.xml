@@ -1,17 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- 1. أذونات الشبكة (أضفنا ACCESS_NETWORK_STATE لحل مشكلة الانهيار) -->
+    <!-- 1. أذونات الشبكة -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     
-    <!-- 2. أذونات الوسائط (لحل مشكلة الصور في الأندرويد الحديث والقديم) -->
+    <!-- 2. أذونات الوسائط -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
     
     <!-- 3. أذونات أخرى -->
     <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- 4. *** إذن البصمة الجديد *** -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
 
     <application
         android:allowBackup="true"
@@ -20,17 +23,23 @@
         android:usesCleartextTraffic="false"
         android:theme="@style/Theme.Monolith">
 
-        <!-- الشاشة الرئيسية -->
+        <!-- *** شاشة القفل (نقطة البداية الجديدة) *** -->
         <activity
-            android:name=".MainActivity"
+            android:name=".LockScreenActivity"
             android:exported="true"
-            android:windowSoftInputMode="adjustResize"
             android:configChanges="orientation|screenSize|keyboardHidden">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- الشاشة الرئيسية (لم تعد نقطة البداية) -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
 
         <!-- شاشة الدردشة -->
         <activity android:name=".ChatActivity" />
@@ -41,7 +50,7 @@
         <!-- شاشة عرض الصور -->
         <activity android:name=".ImageViewerActivity" android:theme="@style/Theme.AppCompat.NoActionBar" />
 
-        <!-- الجسر الآمن لمشاركة الملفات (ممتاز جداً أنك أضفته) -->
+        <!-- الجسر الآمن لمشاركة الملفات -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="com.monolith.fileprovider"
@@ -57,5 +66,6 @@
             android:name="com.yalantis.ucrop.UCropActivity"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
+
     </application>
 </manifest>
