@@ -1,11 +1,9 @@
 package com.monolith
 
-import android.Manifest
 import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
-import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.PorterDuff
@@ -31,7 +29,8 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.AppCompatTextView
-import androidx.core.content.ContextCompat
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import com.bumptech.glide.Glide
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.card.MaterialCardView
@@ -56,20 +55,13 @@ class ChatActivity : AppCompatActivity() {
     private var themeColorHex = "#00FF00"
 
     private lateinit var sharedPreferences: SharedPreferences
+    private lateinit var securePrefs: SharedPreferences
     private val gson = Gson()
     private var messageList: MutableList<ChatMessage> = mutableListOf()
 
-    private val requestPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
-        if (isGranted) {
-            pickImagesLauncher.launch("image/*")
-        } else {
-            Toast.makeText(this, "نحتاج إذن الوصول للصور لإرفاقها.", Toast.LENGTH_SHORT).show()
-        }
-    }
-
     private val pickImagesLauncher = registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris: List<Uri> ->
         if (uris.isNotEmpty()) {
-            selectedImageUris.clear()
+            // الميزة الجديدة: إضافة تراكمية للصور (لا تمسح القديم)
             selectedImageUris.addAll(uris)
             updatePreviewUi()
         }
@@ -110,7 +102,13 @@ class ChatActivity : AppCompatActivity() {
         setContentView(R.layout.activity_chat)
 
         ApiClient.init(applicationContext)
-        ApiClient.setApiKey("YOUR_GROQ_API_KEY_HERE") // <--- ضع مفتاحك هنا
+
+        val masterKey = MasterKey.Builder(this).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build()
+        securePrefs = EncryptedSharedPreferences.create(
+            this, "SecureSettings", masterKey,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+        )
 
         etMessage = findViewById(R.id.etMessage)
         btnSend = findViewById(R.id.btnSend)
@@ -165,6 +163,13 @@ class ChatActivity : AppCompatActivity() {
         btnVisionToggle.setOnClickListener { Toast.makeText(this, "الرؤية الحاسوبية قريباً", Toast.LENGTH_SHORT).show() }
 
         fun sendMessage() {
+            // الحاجز الأول: التحقق من وجود مفتاح قبل الإرسال
+            val apiKey = securePrefs.getString("api_key", null)
+            if (apiKey.isNullOrEmpty()) {
+                showSetupDialog()
+                return
+            }
+
             try {
                 val message = etMessage.text.toString().trim()
                 if (message.isNotEmpty() || selectedImageUris.isNotEmpty()) {
@@ -194,12 +199,8 @@ class ChatActivity : AppCompatActivity() {
                     
                     chatScrollView.post { chatScrollView.fullScroll(android.widget.ScrollView.FOCUS_DOWN) }
 
-                    // بناء السياق
                     val apiMessages = mutableListOf<Message>()
-                    apiMessages.add(Message(
-                        role = "system", 
-                        content = "أنت Monolith، ذكاء اصطناعي سيادي متقدم. تجيب بدقة واحترافية."
-                    ))
+                    apiMessages.add(Message(role = "system", content = "أنت Monolith، ذكاء اصطناعي سيادي متقدم."))
 
                     val recentHistory = messageList.takeLast(15)
                     for (msg in recentHistory) {
@@ -210,12 +211,7 @@ class ChatActivity : AppCompatActivity() {
                         }
                     }
 
-                    val request = ChatRequest(
-                        model = "llama3-8b-8192", 
-                        messages = apiMessages,
-                        temperature = 0.7f,
-                        maxTokens = 2048
-                    )
+                    val request = ChatRequest(model = "llama3-8b-8192", messages = apiMessages, temperature = 0.7f, maxTokens = 2048)
 
                     ApiClient.service.sendMessage(
                         url = "v1/chat/completions", 
@@ -224,34 +220,27 @@ class ChatActivity : AppCompatActivity() {
                     ).enqueue(object : Callback<ChatResponse> {
                         override fun onResponse(call: Call<ChatResponse>, response: Response<ChatResponse>) {
                             runOnUiThread {
-                                val reply = if (response.isSuccessful) {
-                                    response.body()?.choices?.firstOrNull()?.message?.content ?: "لم يتم استلام رد."
+                                if (response.isSuccessful) {
+                                    val reply = response.body()?.choices?.firstOrNull()?.message?.content ?: "لم يتم استلام رد."
+                                    val updatedMsg = aiMsg.copy(content = reply)
+                                    messageList[aiMsgIndex] = updatedMsg
+                                    saveMessages()
+                                    
+                                    chatContainer.removeAllViews()
+                                    for (m in messageList) { addChatBubble(chatContainer, m) }
+                                    chatScrollView.post { chatScrollView.fullScroll(android.widget.ScrollView.FOCUS_DOWN) }
                                 } else {
-                                    "خطأ من الخادم: ${response.code()}"
+                                    handleApiError(aiMsgIndex, "خطأ: ${response.code()}")
                                 }
-                                
-                                val updatedMsg = aiMsg.copy(content = reply)
-                                messageList[aiMsgIndex] = updatedMsg
-                                saveMessages()
-                                
-                                chatContainer.removeAllViews()
-                                for (m in messageList) { addChatBubble(chatContainer, m) }
-                                chatScrollView.post { chatScrollView.fullScroll(android.widget.ScrollView.FOCUS_DOWN) }
                             }
                         }
 
                         override fun onFailure(call: Call<ChatResponse>, t: Throwable) {
                             runOnUiThread {
-                                val errorMsg = aiMsg.copy(content = "فشل الاتصال: ${t.message}")
-                                messageList[aiMsgIndex] = errorMsg
-                                saveMessages()
-                                
-                                chatContainer.removeAllViews()
-                                for (m in messageList) { addChatBubble(chatContainer, m) }
+                                handleApiError(aiMsgIndex, t.message ?: "خطأ غير معروف")
                             }
                         }
                     })
-
                 }
             } catch (e: Exception) {
                 Toast.makeText(this, "حدث خطأ: ${e.message}", Toast.LENGTH_LONG).show()
@@ -270,41 +259,30 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    private fun checkAndPickImage() {
-        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            Manifest.permission.READ_MEDIA_IMAGES
-        } else {
-            Manifest.permission.READ_EXTERNAL_STORAGE
-        }
-
-        if (ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED) {
-            pickImagesLauncher.launch("image/*")
-        } else {
-            requestPermissionLauncher.launch(permission)
-        }
+    private fun showSetupDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("المحرك غير متصل")
+            .setMessage("مرحباً بك في Monolith. يرجى تهيئة المحرك الذكي (إدخال مفتاح API) للبدء في الدردشة.")
+            .setPositiveButton("الذهاب للإعدادات") { _, _ ->
+                startActivity(Intent(this, SettingsActivity::class.java))
+            }
+            .setNegativeButton("إلغاء", null)
+            .show()
     }
 
-    // *** الميزة الجديدة: البحث عن صورة بالاسم عبر الإنترنت ***
-    private fun showSearchImageDialog() {
-        val builder = AlertDialog.Builder(this)
-        builder.setTitle("البحث عن صورة بالاسم")
-        
-        val input = EditText(this)
-        input.hint = "مثال: غروب الشمس، قطة، سيارة..."
-        builder.setView(input)
-
-        builder.setPositiveButton("بحث وجلب") { _, _ ->
-            val query = input.text.toString().trim()
-            if (query.isNotEmpty()) {
-                // استخدام خدمة Unsplash لجلب صورة عشوائية بناءً على الكلمة
-                val imageUrl = "https://source.unsplash.com/random/800x600/?${Uri.encode(query)}"
-                selectedImageUris.add(Uri.parse(imageUrl)) // إضافة رابط الصورة كـ Uri
-                updatePreviewUi()
-                Toast.makeText(this, "تم جلب الصورة بنجاح!", Toast.LENGTH_SHORT).show()
-            }
+    private fun handleApiError(aiMsgIndex: Int, errorMessage: String) {
+        if (aiMsgIndex < messageList.size) {
+            messageList.removeAt(aiMsgIndex)
+            saveMessages()
+            chatContainer.removeAllViews()
+            for (m in messageList) { addChatBubble(chatContainer, m) }
         }
-        builder.setNegativeButton("إلغاء") { dialog, _ -> dialog.cancel() }
-        builder.show()
+        
+        Toast.makeText(this, errorMessage, Toast.LENGTH_LONG).show()
+        
+        if (errorMessage.contains("مصادقة") || errorMessage.contains("مهيأ")) {
+            showSetupDialog()
+        }
     }
 
     private fun updatePreviewUi() {
@@ -334,8 +312,10 @@ class ChatActivity : AppCompatActivity() {
                 imageView.layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
                 imageView.scaleType = ImageView.ScaleType.CENTER_CROP
                 
-                // استخدام Glide لعرض الصورة (يدعم الروابط المحلية والسحابية)
-                Glide.with(this).load(uri).into(imageView)
+                Glide.with(this)
+                    .load(uri)
+                    .placeholder(android.R.drawable.ic_menu_gallery)
+                    .into(imageView)
                 
                 relativeLayout.addView(imageView)
 
@@ -397,26 +377,23 @@ class ChatActivity : AppCompatActivity() {
 
         bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionImage)?.setOnClickListener {
             bottomSheetDialog.dismiss()
-            checkAndPickImage() 
+            pickImagesLauncher.launch("image/*")
         }
         bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionDocument)?.setOnClickListener {
             bottomSheetDialog.dismiss()
-            Toast.makeText(this, "قريباً: اختيار ملفات PDF و TXT", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "قريباً", Toast.LENGTH_SHORT).show()
         }
         bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionAudio)?.setOnClickListener {
             bottomSheetDialog.dismiss()
-            Toast.makeText(this, "قريباً: اختيار ملفات صوتية", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "قريباً", Toast.LENGTH_SHORT).show()
         }
-        
-        // *** هنا ربطنا زر البحث بالدالة الجديدة ***
         bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionSearch)?.setOnClickListener {
             bottomSheetDialog.dismiss()
-            showSearchImageDialog() 
+            Toast.makeText(this, "قريباً", Toast.LENGTH_SHORT).show()
         }
-        
         bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionCamera)?.setOnClickListener {
             bottomSheetDialog.dismiss()
-            Toast.makeText(this, "قريباً: التقاط صورة من الكاميرا", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "قريباً", Toast.LENGTH_SHORT).show()
         }
 
         bottomSheetDialog.show()
@@ -534,8 +511,10 @@ class ChatActivity : AppCompatActivity() {
                 imageView.background = clip
                 imageView.clipToOutline = true
 
-                // استخدام Glide هنا أيضاً
-                Glide.with(this).load(uriString).into(imageView)
+                Glide.with(this)
+                    .load(uriString)
+                    .placeholder(android.R.drawable.ic_menu_gallery)
+                    .into(imageView)
 
                 imageView.setOnClickListener {
                     val intent = Intent(this, ImageViewerActivity::class.java)
