@@ -29,7 +29,9 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.AppCompatTextView
 import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.card.MaterialCardView
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 
@@ -39,8 +41,8 @@ class ChatActivity : AppCompatActivity() {
     
     private lateinit var etMessage: EditText
     private lateinit var btnSend: ImageButton
-    private lateinit var imagePreviewContainer: LinearLayout
-    private lateinit var ivPreviewImage: ImageView
+    private lateinit var imagePreviewContainer: android.widget.HorizontalScrollView
+    private lateinit var previewListContainer: LinearLayout
     private lateinit var chatContainer: LinearLayout
     private lateinit var chatScrollView: android.widget.ScrollView
     private lateinit var tvAppTitle: TextView
@@ -55,7 +57,7 @@ class ChatActivity : AppCompatActivity() {
         if (uris.isNotEmpty()) {
             selectedImageUris.clear()
             selectedImageUris.addAll(uris)
-            showImagePreview(uris)
+            updatePreviewUi()
         }
     }
 
@@ -76,8 +78,7 @@ class ChatActivity : AppCompatActivity() {
         chatScrollView = findViewById(R.id.chatScrollView)
         
         imagePreviewContainer = findViewById(R.id.imagePreviewContainer)
-        ivPreviewImage = findViewById(R.id.ivPreviewImage)
-        val btnRemoveImage = findViewById<TextView>(R.id.btnRemoveImage)
+        previewListContainer = findViewById(R.id.previewListContainer)
 
         sharedPreferences = getSharedPreferences("ChatHistory", MODE_PRIVATE)
         messageList = loadMessages()
@@ -104,14 +105,6 @@ class ChatActivity : AppCompatActivity() {
         btnAttach.setOnClickListener {
             hideKeyboard()
             showAttachBottomSheet()
-        }
-
-        btnRemoveImage.setOnClickListener {
-            selectedImageUris.clear()
-            imagePreviewContainer.visibility = LinearLayout.GONE
-            ivPreviewImage.setImageDrawable(null)
-            btnSend.isEnabled = etMessage.text.isNotEmpty()
-            btnSend.alpha = if (btnSend.isEnabled) 1.0f else 0.5f
         }
 
         btnBack.setOnClickListener { finish() }
@@ -142,8 +135,7 @@ class ChatActivity : AppCompatActivity() {
                     addChatBubble(chatContainer, userMsg)
 
                     selectedImageUris.clear()
-                    imagePreviewContainer.visibility = LinearLayout.GONE
-                    ivPreviewImage.setImageDrawable(null)
+                    updatePreviewUi() // تحديث المعاينة (ستختفي لأن القائمة فارغة)
                     etMessage.text.clear()
                     hideKeyboard()
                     
@@ -171,7 +163,62 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    // دالة مساعدة لتحويل البكسل إلى dp (لضمان حجم مناسب على كل الشاشات)
+    // دالة تحديث واجهة المعاينة (تعرض كل الصور المختارة)
+    private fun updatePreviewUi() {
+        previewListContainer.removeAllViews()
+        
+        if (selectedImageUris.isEmpty()) {
+            imagePreviewContainer.visibility = LinearLayout.GONE
+            btnSend.isEnabled = etMessage.text.isNotEmpty()
+            btnSend.alpha = if (btnSend.isEnabled) 1.0f else 0.5f
+        } else {
+            imagePreviewContainer.visibility = LinearLayout.VISIBLE
+            btnSend.isEnabled = true
+            btnSend.alpha = 1.0f
+
+            // إنشاء مربع صغير لكل صورة
+            for ((index, uri) in selectedImageUris.withIndex()) {
+                val cardView = MaterialCardView(this)
+                val cardParams = LinearLayout.LayoutParams(dpToPx(50), dpToPx(50))
+                cardParams.setMargins(0, 0, dpToPx(8), 0) // مسافة بين الصور
+                cardView.layoutParams = cardParams
+                cardView.radius = dpToPx(8).toFloat()
+                cardView.setCardElevation(0f)
+
+                val relativeLayout = android.widget.RelativeLayout(this)
+                relativeLayout.layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+
+                val imageView = ImageView(this)
+                imageView.layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+                imageView.scaleType = ImageView.ScaleType.CENTER_CROP
+                imageView.setImageURI(uri)
+                relativeLayout.addView(imageView)
+
+                val btnRemove = AppCompatTextView(this)
+                val btnParams = android.widget.RelativeLayout.LayoutParams(dpToPx(18), dpToPx(18))
+                btnParams.addRule(android.widget.RelativeLayout.ALIGN_PARENT_TOP)
+                btnParams.addRule(android.widget.RelativeLayout.ALIGN_PARENT_END)
+                btnParams.setMargins(0, dpToPx(2), dpToPx(2), 0)
+                btnRemove.layoutParams = btnParams
+                btnRemove.text = "✕"
+                btnRemove.setTextColor(Color.WHITE)
+                btnRemove.textSize = 10f
+                btnRemove.gravity = Gravity.CENTER
+                btnRemove.setBackgroundResource(R.drawable.bg_circle_dark)
+                
+                // عند الضغط على X، يتم حذف هذه الصورة فقط
+                btnRemove.setOnClickListener {
+                    selectedImageUris.removeAt(index)
+                    updatePreviewUi() // إعادة رسم المعاينة
+                }
+                
+                relativeLayout.addView(btnRemove)
+                cardView.addView(relativeLayout)
+                previewListContainer.addView(cardView)
+            }
+        }
+    }
+
     private fun dpToPx(dp: Int): Int {
         return (dp * resources.displayMetrics.density).toInt()
     }
@@ -183,7 +230,7 @@ class ChatActivity : AppCompatActivity() {
         imageView.layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         imageView.scaleType = ImageView.ScaleType.FIT_CENTER
         imageView.setImageURI(uri)
-        imageView.setOnClickListener { dialog.dismiss() } // إغلاق عند الضغط
+        imageView.setOnClickListener { dialog.dismiss() }
         dialog.setContentView(imageView)
         dialog.show()
     }
@@ -246,17 +293,6 @@ class ChatActivity : AppCompatActivity() {
         }
 
         bottomSheetDialog.show()
-    }
-
-    private fun showImagePreview(uris: List<Uri>) {
-        try {
-            imagePreviewContainer.visibility = LinearLayout.VISIBLE
-            ivPreviewImage.setImageURI(uris[0]) 
-            btnSend.isEnabled = true
-            btnSend.alpha = 1.0f
-        } catch (e: Exception) {
-            Toast.makeText(this, "تعذر تحميل الصورة", Toast.LENGTH_SHORT).show()
-        }
     }
 
     private fun hideKeyboard() {
@@ -358,7 +394,6 @@ class ChatActivity : AppCompatActivity() {
             val imageContainer = LinearLayout(this)
             imageContainer.orientation = LinearLayout.HORIZONTAL
             
-            // تحويل 150dp إلى بكسل لضمان حجم مثالي على الشاشة
             val imageSizePx = dpToPx(150)
             
             for (uriString in msg.attachmentUris) {
@@ -371,7 +406,6 @@ class ChatActivity : AppCompatActivity() {
                 try {
                     val imageUri = Uri.parse(uriString)
                     imageView.setImageURI(imageUri)
-                    // إضافة ميزة الضغط للتكبير
                     imageView.setOnClickListener { showFullScreenImage(imageUri) }
                 } catch (e: Exception) {}
                 
