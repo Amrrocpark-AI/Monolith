@@ -2,7 +2,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- أذونات الشبكة والوسائط الأساسية -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
@@ -10,11 +9,7 @@
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
-    
-    <!-- *** إذن الوصول الكامل للملفات (The Sovereign Permission) *** -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:ignore="ScopedStorage" />
-
-    <!-- أذونات أخرى -->
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
 
@@ -26,7 +21,6 @@
         android:usesCleartextTraffic="false"
         android:theme="@style/Theme.Monolith">
 
-        <!-- شاشة البداية -->
         <activity
             android:name=".SplashActivity"
             android:exported="true"
@@ -37,32 +31,25 @@
             </intent-filter>
         </activity>
 
-        <!-- الشاشة الرئيسية -->
         <activity
             android:name=".MainActivity"
             android:exported="false"
             android:windowSoftInputMode="adjustResize"
             android:configChanges="orientation|screenSize|keyboardHidden" />
 
-        <!-- شاشة القفل (مخفية) -->
         <activity
             android:name=".LockScreenActivity"
             android:exported="false"
             android:configChanges="orientation|screenSize|keyboardHidden" />
 
-        <!-- *** شاشة مدير الملفات الجديدة *** -->
         <activity android:name=".FileManagerActivity" />
-
-        <!-- شاشة الدردشة -->
         <activity android:name=".ChatActivity" />
-
-        <!-- شاشة الإعدادات -->
         <activity android:name=".SettingsActivity" />
-
-        <!-- شاشة عرض الصور -->
         <activity android:name=".ImageViewerActivity" android:theme="@style/Theme.AppCompat.NoActionBar" />
+        
+        <!-- *** تسجيل محرر الصور الجديد *** -->
+        <activity android:name=".ImageEditorActivity" android:theme="@style/Theme.Monolith" />
 
-        <!-- الجسر الآمن لمشاركة الملفات -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="com.monolith.fileprovider"
@@ -73,7 +60,6 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
-        <!-- شاشة مكتبة القص -->
         <activity
             android:name="com.yalantis.ucrop.UCropActivity"
             android:screenOrientation="portrait"
