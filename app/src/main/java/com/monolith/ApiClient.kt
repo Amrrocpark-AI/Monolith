@@ -3,6 +3,8 @@ package com.monolith
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import okhttp3.Cache
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
@@ -33,19 +35,34 @@ class ConnectivityInterceptor(private val context: Context) : Interceptor {
 }
 
 // ==========================================
-// 2. اعتراض المصادقة (حقن مفتاح API ديناميكياً)
+// 2. اعتراض المصادقة (حقن المفتاح المشفر تلقائياً)
 // ==========================================
-class AuthInterceptor(private val apiKeyProvider: () -> String?) : Interceptor {
+class AuthInterceptor(private val context: Context) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val originalRequest = chain.request()
-        // إذا كان الطلب لا يحتوي على مفتاح، قم بإضافته
+        
         if (originalRequest.header("Authorization") == null) {
-            val apiKey = apiKeyProvider()
+            // جلب المفتاح من التخزين المشفر
+            val masterKey = MasterKey.Builder(context)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
+            val securePrefs = EncryptedSharedPreferences.create(
+                context,
+                "SecureSettings",
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+            
+            val apiKey = securePrefs.getString("api_key", null)
+            
             if (!apiKey.isNullOrEmpty()) {
                 val newRequest = originalRequest.newBuilder()
                     .header("Authorization", "Bearer $apiKey")
                     .build()
                 return chain.proceed(newRequest)
+            } else {
+                throw IOException("المحرك غير مهيأ. يرجى إدخال مفتاح API من الإعدادات.")
             }
         }
         return chain.proceed(originalRequest)
@@ -53,7 +70,7 @@ class AuthInterceptor(private val apiKeyProvider: () -> String?) : Interceptor {
 }
 
 // ==========================================
-// 3. اعتراض تجاوز الحد (إعادة المحاولة التلقائية)
+// 3. اعتراض تجاوز الحد (إعادة المحاولة التلقائية) - ميزتك العبقرية
 // ==========================================
 class RetryInterceptor : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
@@ -63,9 +80,8 @@ class RetryInterceptor : Interceptor {
         
         while (!response.isSuccessful && response.code in listOf(429, 503) && retryCount < maxRetries) {
             retryCount++
-            // الانتظار التصاعدي: 1 ثانية، ثم 2، ثم 4
             Thread.sleep((1000L * Math.pow(2.0, retryCount.toDouble())).toLong())
-            response.close() // إغلاق الاستجابة القديمة
+            response.close()
             response = chain.proceed(chain.request())
         }
         return response
@@ -73,12 +89,17 @@ class RetryInterceptor : Interceptor {
 }
 
 // ==========================================
-// 4. اعتراض إخفاء المفاتيح في السجلات (أمان)
+// 4. اعتراض الأخطاء (منع ظهور 401 في الواجهة)
 // ==========================================
-class LogSanitizerInterceptor : Interceptor {
+class ErrorInterceptor : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
-        // هذا مجرد مثال بسيط، في الواقع يتم تطبيقه داخل الـ Logging Interceptor
-        return chain.proceed(chain.request())
+        val response = chain.proceed(chain.request())
+        when (response.code) {
+            401 -> throw IOException("فشل المصادقة: مفتاح API غير صحيح أو منتهي الصلاحية.")
+            429 -> throw IOException("تم تجاوز الحد المسموح به. يرجى الانتظار قليلاً.")
+            500, 502, 503, 504 -> throw IOException("الخادم يواجه مشكلة حالياً. يرجى المحاولة لاحقاً.")
+        }
+        return response
     }
 }
 
@@ -89,7 +110,6 @@ object ApiClient {
 
     private var context: Context? = null
     private var customTimeoutSeconds: Long = 120L
-    private var dynamicApiKey: String? = null // تخزين المفتاح في الذاكرة
 
     fun init(appContext: Context) {
         this.context = appContext.applicationContext
@@ -99,28 +119,18 @@ object ApiClient {
         customTimeoutSeconds = seconds
     }
 
-    // دالة لتعيين مفتاح API ديناميكياً
-    fun setApiKey(key: String?) {
-        dynamicApiKey = key
-    }
-
-    // إعداد السجل الذكي مع إخفاء المفاتيح
     private val loggingInterceptor = HttpLoggingInterceptor { message ->
-        // إخفاء مفتاح API إذا ظهر في السجل
         val sanitizedMessage = message.replace(Regex("Bearer\\s+[A-Za-z0-9\\-._~+/]+=*"), "Bearer [HIDDEN_API_KEY]")
         android.util.Log.d("MonolithNetwork", sanitizedMessage)
     }.apply {
         level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY else HttpLoggingInterceptor.Level.NONE
     }
 
-    // قياس زمن الاستجابة (Latency Telemetry)
     private val metricsInterceptor = Interceptor { chain ->
         val startTime = System.nanoTime()
         val response = chain.proceed(chain.request())
         val endTime = System.nanoTime()
         val durationMs = (endTime - startTime) / 1_000_000
-        
-        // هنا يمكن حفظ الزمن في متغير عام لعرضه في الواجهة لاحقاً
         android.util.Log.d("MonolithNetwork", "زمن الاستجابة: ${durationMs}ms")
         response
     }
@@ -128,9 +138,9 @@ object ApiClient {
     private fun buildOkHttpClient(): OkHttpClient {
         val builder = OkHttpClient.Builder()
             .addInterceptor(loggingInterceptor)
-            .addInterceptor(AuthInterceptor { dynamicApiKey })
-            .addInterceptor(RetryInterceptor())
-            .addInterceptor(metricsInterceptor)
+            .addInterceptor(ErrorInterceptor()) // يعترض 401 قبل أن يصل للواجهة
+            .addInterceptor(RetryInterceptor()) // يعيد المحاولة
+            .addInterceptor(metricsInterceptor) // يقيس الزمن
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(customTimeoutSeconds, TimeUnit.SECONDS)
             .writeTimeout(customTimeoutSeconds, TimeUnit.SECONDS)
@@ -138,6 +148,8 @@ object ApiClient {
 
         context?.let {
             builder.addInterceptor(ConnectivityInterceptor(it))
+            builder.addInterceptor(AuthInterceptor(it)) // هنا يتم حقن المفتاح المشفر
+            
             val cacheSize = 10L * 1024 * 1024
             val cacheDir = File(it.cacheDir, "http_cache")
             builder.cache(Cache(cacheDir, cacheSize))
@@ -147,7 +159,7 @@ object ApiClient {
 
     private fun buildRetrofit(): Retrofit {
         return Retrofit.Builder()
-            .baseUrl("https://api.openai.com/") // رابط أساسي وهمي
+            .baseUrl("https://api.groq.com/openai/") 
             .client(buildOkHttpClient())
             .addConverterFactory(GsonConverterFactory.create())
             .build()
