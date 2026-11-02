@@ -5,6 +5,7 @@ import android.content.ContentValues
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Color
 import android.graphics.Matrix
 import android.media.ExifInterface
 import android.net.Uri
@@ -18,6 +19,7 @@ import android.text.InputType
 import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
+import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.ImageView
@@ -33,6 +35,9 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
 import java.io.OutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class ImageViewerActivity : AppCompatActivity() {
 
@@ -62,6 +67,7 @@ class ImageViewerActivity : AppCompatActivity() {
         val btnShare = findViewById<ImageButton>(R.id.btnShare)
         val btnCrop = findViewById<ImageButton>(R.id.btnCrop)
         val btnRotate = findViewById<ImageButton>(R.id.btnRotate)
+        val btnRename = findViewById<ImageButton>(R.id.btnRename)
         val btnEditExif = findViewById<ImageButton>(R.id.btnEditExif)
         val btnDownload = findViewById<ImageButton>(R.id.btnDownload)
         val btnInfo = findViewById<ImageButton>(R.id.btnInfo)
@@ -82,58 +88,21 @@ class ImageViewerActivity : AppCompatActivity() {
         btnPrivacyShield.setOnClickListener {
             isPrivacyShieldEnabled = !isPrivacyShieldEnabled
             if (isPrivacyShieldEnabled) {
-                btnPrivacyShield.setColorFilter(android.graphics.Color.parseColor("#00FF00"))
+                btnPrivacyShield.setColorFilter(Color.parseColor("#00FF00"))
                 Toast.makeText(this, "درع الخصوصية: مفعل", Toast.LENGTH_SHORT).show()
             } else {
-                btnPrivacyShield.setColorFilter(android.graphics.Color.WHITE)
+                btnPrivacyShield.setColorFilter(Color.WHITE)
                 Toast.makeText(this, "درع الخصوصية: معطل", Toast.LENGTH_SHORT).show()
             }
         }
 
-        btnAnalyze.setOnClickListener {
-            Toast.makeText(this, "تحليل AI قريباً", Toast.LENGTH_SHORT).show()
-        }
-
-        btnShare.setOnClickListener {
-            if (imageUri != null) {
-                val uriToShare = if (isPrivacyShieldEnabled) getSanitizedUri(imageUri!!) else imageUri!!
-                val intent = Intent(Intent.ACTION_SEND).apply {
-                    type = "image/*"
-                    putExtra(Intent.EXTRA_STREAM, uriToShare)
-                }
-                startActivity(Intent.createChooser(intent, "مشاركة الصورة"))
-            }
-        }
-
-        btnCrop.setOnClickListener {
-            if (imageUri != null) {
-                try {
-                    val file = File(cacheDir, "cropped_${System.currentTimeMillis()}.jpg")
-                    val destinationUri = FileProvider.getUriForFile(this, "com.monolith.fileprovider", file)
-                    
-                    val options = UCrop.Options()
-                    options.setCompressionFormat(Bitmap.CompressFormat.JPEG)
-                    options.setCompressionQuality(100)
-                    options.setHideBottomControls(false)
-                    options.setFreeStyleCropEnabled(true)
-                    options.setShowCropGrid(true)
-                    options.setToolbarTitle("محرر مونوليث")
-                    options.setAllowedGestures(UCropActivity.SCALE, UCropActivity.ROTATE, UCropActivity.ALL)
-
-                    val uCrop = UCrop.of(imageUri!!, destinationUri)
-                        .withOptions(options)
-                        .withMaxResultSize(2048, 2048)
-
-                    uCrop.start(this)
-                } catch (e: Exception) {
-                    Toast.makeText(this, "خطأ في الإعداد: ${e.message}", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
-
+        btnAnalyze.setOnClickListener { Toast.makeText(this, "تحليل AI قريباً", Toast.LENGTH_SHORT).show() }
+        btnShare.setOnClickListener { shareImage() }
+        btnCrop.setOnClickListener { cropImage() }
         btnRotate.setOnClickListener { rotateImage() }
         btnDownload.setOnClickListener { saveImageToGallery() }
         btnInfo.setOnClickListener { showImageInfoWithExif() }
+        btnRename.setOnClickListener { showRenameDialog() }
         btnEditExif.setOnClickListener { showEditExifDialog() }
     }
 
@@ -147,27 +116,40 @@ class ImageViewerActivity : AppCompatActivity() {
         layout.orientation = LinearLayout.VERTICAL
         layout.setPadding(32, 16, 32, 16)
 
-        val etModel = EditText(this).apply {
-            hint = "اسم الكاميرا (مثال: Canon EOS 5D)"
-            inputType = InputType.TYPE_CLASS_TEXT
-        }
-        val etDate = EditText(this).apply {
-            hint = "التاريخ (YYYY:MM:DD HH:MM:SS)"
-            inputType = InputType.TYPE_CLASS_TEXT
-        }
-        val etLat = EditText(this).apply {
+        val etModel = EditText(this).apply { hint = "اسم الكاميرا (مثال: Canon EOS 5D)" }
+        val etDate = EditText(this).apply { hint = "التاريخ (YYYY:MM:DD HH:MM:SS)" }
+        val etLat = EditText(this).apply { 
             hint = "خط العرض (مثال: 34.0522)"
             inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL or InputType.TYPE_NUMBER_FLAG_SIGNED
         }
-        val etLong = EditText(this).apply {
+        val etLong = EditText(this).apply { 
             hint = "خط الطول (مثال: -118.2437)"
             inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL or InputType.TYPE_NUMBER_FLAG_SIGNED
+        }
+
+        // زر المساعد الذكي
+        val btnSuggest = Button(this).apply {
+            text = "🤖 اقتراح ذكي (تزييف واقعي)"
+            setBackgroundColor(Color.parseColor("#00FF00"))
+            setTextColor(Color.BLACK)
+            val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            params.setMargins(0, 24, 0, 24)
+            layoutParams = params
+        }
+
+        btnSuggest.setOnClickListener {
+            etModel.setText("iPhone 15 Pro Max")
+            etDate.setText("2024:05:12 18:30:00")
+            etLat.setText("25.2048") // دبي
+            etLong.setText("55.2708") // دبي
+            Toast.makeText(this, "تم توليد بيانات وهمية مطابقة للواقع!", Toast.LENGTH_SHORT).show()
         }
 
         layout.addView(etModel)
         layout.addView(etDate)
         layout.addView(etLat)
         layout.addView(etLong)
+        layout.addView(btnSuggest)
         builder.setView(layout)
 
         builder.setPositiveButton("حقن البيانات") { _, _ ->
@@ -175,7 +157,6 @@ class ImageViewerActivity : AppCompatActivity() {
             val date = etDate.text.toString()
             val latStr = etLat.text.toString()
             val longStr = etLong.text.toString()
-            
             applyExifData(model, date, latStr, longStr)
         }
         builder.setNegativeButton("إلغاء") { dialog, _ -> dialog.cancel() }
@@ -183,10 +164,8 @@ class ImageViewerActivity : AppCompatActivity() {
     }
 
     private fun applyExifData(model: String, date: String, latStr: String, longStr: String) {
-        // إظهار شريط التحميل وتعطيل الأزرار مؤقتاً
         progressBar.visibility = android.view.View.VISIBLE
         
-        // تشغيل العملية في الخلفية لتجنب تجميد الواجهة
         Thread {
             try {
                 val sourceUri = imageUri!!
@@ -198,34 +177,61 @@ class ImageViewerActivity : AppCompatActivity() {
                 inputStream?.close()
 
                 val exif = ExifInterface(file.absolutePath)
+                var wasCorrected = false
                 
                 if (model.isNotEmpty()) {
                     exif.setAttribute(ExifInterface.TAG_MODEL, model)
                     exif.setAttribute(ExifInterface.TAG_MAKE, "Monolith Studio")
                 }
+                
+                // التصحيح الذكي للتاريخ
                 if (date.isNotEmpty()) {
-                    exif.setAttribute(ExifInterface.TAG_DATETIME, date)
+                    val validDate = if (date.length == 19 && date.contains(":")) {
+                        date
+                    } else if (date.matches(Regex("^\\d{4}$"))) {
+                        wasCorrected = true
+                        "$date:01:01 12:00:00" // سنة فقط
+                    } else {
+                        wasCorrected = true
+                        SimpleDateFormat("yyyy:MM:dd HH:mm:ss", Locale.US).format(Date()) // تاريخ عشوائي
+                    }
+                    exif.setAttribute(ExifInterface.TAG_DATETIME, validDate)
                 }
+                
+                // التصحيح الذكي للإحداثيات
                 if (latStr.isNotEmpty() && longStr.isNotEmpty()) {
-                    try {
-                        val lat = latStr.toDouble()
-                        val long = longStr.toDouble()
+                    val lat = latStr.toDoubleOrNull()
+                    val long = longStr.toDoubleOrNull()
+                    
+                    if (lat != null && lat in -90.0..90.0 && long != null && long in -180.0..180.0) {
                         exif.setAttribute(ExifInterface.TAG_GPS_LATITUDE, convertToDegreeMinuteSec(lat))
                         exif.setAttribute(ExifInterface.TAG_GPS_LATITUDE_REF, if (lat >= 0) "N" else "S")
                         exif.setAttribute(ExifInterface.TAG_GPS_LONGITUDE, convertToDegreeMinuteSec(long))
                         exif.setAttribute(ExifInterface.TAG_GPS_LONGITUDE_REF, if (long >= 0) "E" else "W")
-                    } catch (e: Exception) {}
+                    } else if (lat != null && long != null) {
+                        wasCorrected = true
+                        // تصحيح تلقائي: قسمة الرقم على 10000 حتى يصبح ضمن النطاق
+                        val fixedLat = (lat % 90.0)
+                        val fixedLong = (long % 180.0)
+                        exif.setAttribute(ExifInterface.TAG_GPS_LATITUDE, convertToDegreeMinuteSec(fixedLat))
+                        exif.setAttribute(ExifInterface.TAG_GPS_LATITUDE_REF, "N")
+                        exif.setAttribute(ExifInterface.TAG_GPS_LONGITUDE, convertToDegreeMinuteSec(fixedLong))
+                        exif.setAttribute(ExifInterface.TAG_GPS_LONGITUDE_REF, "E")
+                    }
                 }
                 
                 exif.saveAttributes()
 
-                // العودة للواجهة الرئيسية لتحديث الصورة وإخفاء التحميل
                 Handler(Looper.getMainLooper()).post {
                     imageUri = FileProvider.getUriForFile(this, "com.monolith.fileprovider", file)
                     fullImageView.setImageURI(imageUri)
                     progressBar.visibility = android.view.View.GONE
-                    Toast.makeText(this, "تم تعديل البيانات وحفظها بنجاح!", Toast.LENGTH_LONG).show()
-                    // لاحظ: لا نستدعي closeAndReturn() هنا لكي نبقى في الشاشة!
+                    
+                    if (wasCorrected) {
+                        Toast.makeText(this, "المساعد الذكي: تم تصحيح البيانات المدخلة تلقائياً وحقنها!", Toast.LENGTH_LONG).show()
+                    } else {
+                        Toast.makeText(this, "تم تعديل البيانات وحفظها بنجاح!", Toast.LENGTH_LONG).show()
+                    }
                 }
                 
             } catch (e: Exception) {
@@ -237,12 +243,81 @@ class ImageViewerActivity : AppCompatActivity() {
         }.start()
     }
 
+    private fun showRenameDialog() {
+        if (imageUri == null) return
+        val builder = AlertDialog.Builder(this)
+        builder.setTitle("إعادة تسمية الصورة")
+        val input = EditText(this)
+        input.setText(imageUri!!.lastPathSegment)
+        builder.setView(input)
+        
+        builder.setPositiveButton("حفظ") { _, _ ->
+            val newName = input.text.toString().trim()
+            if (newName.isNotEmpty()) {
+                try {
+                    val newFile = File(cacheDir, if(newName.endsWith(".jpg")) newName else "$newName.jpg")
+                    val inputStream = contentResolver.openInputStream(imageUri!!)
+                    val outputStream = FileOutputStream(newFile)
+                    inputStream?.copyTo(outputStream)
+                    outputStream.close()
+                    inputStream?.close()
+                    
+                    imageUri = FileProvider.getUriForFile(this, "com.monolith.fileprovider", newFile)
+                    fullImageView.setImageURI(imageUri)
+                    
+                    Toast.makeText(this, "تمت إعادة التسمية بنجاح!", Toast.LENGTH_SHORT).show()
+                } catch (e: Exception) {
+                    Toast.makeText(this, "فشل التسمية: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        builder.setNegativeButton("إلغاء") { dialog, _ -> dialog.cancel() }
+        builder.show()
+    }
+
     private fun convertToDegreeMinuteSec(coord: Double): String {
         val absCoord = Math.abs(coord)
         val degree = absCoord.toInt()
         val minute = ((absCoord - degree) * 60).toInt()
         val second = ((absCoord - degree - (minute / 60.0)) * 3600)
         return "$degree/1,$minute/1,${second.toInt()}/1"
+    }
+
+    private fun shareImage() {
+        if (imageUri != null) {
+            val uriToShare = if (isPrivacyShieldEnabled) getSanitizedUri(imageUri!!) else imageUri!!
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "image/*"
+                putExtra(Intent.EXTRA_STREAM, uriToShare)
+            }
+            startActivity(Intent.createChooser(intent, "مشاركة الصورة"))
+        }
+    }
+
+    private fun cropImage() {
+        if (imageUri != null) {
+            try {
+                val file = File(cacheDir, "cropped_${System.currentTimeMillis()}.jpg")
+                val destinationUri = FileProvider.getUriForFile(this, "com.monolith.fileprovider", file)
+                
+                val options = UCrop.Options()
+                options.setCompressionFormat(Bitmap.CompressFormat.JPEG)
+                options.setCompressionQuality(100)
+                options.setHideBottomControls(false)
+                options.setFreeStyleCropEnabled(true)
+                options.setShowCropGrid(true)
+                options.setToolbarTitle("محرر مونوليث")
+                options.setAllowedGestures(UCropActivity.SCALE, UCropActivity.ROTATE, UCropActivity.ALL)
+
+                val uCrop = UCrop.of(imageUri!!, destinationUri)
+                    .withOptions(options)
+                    .withMaxResultSize(2048, 2048)
+
+                uCrop.start(this)
+            } catch (e: Exception) {
+                Toast.makeText(this, "خطأ في الإعداد: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     private fun getSanitizedUri(sourceUri: Uri): Uri {
