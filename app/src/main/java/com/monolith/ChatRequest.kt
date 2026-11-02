@@ -2,41 +2,85 @@ package com.monolith
 
 import com.google.gson.annotations.SerializedName
 
-// هذا الملف يمثل "الطلب" المتقدم الذي نرسله للذكاء الاصطناعي
+// ==========================================
+// 1. نموذج الطلب الشامل (The Ultimate Request)
+// ==========================================
 data class ChatRequest(
-    // اسم النموذج (مثل: llama3-8b-8192)
     @SerializedName("model") val model: String,
-    
-    // قائمة الرسائل (تاريخ المحادثة)
     @SerializedName("messages") val messages: List<Message>,
     
-    // درجة الإبداعية (0.0 دقيق جداً، 1.0 مبدع جداً)
+    // التحكم في الإبداعية
     @SerializedName("temperature") val temperature: Float = 0.7f,
-    
-    // التحكم الدقيق في اختيار الكلمات (يفضل تركه 1.0 مع النماذج الصغيرة)
     @SerializedName("top_p") val topP: Float = 1.0f,
     
-    // الحد الأقصى لطول الرد (بالرمز/التوكنز)
+    // طول الرد
     @SerializedName("max_tokens") val maxTokens: Int = 2048,
     
-    // عقوبة التكرار: تمنع النموذج من تكرار نفس الكلمة أو الجملة
+    // منع التكرار
     @SerializedName("frequency_penalty") val frequencyPenalty: Float = 0.5f,
-    
-    // عقوبة التواجد: تشجع النموذج على طرح مواضيع جديدة
     @SerializedName("presence_penalty") val presencePenalty: Float = 0.5f,
     
-    // إيقاف فوري عند الوصول لكلمة معينة
+    // إيقاف فوري عند كلمات معينة
     @SerializedName("stop") val stop: List<String>? = null,
     
-    // دعم البث المباشر (مستقبلاً)
-    @SerializedName("stream") val stream: Boolean = false
+    // البث المباشر
+    @SerializedName("stream") val stream: Boolean = false,
+    
+    // (جديد) إجبار النموذج على الرد بصيغة JSON
+    @SerializedName("response_format") val responseFormat: ResponseFormat? = null,
+    
+    // (جديد) الأدوات التي يمكن للنموذج استخدامها (Function Calling)
+    @SerializedName("tools") val tools: List<Tool>? = null,
+    
+    // (جديد) استراتيجية التعامل مع المحادثات الطويلة
+    @SerializedName("context_strategy") val contextStrategy: String? = null // "truncate" أو "summarize"
 )
 
-// نموذج الرسالة الواحدة
+// ==========================================
+// 2. نموذج الرسالة (The Ultimate Message)
+// ==========================================
 data class Message(
-    // الدور: "system" للتعليمات، "user" للمستخدم، "assistant" للذكاء الاصطناعي
     @SerializedName("role") val role: String,
     
-    // محتوى الرسالة (النص)
-    @SerializedName("content") val content: String
+    // (جديد) المحتوى أصبح (Any) ليقبل نصاً عادياً أو قائمة من النصوص والصور
+    @SerializedName("content") val content: Any 
+)
+
+// ==========================================
+// 3. نموذج الصور والنصوص (Multimodal Support)
+// ==========================================
+data class ContentPart(
+    @SerializedName("type") val type: String, // "text" أو "image_url"
+    @SerializedName("text") val text: String? = null,
+    @SerializedName("image_url") val imageUrl: ImageUrl? = null
+)
+
+data class ImageUrl(
+    @SerializedName("url") val url: String // رابط الصورة أو Base64
+)
+
+// ==========================================
+// 4. إجبار النموذج على الرد بـ JSON
+// ==========================================
+data class ResponseFormat(
+    @SerializedName("type") val type: String = "json_object"
+)
+
+// ==========================================
+// 5. نظام الأدوات (Function Calling)
+// ==========================================
+data class Tool(
+    @SerializedName("type") val type: String = "function",
+    @SerializedName("function") val function: FunctionDefinition
+)
+
+data class FunctionDefinition(
+    @SerializedName("name") val name: String,
+    @SerializedName("description") val description: String,
+    @SerializedName("parameters") val parameters: ToolParameters
+)
+
+data class ToolParameters(
+    @SerializedName("type") val type: String = "object",
+    @SerializedName("properties") val properties: Map<String, Any>
 )
