@@ -271,9 +271,6 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    // ==========================================
-    // الدالة المحدثة للقائمة السفلية (تطابق التصميم الجديد)
-    // ==========================================
     private fun showAttachBottomSheet() {
         val bottomSheetDialog = BottomSheetDialog(this)
         val bottomSheetView = layoutInflater.inflate(R.layout.bottom_sheet_attach, null)
