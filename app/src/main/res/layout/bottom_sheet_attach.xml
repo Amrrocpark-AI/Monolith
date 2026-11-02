@@ -7,7 +7,6 @@
     android:background="#1A1A1A"
     android:padding="24dp">
 
-    <!-- العنوان -->
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -25,7 +24,6 @@
         android:orientation="horizontal"
         android:weightSum="3">
 
-        <!-- 1. صورة -->
         <LinearLayout
             android:id="@+id/btnOptionImage"
             android:layout_width="0dp"
@@ -34,8 +32,7 @@
             android:orientation="vertical"
             android:gravity="center"
             android:clickable="true"
-            android:focusable="true"
-            android:background="?attr/selectableItemBackgroundBorderless">
+            android:focusable="true">
             
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="60dp"
@@ -63,7 +60,6 @@
                 android:layout_marginTop="8dp" />
         </LinearLayout>
 
-        <!-- 2. مستند -->
         <LinearLayout
             android:id="@+id/btnOptionDocument"
             android:layout_width="0dp"
@@ -72,8 +68,7 @@
             android:orientation="vertical"
             android:gravity="center"
             android:clickable="true"
-            android:focusable="true"
-            android:background="?attr/selectableItemBackgroundBorderless">
+            android:focusable="true">
             
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="60dp"
@@ -101,7 +96,6 @@
                 android:layout_marginTop="8dp" />
         </LinearLayout>
 
-        <!-- 3. صوت -->
         <LinearLayout
             android:id="@+id/btnOptionAudio"
             android:layout_width="0dp"
@@ -110,8 +104,7 @@
             android:orientation="vertical"
             android:gravity="center"
             android:clickable="true"
-            android:focusable="true"
-            android:background="?attr/selectableItemBackgroundBorderless">
+            android:focusable="true">
             
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="60dp"
@@ -148,7 +141,6 @@
         android:weightSum="3"
         android:layout_marginTop="24dp">
 
-        <!-- 4. بحث -->
         <LinearLayout
             android:id="@+id/btnOptionSearch"
             android:layout_width="0dp"
@@ -157,8 +149,7 @@
             android:orientation="vertical"
             android:gravity="center"
             android:clickable="true"
-            android:focusable="true"
-            android:background="?attr/selectableItemBackgroundBorderless">
+            android:focusable="true">
             
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="60dp"
@@ -186,7 +177,6 @@
                 android:layout_marginTop="8dp" />
         </LinearLayout>
 
-        <!-- 5. كاميرا -->
         <LinearLayout
             android:id="@+id/btnOptionCamera"
             android:layout_width="0dp"
@@ -195,8 +185,7 @@
             android:orientation="vertical"
             android:gravity="center"
             android:clickable="true"
-            android:focusable="true"
-            android:background="?attr/selectableItemBackgroundBorderless">
+            android:focusable="true">
             
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="60dp"
@@ -224,7 +213,6 @@
                 android:layout_marginTop="8dp" />
         </LinearLayout>
 
-        <!-- 6. ذكاء AI -->
         <LinearLayout
             android:id="@+id/btnOptionAI"
             android:layout_width="0dp"
@@ -233,8 +221,7 @@
             android:orientation="vertical"
             android:gravity="center"
             android:clickable="true"
-            android:focusable="true"
-            android:background="?attr/selectableItemBackgroundBorderless">
+            android:focusable="true">
             
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="60dp"
