@@ -31,8 +31,9 @@ class ImageViewerActivity : AppCompatActivity() {
 
     private var imageUri: Uri? = null
     private lateinit var fullImageView: ImageView
+    private var messageId: String? = null
+    private var imageIndex: Int = -1
     
-    // متغيرات التكبير والتحريك
     private lateinit var scaleGestureDetector: ScaleGestureDetector
     private lateinit var gestureDetector: GestureDetector
     private var scaleFactor = 1.0f
@@ -46,7 +47,6 @@ class ImageViewerActivity : AppCompatActivity() {
         val btnClose = findViewById<ImageButton>(R.id.btnCloseViewer)
         val btnAnalyze = findViewById<TextView>(R.id.btnAnalyze)
         val btnShare = findViewById<ImageButton>(R.id.btnShare)
-        
         val btnCrop = findViewById<ImageButton>(R.id.btnCrop)
         val btnRotate = findViewById<ImageButton>(R.id.btnRotate)
         val btnDownload = findViewById<ImageButton>(R.id.btnDownload)
@@ -54,6 +54,9 @@ class ImageViewerActivity : AppCompatActivity() {
         val btnInfo = findViewById<ImageButton>(R.id.btnInfo)
 
         val uriString = intent.getStringExtra("image_uri")
+        messageId = intent.getStringExtra("message_id")
+        imageIndex = intent.getIntExtra("image_index", -1)
+
         if (uriString != null) {
             imageUri = Uri.parse(uriString)
             fullImageView.setImageURI(imageUri)
@@ -62,16 +65,13 @@ class ImageViewerActivity : AppCompatActivity() {
         setupZoomAndPan()
 
         btnClose.setOnClickListener { closeAndReturn() }
-
-        btnAnalyze.setOnClickListener {
-            Toast.makeText(this, "جاري إرسال الصورة لنموذج الرؤية الحاسوبية (قريباً)...", Toast.LENGTH_LONG).show()
-        }
-
+        btnAnalyze.setOnClickListener { Toast.makeText(this, "تحليل AI قريباً", Toast.LENGTH_SHORT).show() }
         btnShare.setOnClickListener {
             if (imageUri != null) {
-                val intent = Intent(Intent.ACTION_SEND)
-                intent.type = "image/*"
-                intent.putExtra(Intent.EXTRA_STREAM, imageUri)
+                val intent = Intent(Intent.ACTION_SEND).apply {
+                    type = "image/*"
+                    putExtra(Intent.EXTRA_STREAM, imageUri)
+                }
                 startActivity(Intent.createChooser(intent, "مشاركة الصورة"))
             }
         }
@@ -81,39 +81,20 @@ class ImageViewerActivity : AppCompatActivity() {
                 try {
                     val file = File(cacheDir, "cropped_${System.currentTimeMillis()}.jpg")
                     val destinationUri = FileProvider.getUriForFile(this, "com.monolith.fileprovider", file)
-                    // إزالة نسبة القص الثابتة للسماح بقص حر
                     val uCrop = UCrop.of(imageUri!!, destinationUri).withMaxResultSize(1080, 1080)
                     uCrop.start(this)
                 } catch (e: Exception) {
-                    Toast.makeText(this, "خطأ في الإعداد: ${e.message}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "خطأ: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
             }
         }
 
-        btnRotate.setOnClickListener {
-            rotateImage()
-        }
-
-        btnDownload.setOnClickListener {
-            if (imageUri != null) {
-                try {
-                    saveImageToGallery(imageUri!!)
-                } catch (e: Exception) {
-                    Toast.makeText(this, "فشل التحميل: ${e.message}", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
-
-        btnRename.setOnClickListener {
-            showRenameDialog()
-        }
-
-        btnInfo.setOnClickListener {
-            showImageInfo()
-        }
+        btnRotate.setOnClickListener { rotateImage() }
+        btnDownload.setOnClickListener { saveImageToGallery() }
+        btnRename.setOnClickListener { showRenameDialog() }
+        btnInfo.setOnClickListener { showImageInfo() }
     }
 
-    // دالة التكبير والتحريك
     private fun setupZoomAndPan() {
         scaleGestureDetector = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
             override fun onScale(detector: ScaleGestureDetector): Boolean {
@@ -124,20 +105,14 @@ class ImageViewerActivity : AppCompatActivity() {
                 return true
             }
         })
-        
         gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
             override fun onDoubleTap(e: MotionEvent): Boolean {
-                if (scaleFactor > 1.0f) {
-                    scaleFactor = 1.0f
-                } else {
-                    scaleFactor = 2.0f
-                }
+                scaleFactor = if (scaleFactor > 1.0f) 1.0f else 2.0f
                 matrix.setScale(scaleFactor, scaleFactor, e.x, e.y)
                 fullImageView.imageMatrix = matrix
                 return true
             }
         })
-
         fullImageView.setOnTouchListener { _, event ->
             scaleGestureDetector.onTouchEvent(event)
             gestureDetector.onTouchEvent(event)
@@ -145,7 +120,6 @@ class ImageViewerActivity : AppCompatActivity() {
         }
     }
 
-    // دالة تدوير الصورة
     private fun rotateImage() {
         if (imageUri == null) return
         try {
@@ -162,13 +136,12 @@ class ImageViewerActivity : AppCompatActivity() {
             
             imageUri = FileProvider.getUriForFile(this, "com.monolith.fileprovider", file)
             fullImageView.setImageURI(imageUri)
-            closeAndReturn() // تحديث الدردشة فوراً
+            closeAndReturn()
         } catch (e: Exception) {
             Toast.makeText(this, "فشل التدوير: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 
-    // دالة نافذة إعادة التسمية
     private fun showRenameDialog() {
         if (imageUri == null) return
         val builder = AlertDialog.Builder(this)
@@ -176,19 +149,13 @@ class ImageViewerActivity : AppCompatActivity() {
         val input = EditText(this)
         input.setText(imageUri!!.lastPathSegment)
         builder.setView(input)
-        
         builder.setPositiveButton("حفظ") { _, _ ->
-            val newName = input.text.toString()
-            if (newName.isNotEmpty()) {
-                // ملاحظة: إعادة تسمية الملفات الحقيقية تتطلب صلاحيات، سنستخدم حلاً مؤقتاً
-                Toast.makeText(this, "تمت التسمية إلى: $newName", Toast.LENGTH_SHORT).show()
-            }
+            Toast.makeText(this, "تمت التسمية إلى: ${input.text}", Toast.LENGTH_SHORT).show()
         }
         builder.setNegativeButton("إلغاء") { dialog, _ -> dialog.cancel() }
         builder.show()
     }
 
-    // دالة عرض المعلومات الحقيقية
     private fun showImageInfo() {
         if (imageUri == null) return
         try {
@@ -199,13 +166,7 @@ class ImageViewerActivity : AppCompatActivity() {
             }
             val width = options.outWidth
             val height = options.outHeight
-            
-            var sizeInKb = 0
-            contentResolver.openInputStream(imageUri!!)?.use {
-                sizeInKb = it.available() / 1024
-            }
-            
-            val info = "الاسم: ${imageUri!!.lastPathSegment}\nالأبعاد: $width x $height\nالحجم: ~$sizeInKb كيلوبايت"
+            val info = "الأبعاد: $width x $height"
             AlertDialog.Builder(this)
                 .setTitle("معلومات الصورة")
                 .setMessage(info)
@@ -216,17 +177,19 @@ class ImageViewerActivity : AppCompatActivity() {
         }
     }
 
-    // دالة الرجوع وإرسال الصورة المحدثة للدردشة
     private fun closeAndReturn() {
         val resultIntent = Intent()
         resultIntent.putExtra("new_image_uri", imageUri.toString())
+        resultIntent.putExtra("message_id", messageId)
+        resultIntent.putExtra("image_index", imageIndex)
         setResult(RESULT_OK, resultIntent)
         finish()
     }
 
-    private fun saveImageToGallery(sourceUri: Uri) {
+    private fun saveImageToGallery() {
+        if (imageUri == null) return
         try {
-            val inputStream: InputStream? = contentResolver.openInputStream(sourceUri)
+            val inputStream = contentResolver.openInputStream(imageUri!!)
             val bitmap = BitmapFactory.decodeStream(inputStream)
             val filename = "Monolith_${System.currentTimeMillis()}.jpg"
             var outputStream: OutputStream? = null
@@ -238,9 +201,7 @@ class ImageViewerActivity : AppCompatActivity() {
                     put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Monolith")
                 }
                 val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
-                if (uri != null) {
-                    outputStream = contentResolver.openOutputStream(uri)
-                }
+                if (uri != null) outputStream = contentResolver.openOutputStream(uri)
             } else {
                 val imagesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES).toString() + "/Monolith"
                 val dir = File(imagesDir)
@@ -252,7 +213,7 @@ class ImageViewerActivity : AppCompatActivity() {
             if (outputStream != null) {
                 bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
                 outputStream.close()
-                Toast.makeText(this, "تم حفظ الصورة في مجلد Monolith!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "تم الحفظ في مجلد Monolith", Toast.LENGTH_SHORT).show()
             }
         } catch (e: Exception) {
             Toast.makeText(this, "خطأ أثناء الحفظ: ${e.message}", Toast.LENGTH_SHORT).show()
@@ -264,13 +225,10 @@ class ImageViewerActivity : AppCompatActivity() {
         if (resultCode == RESULT_OK && requestCode == UCrop.REQUEST_CROP) {
             val resultUri = UCrop.getOutput(data!!)
             if (resultUri != null) {
-                fullImageView.setImageURI(resultUri)
                 imageUri = resultUri
-                closeAndReturn() // تحديث الدردشة فوراً
+                fullImageView.setImageURI(imageUri)
+                closeAndReturn()
             }
-        } else if (resultCode == UCrop.RESULT_ERROR) {
-            val cropError = UCrop.getError(data!!)
-            Toast.makeText(this, "فشل القص: ${cropError?.message}", Toast.LENGTH_SHORT).show()
         }
     }
 }
