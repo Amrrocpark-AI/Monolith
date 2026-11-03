@@ -39,7 +39,7 @@ interface MessageDao {
     suspend fun clearConversation(conversationId: String)
 }
 
-// 3. أوامر الخزنة (Vault DAO) مع الإحصائيات والبحث
+// 3. أوامر الخزنة (Vault DAO)
 @Dao
 interface VaultDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -51,7 +51,6 @@ interface VaultDao {
     @Query("DELETE FROM encrypted_files WHERE id = :id")
     suspend fun deleteEncryptedFileById(id: String)
 
-    // دوال الإحصائيات للوحة الصحة
     @Query("SELECT COUNT(*) FROM encrypted_files")
     suspend fun getFilesCount(): Int
 
@@ -61,7 +60,6 @@ interface VaultDao {
     @Query("SELECT COUNT(*) FROM encrypted_files WHERE isSteganography = 1")
     suspend fun getSteganographyCount(): Int
 
-    // البحث
     @Query("SELECT * FROM encrypted_files WHERE originalName LIKE '%' || :query || '%'")
     suspend fun searchEncryptedFiles(query: String): List<EncryptedFileEntity>
 }
@@ -86,10 +84,7 @@ abstract class AppDatabase : RoomDatabase() {
 
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
-                // 1. جلب أو توليد مفتاح تشفير قاعدة البيانات
                 val dbPassphrase = getOrCreateDbPassphrase(context)
-                
-                // 2. إعداد SQLCipher
                 val factory = SupportFactory(SQLiteDatabase.getBytes(dbPassphrase.toCharArray()))
 
                 val instance = Room.databaseBuilder(
@@ -97,7 +92,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "monolith_database"
                 )
-                .openHelperFactory(factory) // تفعيل تشفير قاعدة البيانات
+                .openHelperFactory(factory)
                 .addMigrations(MIGRATION_1_2)
                 .build()
                 INSTANCE = instance
@@ -105,7 +100,7 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
-        // دالة توليد المفتاح السري وتخزينه بأمان
+        // *** الحل: إرجاع القيمة مباشرة بدلاً من متغير var ***
         private fun getOrCreateDbPassphrase(context: Context): String {
             val masterKey = MasterKey.Builder(context)
                 .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
@@ -116,15 +111,17 @@ abstract class AppDatabase : RoomDatabase() {
                 EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
             )
             
-            var passphrase = securePrefs.getString("db_passphrase", null)
-            if (passphrase == null) {
+            val existingPassphrase: String? = securePrefs.getString("db_passphrase", null)
+            return if (existingPassphrase != null) {
+                existingPassphrase
+            } else {
                 val random = SecureRandom()
                 val bytes = ByteArray(32)
                 random.nextBytes(bytes)
-                passphrase = android.util.Base64.encodeToString(bytes, android.util.Base64.DEFAULT)
-                securePrefs.edit().putString("db_passphrase", passphrase).apply()
+                val newPassphrase = android.util.Base64.encodeToString(bytes, android.util.Base64.DEFAULT)
+                securePrefs.edit().putString("db_passphrase", newPassphrase).apply()
+                newPassphrase
             }
-            return passphrase
         }
     }
 }
