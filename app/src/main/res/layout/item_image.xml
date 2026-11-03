@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_margin="4dp"
+    app:cardCornerRadius="8dp"
+    app:cardBackgroundColor="#1A1A1A"
+    app:cardElevation="0dp"
+    app:rippleColor="#3300D4FF"
+    app:strokeColor="#2A2A2A"
+    app:strokeWidth="1dp">
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <ImageView
+            android:id="@+id/ivGalleryImage"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:background="#2A2A2A"
+            android:contentDescription="Gallery Image" />
+
+        <!-- مربع التحديد (يظهر فقط في وضع التحديد) -->
+        <CheckBox
+            android:id="@+id/cbSelectImage"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|end"
+            android:layout_margin="8dp"
+            android:visibility="gone"
+            android:buttonTint="#00D4FF"
+            android:clickable="false"
+            android:focusable="false" />
+    </FrameLayout>
+</com.google.android.material.card.MaterialCardView>
