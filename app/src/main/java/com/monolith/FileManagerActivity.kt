@@ -103,6 +103,22 @@ class FileManagerActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // تحميل مكتبة التشفير الجديدة
+        System.loadLibrary("sqlcipher")
+
+        // شبكة الأمان: إذا حدث أي خطأ فادح، سيتم عرض رسالته بدلاً من إغلاق التطبيق!
+        Thread.setDefaultUncaughtExceptionHandler { _, e ->
+            e.printStackTrace()
+            runOnUiThread {
+                AlertDialog.Builder(this)
+                    .setTitle("عطل برمجي (الرجاء تصوير هذه الرسالة)")
+                    .setMessage("الخطأ: ${e.message}\n\nالمكان: ${e.stackTrace.firstOrNull()}")
+                    .setPositiveButton("حسناً", null)
+                    .show()
+            }
+        }
+
         setContentView(R.layout.activity_file_manager)
         
         try {
