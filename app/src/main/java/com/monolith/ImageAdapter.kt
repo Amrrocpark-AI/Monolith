@@ -19,9 +19,20 @@ class ImageAdapter(
     private var isSelectionMode = false
     private var selectedUris: Set<Uri> = emptySet()
 
-    fun submitList(newImages: List<Uri>) { images = newImages; notifyDataSetChanged() }
-    fun setSelectionMode(mode: Boolean) { isSelectionMode = mode; notifyDataSetChanged() }
-    fun updateSelection(selected: Set<Uri>) { selectedUris = selected; notifyDataSetChanged() }
+    fun submitList(newImages: List<Uri>) {
+        images = newImages
+        notifyDataSetChanged()
+    }
+
+    fun setSelectionMode(mode: Boolean) {
+        isSelectionMode = mode
+        notifyDataSetChanged()
+    }
+
+    fun updateSelection(selected: Set<Uri>) {
+        selectedUris = selected
+        notifyDataSetChanged()
+    }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ImageViewHolder {
         val view = LayoutInflater.from(parent.context).inflate(R.layout.item_image, parent, false)
@@ -32,7 +43,9 @@ class ImageAdapter(
         try {
             val uri = images[position]
             holder.bind(uri, isSelectionMode, selectedUris.contains(uri))
-        } catch (e: Exception) { e.printStackTrace() }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     override fun getItemCount(): Int = images.size
@@ -43,7 +56,6 @@ class ImageAdapter(
 
         fun bind(uri: Uri, isSelectionMode: Boolean, isSelected: Boolean) {
             try {
-                // جودة كاملة بدون تصغير
                 Glide.with(itemView.context)
                     .load(uri)
                     .placeholder(android.R.drawable.ic_menu_gallery)
@@ -51,7 +63,9 @@ class ImageAdapter(
                     .diskCacheStrategy(DiskCacheStrategy.ALL)
                     .centerCrop()
                     .into(ivGalleryImage)
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
 
             cbSelectImage.visibility = if (isSelectionMode) View.VISIBLE else View.GONE
             cbSelectImage.isChecked = isSelected
