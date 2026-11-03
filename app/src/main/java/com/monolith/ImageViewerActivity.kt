@@ -29,6 +29,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
+import com.bumptech.glide.Glide
 import com.yalantis.ucrop.UCrop
 import com.yalantis.ucrop.UCropActivity
 import java.io.File
@@ -56,54 +57,61 @@ class ImageViewerActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_image_viewer)
+        try {
+            setContentView(R.layout.activity_image_viewer)
 
-        fullImageView = findViewById(R.id.fullImageView)
-        progressBar = findViewById(R.id.progressBar)
-        
-        val btnClose = findViewById<ImageButton>(R.id.btnCloseViewer)
-        val btnPrivacyShield = findViewById<ImageButton>(R.id.btnPrivacyShield)
-        val btnAnalyze = findViewById<TextView>(R.id.btnAnalyze)
-        val btnShare = findViewById<ImageButton>(R.id.btnShare)
-        val btnCrop = findViewById<ImageButton>(R.id.btnCrop)
-        val btnRotate = findViewById<ImageButton>(R.id.btnRotate)
-        val btnRename = findViewById<ImageButton>(R.id.btnRename)
-        val btnEditExif = findViewById<ImageButton>(R.id.btnEditExif)
-        val btnDownload = findViewById<ImageButton>(R.id.btnDownload)
-        val btnInfo = findViewById<ImageButton>(R.id.btnInfo)
+            fullImageView = findViewById(R.id.fullImageView)
+            progressBar = findViewById(R.id.progressBar)
+            
+            val btnClose = findViewById<ImageButton?>(R.id.btnCloseViewer)
+            val btnPrivacyShield = findViewById<ImageButton?>(R.id.btnPrivacyShield)
+            val btnAnalyze = findViewById<TextView?>(R.id.btnAnalyze)
+            val btnShare = findViewById<ImageButton?>(R.id.btnShare)
+            val btnCrop = findViewById<ImageButton?>(R.id.btnCrop)
+            val btnRotate = findViewById<ImageButton?>(R.id.btnRotate)
+            val btnRename = findViewById<ImageButton?>(R.id.btnRename)
+            val btnEditExif = findViewById<ImageButton?>(R.id.btnEditExif)
+            val btnDownload = findViewById<ImageButton?>(R.id.btnDownload)
+            val btnInfo = findViewById<ImageButton?>(R.id.btnInfo)
 
-        val uriString = intent.getStringExtra("image_uri")
-        messageId = intent.getStringExtra("message_id")
-        imageIndex = intent.getIntExtra("image_index", -1)
+            val uriString = intent.getStringExtra("image_uri")
+            messageId = intent.getStringExtra("message_id")
+            imageIndex = intent.getIntExtra("image_index", -1)
 
-        if (uriString != null) {
-            imageUri = Uri.parse(uriString)
-            fullImageView.setImageURI(imageUri)
-        }
-
-        setupZoomAndPan()
-
-        btnClose.setOnClickListener { closeAndReturn() }
-
-        btnPrivacyShield.setOnClickListener {
-            isPrivacyShieldEnabled = !isPrivacyShieldEnabled
-            if (isPrivacyShieldEnabled) {
-                btnPrivacyShield.setColorFilter(Color.parseColor("#00FF00"))
-                Toast.makeText(this, "درع الخصوصية: مفعل", Toast.LENGTH_SHORT).show()
-            } else {
-                btnPrivacyShield.setColorFilter(Color.WHITE)
-                Toast.makeText(this, "درع الخصوصية: معطل", Toast.LENGTH_SHORT).show()
+            if (uriString != null) {
+                imageUri = Uri.parse(uriString)
+                Glide.with(this).load(imageUri).into(fullImageView)
             }
-        }
 
-        btnAnalyze.setOnClickListener { Toast.makeText(this, "تحليل AI قريباً", Toast.LENGTH_SHORT).show() }
-        btnShare.setOnClickListener { shareImage() }
-        btnCrop.setOnClickListener { cropImage() }
-        btnRotate.setOnClickListener { rotateImage() }
-        btnDownload.setOnClickListener { saveImageToGallery() }
-        btnInfo.setOnClickListener { showImageInfoWithExif() }
-        btnRename.setOnClickListener { showRenameDialog() }
-        btnEditExif.setOnClickListener { showEditExifDialog() }
+            setupZoomAndPan()
+
+            btnClose?.setOnClickListener { closeAndReturn() }
+
+            btnPrivacyShield?.setOnClickListener {
+                isPrivacyShieldEnabled = !isPrivacyShieldEnabled
+                if (isPrivacyShieldEnabled) {
+                    btnPrivacyShield.setColorFilter(Color.parseColor("#00FF00"))
+                    Toast.makeText(this, "درع الخصوصية: مفعل", Toast.LENGTH_SHORT).show()
+                } else {
+                    btnPrivacyShield.setColorFilter(Color.WHITE)
+                    Toast.makeText(this, "درع الخصوصية: معطل", Toast.LENGTH_SHORT).show()
+                }
+            }
+
+            btnAnalyze?.setOnClickListener { Toast.makeText(this, "تحليل AI قريباً", Toast.LENGTH_SHORT).show() }
+            btnShare?.setOnClickListener { shareImage() }
+            btnCrop?.setOnClickListener { cropImage() }
+            btnRotate?.setOnClickListener { rotateImage() }
+            btnDownload?.setOnClickListener { saveImageToGallery() }
+            btnInfo?.setOnClickListener { showImageInfoWithExif() }
+            btnRename?.setOnClickListener { showRenameDialog() }
+            btnEditExif?.setOnClickListener { showEditExifDialog() }
+            
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Toast.makeText(this, "حدث خطأ أثناء فتح الصورة", Toast.LENGTH_SHORT).show()
+            finish()
+        }
     }
 
     private fun showEditExifDialog() {
@@ -163,7 +171,7 @@ class ImageViewerActivity : AppCompatActivity() {
     }
 
     private fun applyExifData(model: String, date: String, latStr: String, longStr: String) {
-        progressBar.visibility = android.view.View.VISIBLE
+        progressBar?.visibility = android.view.View.VISIBLE
         
         Thread {
             try {
@@ -220,8 +228,8 @@ class ImageViewerActivity : AppCompatActivity() {
 
                 Handler(Looper.getMainLooper()).post {
                     imageUri = FileProvider.getUriForFile(this, "com.monolith.fileprovider", file)
-                    fullImageView.setImageURI(imageUri)
-                    progressBar.visibility = android.view.View.GONE
+                    Glide.with(this).load(imageUri).into(fullImageView)
+                    progressBar?.visibility = android.view.View.GONE
                     
                     if (wasCorrected) {
                         Toast.makeText(this, "المساعد الذكي: تم تصحيح البيانات المدخلة تلقائياً وحقنها!", Toast.LENGTH_LONG).show()
@@ -232,7 +240,7 @@ class ImageViewerActivity : AppCompatActivity() {
                 
             } catch (e: Exception) {
                 Handler(Looper.getMainLooper()).post {
-                    progressBar.visibility = android.view.View.GONE
+                    progressBar?.visibility = android.view.View.GONE
                     Toast.makeText(this, "فشل الحقن: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
             }
@@ -259,7 +267,7 @@ class ImageViewerActivity : AppCompatActivity() {
                     inputStream?.close()
                     
                     imageUri = FileProvider.getUriForFile(this, "com.monolith.fileprovider", newFile)
-                    fullImageView.setImageURI(imageUri)
+                    Glide.with(this).load(imageUri).into(fullImageView)
                     
                     Toast.makeText(this, "تمت إعادة التسمية بنجاح!", Toast.LENGTH_SHORT).show()
                 } catch (e: Exception) {
@@ -281,12 +289,16 @@ class ImageViewerActivity : AppCompatActivity() {
 
     private fun shareImage() {
         if (imageUri != null) {
-            val uriToShare = if (isPrivacyShieldEnabled) getSanitizedUri(imageUri!!) else imageUri!!
-            val intent = Intent(Intent.ACTION_SEND).apply {
-                type = "image/*"
-                putExtra(Intent.EXTRA_STREAM, uriToShare)
+            try {
+                val uriToShare = if (isPrivacyShieldEnabled) getSanitizedUri(imageUri!!) else imageUri!!
+                val intent = Intent(Intent.ACTION_SEND).apply {
+                    type = "image/*"
+                    putExtra(Intent.EXTRA_STREAM, uriToShare)
+                }
+                startActivity(Intent.createChooser(intent, "مشاركة الصورة"))
+            } catch (e: Exception) {
+                Toast.makeText(this, "فشل المشاركة", Toast.LENGTH_SHORT).show()
             }
-            startActivity(Intent.createChooser(intent, "مشاركة الصورة"))
         }
     }
 
@@ -378,33 +390,37 @@ class ImageViewerActivity : AppCompatActivity() {
     }
 
     private fun setupZoomAndPan() {
-        scaleGestureDetector = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
-            override fun onScale(detector: ScaleGestureDetector): Boolean {
-                scaleFactor *= detector.scaleFactor
-                scaleFactor = Math.max(0.1f, Math.min(scaleFactor, 5.0f))
-                matrix.setScale(scaleFactor, scaleFactor, detector.focusX, detector.focusY)
-                fullImageView.imageMatrix = matrix
-                return true
+        try {
+            scaleGestureDetector = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+                override fun onScale(detector: ScaleGestureDetector): Boolean {
+                    scaleFactor *= detector.scaleFactor
+                    scaleFactor = Math.max(0.1f, Math.min(scaleFactor, 5.0f))
+                    matrix.setScale(scaleFactor, scaleFactor, detector.focusX, detector.focusY)
+                    fullImageView.imageMatrix = matrix
+                    return true
+                }
+            })
+            gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+                override fun onDoubleTap(e: MotionEvent): Boolean {
+                    scaleFactor = if (scaleFactor > 1.0f) 1.0f else 2.0f
+                    matrix.setScale(scaleFactor, scaleFactor, e.x, e.y)
+                    fullImageView.imageMatrix = matrix
+                    return true
+                }
+            })
+            fullImageView.setOnTouchListener { _, event ->
+                scaleGestureDetector.onTouchEvent(event)
+                gestureDetector.onTouchEvent(event)
+                true
             }
-        })
-        gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
-            override fun onDoubleTap(e: MotionEvent): Boolean {
-                scaleFactor = if (scaleFactor > 1.0f) 1.0f else 2.0f
-                matrix.setScale(scaleFactor, scaleFactor, e.x, e.y)
-                fullImageView.imageMatrix = matrix
-                return true
-            }
-        })
-        fullImageView.setOnTouchListener { _, event ->
-            scaleGestureDetector.onTouchEvent(event)
-            gestureDetector.onTouchEvent(event)
-            true
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 
     private fun rotateImage() {
         if (imageUri == null) return
-        progressBar.visibility = android.view.View.VISIBLE
+        progressBar?.visibility = android.view.View.VISIBLE
         try {
             val inputStream = contentResolver.openInputStream(imageUri!!)
             val originalBitmap = BitmapFactory.decodeStream(inputStream)
@@ -418,27 +434,31 @@ class ImageViewerActivity : AppCompatActivity() {
             outputStream.close()
             
             imageUri = FileProvider.getUriForFile(this, "com.monolith.fileprovider", file)
-            fullImageView.setImageURI(imageUri)
-            progressBar.visibility = android.view.View.GONE
+            Glide.with(this).load(imageUri).into(fullImageView)
+            progressBar?.visibility = android.view.View.GONE
             Toast.makeText(this, "تم التدوير بنجاح", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
-            progressBar.visibility = android.view.View.GONE
+            progressBar?.visibility = android.view.View.GONE
             Toast.makeText(this, "فشل التدوير: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 
     private fun closeAndReturn() {
-        val resultIntent = Intent()
-        resultIntent.putExtra("new_image_uri", imageUri.toString())
-        resultIntent.putExtra("message_id", messageId)
-        resultIntent.putExtra("image_index", imageIndex)
-        setResult(RESULT_OK, resultIntent)
-        finish()
+        try {
+            val resultIntent = Intent()
+            resultIntent.putExtra("new_image_uri", imageUri.toString())
+            resultIntent.putExtra("message_id", messageId)
+            resultIntent.putExtra("image_index", imageIndex)
+            setResult(RESULT_OK, resultIntent)
+            finish()
+        } catch (e: Exception) {
+            finish()
+        }
     }
 
     private fun saveImageToGallery() {
         if (imageUri == null) return
-        progressBar.visibility = android.view.View.VISIBLE
+        progressBar?.visibility = android.view.View.VISIBLE
         try {
             val uriToSave = if (isPrivacyShieldEnabled) getSanitizedUri(imageUri!!) else imageUri!!
             
@@ -466,27 +486,31 @@ class ImageViewerActivity : AppCompatActivity() {
             if (outputStream != null) {
                 bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
                 outputStream.close()
-                progressBar.visibility = android.view.View.GONE
+                progressBar?.visibility = android.view.View.GONE
                 Toast.makeText(this, "تم الحفظ في مجلد Monolith", Toast.LENGTH_SHORT).show()
             }
         } catch (e: Exception) {
-            progressBar.visibility = android.view.View.GONE
+            progressBar?.visibility = android.view.View.GONE
             Toast.makeText(this, "خطأ أثناء الحفظ: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (resultCode == RESULT_OK && requestCode == UCrop.REQUEST_CROP) {
-            val resultUri = UCrop.getOutput(data!!)
-            if (resultUri != null) {
-                imageUri = resultUri
-                fullImageView.setImageURI(imageUri)
-                closeAndReturn()
+        try {
+            if (resultCode == RESULT_OK && requestCode == UCrop.REQUEST_CROP) {
+                val resultUri = UCrop.getOutput(data!!)
+                if (resultUri != null) {
+                    imageUri = resultUri
+                    Glide.with(this).load(imageUri).into(fullImageView)
+                    closeAndReturn()
+                }
+            } else if (resultCode == UCrop.RESULT_ERROR) {
+                val cropError = UCrop.getError(data!!)
+                Toast.makeText(this, "فشل القص: ${cropError?.message}", Toast.LENGTH_SHORT).show()
             }
-        } else if (resultCode == UCrop.RESULT_ERROR) {
-            val cropError = UCrop.getError(data!!)
-            Toast.makeText(this, "فشل القص: ${cropError?.message}", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 }
