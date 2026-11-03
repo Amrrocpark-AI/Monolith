@@ -75,13 +75,13 @@
             android:textSize="16sp"
             android:layout_marginStart="12dp"/>
             
-        <!-- زر تحديد الكل -->
+        <!-- زر تحديد الكل (تم تغيير الأيقونة) -->
         <ImageButton
             android:id="@+id/btnSelectAll"
             android:layout_width="40dp"
             android:layout_height="40dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_menu_mark"
+            android:src="@android:drawable/ic_menu_agenda" 
             app:tint="#00D4FF" />
     </LinearLayout>
 
@@ -163,7 +163,7 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
-    <!-- 7. الشريط السفلي السيادي (حذف، إرسال، نقل، نسخ، إضافة لألبوم) -->
+    <!-- 7. الشريط السفلي السيادي -->
     <LinearLayout
         android:id="@+id/bottomSelectionBar"
         android:layout_width="match_parent"
@@ -175,7 +175,6 @@
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="parent">
 
-        <!-- حذف -->
         <LinearLayout
             android:id="@+id/actionDelete"
             android:layout_width="0dp"
@@ -200,7 +199,6 @@
                 android:layout_marginTop="4dp" />
         </LinearLayout>
 
-        <!-- مشاركة -->
         <LinearLayout
             android:id="@+id/actionShare"
             android:layout_width="0dp"
@@ -225,7 +223,6 @@
                 android:layout_marginTop="4dp" />
         </LinearLayout>
 
-        <!-- نقل -->
         <LinearLayout
             android:id="@+id/actionMove"
             android:layout_width="0dp"
@@ -250,7 +247,6 @@
                 android:layout_marginTop="4dp" />
         </LinearLayout>
 
-        <!-- نسخ -->
         <LinearLayout
             android:id="@+id/actionCopy"
             android:layout_width="0dp"
@@ -275,7 +271,6 @@
                 android:layout_marginTop="4dp" />
         </LinearLayout>
 
-        <!-- إضافة إلى ألبوم -->
         <LinearLayout
             android:id="@+id/actionAddAlbum"
             android:layout_width="0dp"
