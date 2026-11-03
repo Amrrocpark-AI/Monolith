@@ -12,7 +12,6 @@ import android.provider.MediaStore
 import android.provider.Settings
 import android.text.Editable
 import android.text.TextWatcher
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -88,7 +87,6 @@ class FileManagerActivity : AppCompatActivity() {
             loadDataForCurrentMode()
         } else {
             Toast.makeText(this, "نحتاج إذن الوصول للملفات.", Toast.LENGTH_LONG).show()
-            // بدلاً من إغلاق التطبيق، نبقى في وضع الملفات الافتراضي
             currentMode = ViewMode.FILES
             updateUIForMode()
         }
@@ -98,8 +96,7 @@ class FileManagerActivity : AppCompatActivity() {
         if (isGranted) {
             if (currentMode == ViewMode.SCREENSHOTS) loadScreenshots() else loadRealGallery()
         } else {
-            Toast.makeText(this, "نحتاج إذن الصور لعرض المعرض.", Toast.LENGTH_SHORT).show()
-            // العودة لوضع الملفات بدلاً من الانهيار
+            Toast.makeText(this, "نحتاج إذن الصور.", Toast.LENGTH_SHORT).show()
             setViewMode(ViewMode.FILES)
         }
     }
@@ -181,7 +178,6 @@ class FileManagerActivity : AppCompatActivity() {
         findViewById<LinearLayout>(R.id.btnPinnedNew)?.setOnClickListener { showCreateVirtualAlbumDialog() }
         findViewById<LinearLayout>(R.id.btnPinnedFavorites)?.setOnClickListener { Toast.makeText(this, "قريباً", Toast.LENGTH_SHORT).show() }
         
-        // أزرار المعرض والمهملات
         findViewById<LinearLayout>(R.id.btnPinnedScreenshots)?.setOnClickListener { 
             try { setViewMode(ViewMode.SCREENSHOTS) } catch (e: Exception) { Toast.makeText(this, "لا يمكن فتح لقطات الشاشة", Toast.LENGTH_SHORT).show() }
         }
@@ -287,7 +283,7 @@ class FileManagerActivity : AppCompatActivity() {
             }
         } catch (e: Exception) {
             e.printStackTrace()
-            setViewMode(ViewMode.FILES) // في حال حدوث خطأ مفاجئ في الصلاحيات، نعود للملفات
+            setViewMode(ViewMode.FILES)
         }
     }
 
@@ -314,7 +310,7 @@ class FileManagerActivity : AppCompatActivity() {
                     ViewMode.ALBUMS, ViewMode.GALLERY -> setViewMode(ViewMode.FILES)
                 }
             } catch (e: Exception) {
-                finish() // في حال وجود مشكلة في العودة، نغلق الصفحة بأمان
+                finish()
             }
         }
     }
@@ -491,12 +487,14 @@ class FileManagerActivity : AppCompatActivity() {
     }
 
     private fun handleImageClick(uri: Uri) {
-        if (isSelectionMode) toggleImageSelection(uri)
-        else {
+        if (isSelectionMode) {
+            toggleImageSelection(uri)
+        } else {
             try {
                 startActivity(Intent(this, ImageViewerActivity::class.java).putExtra("image_uri", uri.toString()))
             } catch (e: Exception) {
-                Toast.makeText(this, "لا يمكن فتح الصورة", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "لا يمكن فتح الصورة: ${e.message}", Toast.LENGTH_SHORT).show()
+                e.printStackTrace()
             }
         }
     }
@@ -546,12 +544,7 @@ class FileManagerActivity : AppCompatActivity() {
             val query = etSearchFiles.text.toString()
             if (currentMode == ViewMode.GALLERY || currentMode == ViewMode.SCREENSHOTS) {
                 val filteredUris = if (query.isEmpty()) galleryUris.toList() else galleryUris.filter { (it.lastPathSegment ?: "").contains(query, ignoreCase = true) }
-                try {
-                    imageAdapter.submitList(filteredUris)
-                } catch (e: Exception) {
-                    Log.e("GalleryError", "Error submitting list to ImageAdapter", e)
-                    Toast.makeText(this, "خطأ في عرض الصور (تأكد من كود ImageAdapter)", Toast.LENGTH_SHORT).show()
-                }
+                imageAdapter.submitList(filteredUris)
             } else {
                 var filtered = if (query.isEmpty()) allFiles.toList() else allFiles.filter { it.name.contains(query, ignoreCase = true) }
                 if (!showHiddenFiles) filtered = filtered.filter { !it.name.startsWith(".") }
@@ -793,7 +786,7 @@ class FileManagerActivity : AppCompatActivity() {
             } else loadDataForCurrentMode()
         } catch (e: Exception) {
             Toast.makeText(this, "حدث خطأ في الصلاحيات", Toast.LENGTH_SHORT).show()
-            loadDataForCurrentMode() // نحاول المتابعة على أي حال
+            loadDataForCurrentMode() 
         }
     }
 
@@ -811,7 +804,6 @@ class FileManagerActivity : AppCompatActivity() {
     }
 }
 
-// --- كلاس FileItem و FileAdapter كما هو ---
 data class FileItem(
     val file: File,
     val name: String = file.name,
