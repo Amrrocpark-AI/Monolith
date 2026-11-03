@@ -51,11 +51,13 @@ class FileManagerActivity : AppCompatActivity() {
     private lateinit var etSearchFiles: EditText
     private lateinit var tabLayoutFiles: TabLayout
     private lateinit var tvPathTitle: TextView
+    
     private lateinit var topBarFileManager: LinearLayout
     private lateinit var topBarSelection: LinearLayout
     private lateinit var tvSelectionCount: TextView
     private lateinit var bottomSelectionBar: LinearLayout
     private lateinit var btnSelectAll: ImageButton
+    
     private lateinit var actionDelete: LinearLayout
     private lateinit var actionShare: LinearLayout
     private lateinit var actionMove: LinearLayout
@@ -79,7 +81,6 @@ class FileManagerActivity : AppCompatActivity() {
     private val selectedImages = mutableSetOf<Uri>()
 
     private lateinit var virtualAlbumDao: VirtualAlbumDao
-    private lateinit var sharedPreferences: android.content.SharedPreferences
 
     private val requestPermissionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         if (Environment.isExternalStorageManager()) {
@@ -100,8 +101,6 @@ class FileManagerActivity : AppCompatActivity() {
             finish()
             return
         }
-        
-        sharedPreferences = getSharedPreferences("Settings", MODE_PRIVATE)
 
         rvFiles = findViewById(R.id.rvFiles)
         etSearchFiles = findViewById(R.id.etSearchFiles)
@@ -308,7 +307,14 @@ class FileManagerActivity : AppCompatActivity() {
     }
 
     private fun installApk(apkFile: File) {
-        try { startActivity(Intent(Intent.ACTION_VIEW).apply { setDataAndType(FileProvider.getUriForFile(this, "${packageName}.fileprovider", apkFile), "application/vnd.android.package-archive"); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) }) }
+        try { 
+            val uri = FileProvider.getUriForFile(this, "${packageName}.fileprovider", apkFile)
+            val intent = Intent(Intent.ACTION_VIEW).apply { 
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) 
+            }
+            startActivity(intent) 
+        }
         catch (e: Exception) { Toast.makeText(this, "فشل فتح المثبت", Toast.LENGTH_SHORT).show() }
     }
 
