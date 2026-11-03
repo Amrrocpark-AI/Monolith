@@ -63,7 +63,7 @@ class FileManagerActivity : AppCompatActivity() {
     
     private var isGalleryMode = false
     private var isAlbumMode = false
-    private var currentAlbumId: String? = null // لتخزين الألبوم الذي نتصفحه حالياً
+    private var currentAlbumId: String? = null
     private var isSortAscending = true
     private var sortType = "NAME"
     private var showHiddenFiles = false
@@ -132,7 +132,7 @@ class FileManagerActivity : AppCompatActivity() {
                         isGalleryMode = false; isAlbumMode = true
                         rvFiles.layoutManager = GridLayoutManager(this@FileManagerActivity, 2)
                         rvFiles.adapter = albumAdapter
-                        fabCreateFolder.visibility = View.VISIBLE // لإنشاء ألبوم جديد
+                        fabCreateFolder.visibility = View.VISIBLE
                         loadAlbums()
                     }
                 }
@@ -167,11 +167,9 @@ class FileManagerActivity : AppCompatActivity() {
         if (isSelectionMode) {
             clearSelection()
         } else if (currentAlbumId != null) {
-            // العودة إلى قائمة الألبومات
             currentAlbumId = null
             loadAlbums()
         } else if (isAlbumMode) {
-            // الخروج من الألبومات إلى الملفات
             tabLayoutFiles.getTabAt(0)?.select()
         } else {
             val parent = currentDirectory.parentFile
@@ -182,14 +180,13 @@ class FileManagerActivity : AppCompatActivity() {
     override fun onBackPressed() { handleBackPress() }
 
     // ==========================================
-    // الألبومات (Albums Logic)
+    // الألبومات
     // ==========================================
     private fun loadAlbums() {
         tvPathTitle.text = "الألبومات"
         lifecycleScope.launch {
             val albumsList = mutableListOf<AlbumItem>()
             
-            // 1. جلب ألبومات النظام (Redmi)
             withContext(Dispatchers.IO) {
                 val projection = arrayOf(
                     MediaStore.Images.Media.BUCKET_ID,
@@ -223,7 +220,6 @@ class FileManagerActivity : AppCompatActivity() {
                 }
             }
 
-            // 2. جلب الألبومات الافتراضية من قاعدة البيانات
             val virtualAlbums = virtualAlbumDao.getAllAlbums()
             for (vAlbum in virtualAlbums) {
                 val mediaUris = virtualAlbumDao.getMediaForAlbum(vAlbum.id)
@@ -238,11 +234,9 @@ class FileManagerActivity : AppCompatActivity() {
     }
 
     private fun handleAlbumClick(album: AlbumItem) {
-        if (album.name == "Camera" || album.name == "الكاميرا" || !album.bucketId.contains("-")) {
-            // ألبوم نظام
+        if (!album.bucketId.contains("-")) {
             loadImagesForSystemAlbum(album)
         } else {
-            // ألبوم افتراضي
             loadImagesForVirtualAlbum(album)
         }
     }
@@ -313,7 +307,7 @@ class FileManagerActivity : AppCompatActivity() {
     }
 
     // ==========================================
-    // العمليات الأساسية (التي لم تتغير)
+    // العمليات الأساسية
     // ==========================================
     private fun handleFileClick(file: File) {
         if (isSelectionMode) toggleFileSelection(file) 
@@ -400,7 +394,7 @@ class FileManagerActivity : AppCompatActivity() {
     }
 
     private fun applyFilterAndSort() {
-        if (isAlbumMode) return // الألبومات لها منطقها الخاص
+        if (isAlbumMode) return
         val query = etSearchFiles.text.toString()
         if (isGalleryMode) {
             var filteredUris = if (query.isEmpty()) galleryUris.toList() else galleryUris.filter { (it.lastPathSegment ?: "").contains(query, ignoreCase = true) }
@@ -440,7 +434,6 @@ class FileManagerActivity : AppCompatActivity() {
         }
     }
 
-    // ... (باقي دوال ZIP و الصلاحيات تبقى كما هي في الكود السابق)
     private fun handleZipFile(zipFile: File) { try { if (ZipFile(zipFile).isEncrypted) showExtractPasswordDialog(zipFile) else executeExtraction(zipFile) } catch (e: Exception) { Toast.makeText(this, "أرشيف غير صالح", Toast.LENGTH_SHORT).show() } }
     private fun showExtractPasswordDialog(zipFile: File) { /* الكود القديم */ }
     private fun executeExtraction(zipFile: File) { /* الكود القديم */ }
@@ -449,4 +442,77 @@ class FileManagerActivity : AppCompatActivity() {
     private fun executeZipCreation(files: List<File>, zipName: String, password: String) { /* الكود القديم */ }
     private fun checkAndRequestPermission() { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) { if (Environment.isExternalStorageManager()) loadDirectory(currentDirectory) else { requestPermissionLauncher.launch(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply { addCategory("android.intent.category.DEFAULT"); data = Uri.parse("package:$packageName") }) } } else loadDirectory(currentDirectory) }
     private fun loadDirectory(dir: File) { currentDirectory = dir; lifecycleScope.launch { val files = withContext(Dispatchers.IO) { dir.listFiles()?.toMutableList() ?: mutableListOf() }; withContext(Dispatchers.Main) { allFiles = files; applyFilterAndSort() } } }
+}
+
+// ==========================================
+// تعريف الملفات (FileItem و FileAdapter) في نهاية الملف
+// ==========================================
+data class FileItem(
+    val file: File,
+    val name: String = file.name,
+    val isDirectory: Boolean = file.isDirectory,
+    val size: Long = file.length(),
+    val lastModified: Long = file.lastModified()
+)
+
+class FileAdapter(
+    private val onFileClick: (File) -> Unit,
+    private val onFileLongClick: (File) -> Unit
+) : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
+    
+    private var files: List<FileItem> = emptyList()
+    private var isSelectionMode = false
+    private var selectedFiles: Set<File> = emptySet()
+
+    fun submitList(newFiles: List<FileItem>, isGallery: Boolean) { 
+        files = newFiles; notifyDataSetChanged() 
+    }
+    
+    fun setSelectionMode(mode: Boolean) { isSelectionMode = mode; notifyDataSetChanged() }
+    fun updateSelection(selected: Set<File>) { selectedFiles = selected; notifyDataSetChanged() }
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): FileViewHolder {
+        val view = LayoutInflater.from(parent.context).inflate(R.layout.item_file, parent, false)
+        return FileViewHolder(view)
+    }
+
+    override fun onBindViewHolder(holder: FileViewHolder, position: Int) {
+        val item = files[position]
+        holder.bind(item, isSelectionMode, selectedFiles.contains(item.file), onFileClick, onFileLongClick)
+    }
+
+    override fun getItemCount(): Int = files.size
+
+    class FileViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+        private val ivFileIcon: ImageView = itemView.findViewById(R.id.ivFileIcon)
+        private val tvFileName: TextView = itemView.findViewById(R.id.tvFileName)
+        private val tvFileDetails: TextView = itemView.findViewById(R.id.tvFileDetails)
+        private val cbSelectFile: CheckBox = itemView.findViewById(R.id.cbSelectFile)
+
+        fun bind(item: FileItem, isSelectionMode: Boolean, isSelected: Boolean, onClick: (File) -> Unit, onLongClick: (File) -> Unit) {
+            val file = item.file
+            tvFileName.text = item.name
+            val dateString = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(item.lastModified))
+            cbSelectFile.visibility = if (isSelectionMode) View.VISIBLE else View.GONE
+            cbSelectFile.isChecked = isSelected
+
+            if (file.isDirectory) {
+                ivFileIcon.setImageResource(android.R.drawable.ic_menu_set_as)
+                ivFileIcon.setColorFilter(android.graphics.Color.parseColor("#00D4FF"))
+                tvFileDetails.text = "مجلد • $dateString"
+            } else {
+                val sizeInKb = file.length() / 1024
+                val sizeString = if (sizeInKb > 1024) "${sizeInKb / 1024} MB" else "$sizeInKb KB"
+                tvFileDetails.visibility = View.VISIBLE
+                ivFileIcon.setColorFilter(android.graphics.Color.parseColor("#AAAAAA"))
+                if (file.name.endsWith(".zip", true)) { ivFileIcon.setImageResource(android.R.drawable.ic_menu_save); ivFileIcon.setColorFilter(android.graphics.Color.parseColor("#FFAA00")) }
+                else if (file.name.endsWith(".apk", true)) { ivFileIcon.setImageResource(android.R.drawable.ic_menu_manage); ivFileIcon.setColorFilter(android.graphics.Color.parseColor("#00D4FF")) }
+                else if (file.name.endsWith(".jpg", true) || file.name.endsWith(".png", true)) { ivFileIcon.setImageResource(android.R.drawable.ic_menu_gallery) }
+                else ivFileIcon.setImageResource(android.R.drawable.ic_menu_agenda)
+                tvFileDetails.text = "$sizeString • $dateString"
+            }
+            itemView.setOnClickListener { onClick(file) }
+            itemView.setOnLongClickListener { onLongClick(file); true }
+        }
+    }
 }
