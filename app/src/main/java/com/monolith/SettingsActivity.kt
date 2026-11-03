@@ -10,13 +10,7 @@ import android.os.Bundle
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.view.View
-import android.widget.ArrayAdapter
-import android.widget.Button
-import android.widget.EditText
-import android.widget.RadioGroup
-import android.widget.SeekBar
-import android.widget.Spinner
-import android.widget.Toast
+import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
@@ -32,21 +26,24 @@ import okhttp3.Request
 
 class SettingsActivity : AppCompatActivity() {
 
+    private lateinit var sharedPreferences: android.content.SharedPreferences
+    private lateinit var securePrefs: android.content.SharedPreferences
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
 
+        sharedPreferences = getSharedPreferences("Settings", MODE_PRIVATE)
+
         // ==========================================
-        // 1. التخزين المشفر (لحماية المفتاح)
+        // 1. إعداد التخزين المشفر (لحماية المفتاح)
         // ==========================================
         val masterKey = MasterKey.Builder(this)
             .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
             .build()
 
-        val securePrefs = EncryptedSharedPreferences.create(
-            this,
-            "SecureSettings",
-            masterKey,
+        securePrefs = EncryptedSharedPreferences.create(
+            this, "SecureSettings", masterKey,
             EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
         )
@@ -108,7 +105,7 @@ class SettingsActivity : AppCompatActivity() {
                     btnTestAndSave.postDelayed({
                         btnTestAndSave.isEnabled = true
                         btnTestAndSave.text = "اختبار وحفظ المفتاح"
-                        btnTestAndSave.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#00FF00"))
+                        btnTestAndSave.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#00D4FF"))
                         btnTestAndSave.setTextColor(Color.BLACK)
                     }, 3000)
                 }
@@ -116,7 +113,52 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         // ==========================================
-        // 3. كودك الأصلي (اللغة، الخلفية، الألوان)
+        // 3. تخصيص شريط التحديد (الجديد)
+        // ==========================================
+        val rgNeonColor = findViewById<RadioGroup>(R.id.rgNeonColor)
+        val rgFrameStyle = findViewById<RadioGroup>(R.id.rgFrameStyle)
+        val btnSaveSelectionStyle = findViewById<Button>(R.id.btnSaveSelectionStyle)
+
+        // استعادة الحالة المحفوظة
+        val savedNeonColor = sharedPreferences.getString("selection_bar_color", "BLUE")
+        when (savedNeonColor) {
+            "BLUE" -> rgNeonColor.check(R.id.rbNeonBlue)
+            "PINK" -> rgNeonColor.check(R.id.rbNeonPink)
+            "GREEN" -> rgNeonColor.check(R.id.rbNeonGreen)
+        }
+
+        val savedFrameStyle = sharedPreferences.getString("selection_bar_style", "CYBER")
+        when (savedFrameStyle) {
+            "CYBER" -> rgFrameStyle.check(R.id.rbStyleCyber)
+            "ROUNDED" -> rgFrameStyle.check(R.id.rbStyleRounded)
+        }
+
+        btnSaveSelectionStyle.setOnClickListener {
+            val selectedColorId = rgNeonColor.checkedRadioButtonId
+            val colorStr = when (selectedColorId) {
+                R.id.rbNeonBlue -> "BLUE"
+                R.id.rbNeonPink -> "PINK"
+                R.id.rbNeonGreen -> "GREEN"
+                else -> "BLUE"
+            }
+
+            val selectedStyleId = rgFrameStyle.checkedRadioButtonId
+            val styleStr = when (selectedStyleId) {
+                R.id.rbStyleCyber -> "CYBER"
+                R.id.rbStyleRounded -> "ROUNDED"
+                else -> "CYBER"
+            }
+
+            sharedPreferences.edit()
+                .putString("selection_bar_color", colorStr)
+                .putString("selection_bar_style", styleStr)
+                .apply()
+
+            Toast.makeText(this, "تم حفظ تخصيص شريط التحديد", Toast.LENGTH_SHORT).show()
+        }
+
+        // ==========================================
+        // 4. إعدادات المظهر (اللغة، الخلفية، الألوان)
         // ==========================================
         val spinner = findViewById<Spinner>(R.id.languageSpinner)
         val btnApplyLanguage = findViewById<Button>(R.id.btnApplyLanguage)
@@ -128,8 +170,6 @@ class SettingsActivity : AppCompatActivity() {
         val sbBlue = findViewById<SeekBar>(R.id.sbBlue)
         val viewColorPreview = findViewById<View>(R.id.viewColorPreview)
         val btnSaveColor = findViewById<Button>(R.id.btnSaveColor)
-
-        val sharedPreferences = getSharedPreferences("Settings", MODE_PRIVATE)
 
         val languages = arrayOf("English", "العربية", "Français", "Español", "日本語", "فارسی", "Türkçe", "Bahasa Indonesia", "中文", "ⵜⴰⵎⴰⵣⵉⵖⵜ", "한국어")
         val languageCodes = arrayOf("en", "ar", "fr", "es", "ja", "fa", "tr", "id", "zh", "zgh", "ko")
@@ -163,7 +203,6 @@ class SettingsActivity : AppCompatActivity() {
                 try {
                     val takeFlags: Int = Intent.FLAG_GRANT_READ_URI_PERMISSION
                     contentResolver.takePersistableUriPermission(uri, takeFlags)
-                    
                     sharedPreferences.edit().putString("AppBackgroundImage", uri.toString()).apply()
                     Toast.makeText(this, "تم حفظ الصورة بإذن دائم!", Toast.LENGTH_SHORT).show()
                 } catch (e: Exception) {
@@ -210,7 +249,7 @@ class SettingsActivity : AppCompatActivity() {
             Toast.makeText(this, "تم حفظ اللون: $colorHex", Toast.LENGTH_SHORT).show()
         }
 
-        val savedColorHex = sharedPreferences.getString("AppThemeColor", "#00FF00")
+        val savedColorHex = sharedPreferences.getString("AppThemeColor", "#00D4FF")
         if (savedColorHex != null) {
             try {
                 val savedColor = Color.parseColor(savedColorHex)
