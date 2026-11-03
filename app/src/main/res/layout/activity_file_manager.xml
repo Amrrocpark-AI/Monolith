@@ -5,7 +5,7 @@
     android:layout_height="match_parent"
     android:background="#050505">
 
-    <!-- الشريط العلوي العادي -->
+    <!-- 1. الشريط العلوي العادي -->
     <LinearLayout
         android:id="@+id/topBarFileManager"
         android:layout_width="match_parent"
@@ -45,7 +45,7 @@
             app:tint="#FFFFFF" />
     </LinearLayout>
 
-    <!-- شريط التحديد المتعدد (يظهر فقط عند تحديد ملفات) -->
+    <!-- 2. شريط التحديد العلوي (يظهر فقط عند تحديد ملفات) -->
     <LinearLayout
         android:id="@+id/topBarSelection"
         android:layout_width="match_parent"
@@ -74,25 +74,18 @@
             android:textColor="#FFFFFF"
             android:textSize="16sp"
             android:layout_marginStart="12dp"/>
-
+            
+        <!-- زر تحديد الكل -->
         <ImageButton
-            android:id="@+id/btnDeleteSelected"
+            android:id="@+id/btnSelectAll"
             android:layout_width="40dp"
             android:layout_height="40dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_menu_delete"
-            app:tint="#FFFFFF" />
-
-        <ImageButton
-            android:id="@+id/btnZipSelected"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_menu_save"
+            android:src="@android:drawable/ic_menu_mark"
             app:tint="#00D4FF" />
     </LinearLayout>
 
-    <!-- شريط البحث -->
+    <!-- 3. شريط البحث -->
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/searchCard"
         android:layout_width="match_parent"
@@ -132,7 +125,7 @@
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
-    <!-- شريط التبويبات -->
+    <!-- 4. شريط التبويبات (الملفات، الصور، الألبومات) -->
     <com.google.android.material.tabs.TabLayout
         android:id="@+id/tabLayoutFiles"
         android:layout_width="match_parent"
@@ -145,19 +138,20 @@
         app:layout_constraintTop_toBottomOf="@+id/searchCard">
         <com.google.android.material.tabs.TabItem android:text="الملفات" />
         <com.google.android.material.tabs.TabItem android:text="المعرض" />
+        <com.google.android.material.tabs.TabItem android:text="الألبومات" />
     </com.google.android.material.tabs.TabLayout>
 
-    <!-- قائمة الملفات -->
+    <!-- 5. قائمة الملفات -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rvFiles"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:clipToPadding="false"
-        android:paddingBottom="80dp"
+        android:paddingBottom="100dp"
         app:layout_constraintTop_toBottomOf="@+id/tabLayoutFiles"
         app:layout_constraintBottom_toBottomOf="parent" />
 
-    <!-- الزر العائم -->
+    <!-- 6. الزر العائم -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/fabCreateFolder"
         android:layout_width="wrap_content"
@@ -168,5 +162,144 @@
         app:tint="#000000"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- 7. الشريط السفلي السيادي (حذف، إرسال، نقل، نسخ، إضافة لألبوم) -->
+    <LinearLayout
+        android:id="@+id/bottomSelectionBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="@drawable/selection_actions_bg"
+        android:paddingVertical="12dp"
+        android:elevation="8dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent">
+
+        <!-- حذف -->
+        <LinearLayout
+            android:id="@+id/actionDelete"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true">
+            <ImageView
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:src="@android:drawable/ic_menu_delete"
+                app:tint="#FF4444" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="حذف"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:layout_marginTop="4dp" />
+        </LinearLayout>
+
+        <!-- مشاركة -->
+        <LinearLayout
+            android:id="@+id/actionShare"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true">
+            <ImageView
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:src="@android:drawable/ic_menu_share"
+                app:tint="#00D4FF" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="إرسال"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:layout_marginTop="4dp" />
+        </LinearLayout>
+
+        <!-- نقل -->
+        <LinearLayout
+            android:id="@+id/actionMove"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true">
+            <ImageView
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:src="@android:drawable/ic_menu_save"
+                app:tint="#FFFFFF" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="نقل"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:layout_marginTop="4dp" />
+        </LinearLayout>
+
+        <!-- نسخ -->
+        <LinearLayout
+            android:id="@+id/actionCopy"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true">
+            <ImageView
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:src="@android:drawable/ic_menu_add"
+                app:tint="#FFFFFF" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="نسخ"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:layout_marginTop="4dp" />
+        </LinearLayout>
+
+        <!-- إضافة إلى ألبوم -->
+        <LinearLayout
+            android:id="@+id/actionAddAlbum"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true">
+            <ImageView
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:src="@android:drawable/ic_menu_gallery"
+                app:tint="#00D4FF" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="ألبوم"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:layout_marginTop="4dp" />
+        </LinearLayout>
+
+    </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
