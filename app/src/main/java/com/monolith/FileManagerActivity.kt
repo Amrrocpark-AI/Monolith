@@ -46,6 +46,7 @@ class FileManagerActivity : AppCompatActivity() {
 
     private lateinit var rvFiles: RecyclerView
     private lateinit var fileAdapter: FileAdapter
+    private lateinit var imageAdapter: ImageAdapter
     private lateinit var etSearchFiles: EditText
     private lateinit var tabLayoutFiles: TabLayout
     private lateinit var tvPathTitle: TextView
@@ -58,9 +59,6 @@ class FileManagerActivity : AppCompatActivity() {
     private var allFiles: MutableList<File> = mutableListOf()
     private var galleryUris: MutableList<Uri> = mutableListOf()
     
-    // *** تم الإصلاح: List<FileItem> بدلاً من List<Any> ***
-    private var displayedFiles: List<FileItem> = emptyList()
-    
     private var isGalleryMode = false
     private var isSortAscending = true
     private var sortType = "NAME"
@@ -68,6 +66,7 @@ class FileManagerActivity : AppCompatActivity() {
 
     private var isSelectionMode = false
     private val selectedFiles = mutableSetOf<File>()
+    private val selectedImages = mutableSetOf<Uri>()
 
     private val requestPermissionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         if (Environment.isExternalStorageManager()) {
@@ -96,19 +95,37 @@ class FileManagerActivity : AppCompatActivity() {
         val btnZipSelected = findViewById<ImageButton>(R.id.btnZipSelected)
         val fabCreateFolder = findViewById<FloatingActionButton>(R.id.fabCreateFolder)
 
+        // تهيئة المحولين
         fileAdapter = FileAdapter(
             onFileClick = { file -> handleFileClick(file) },
             onFileLongClick = { file -> handleFileLongClick(file) }
         )
+        imageAdapter = ImageAdapter(
+            onImageClick = { uri -> handleImageClick(uri) },
+            onImageLongClick = { uri -> handleImageLongClick(uri) }
+        )
         
+        // البداية بوضع الملفات
         rvFiles.layoutManager = LinearLayoutManager(this)
         rvFiles.adapter = fileAdapter
 
         tabLayoutFiles.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
             override fun onTabSelected(tab: TabLayout.Tab?) {
                 when (tab?.position) {
-                    0 -> { isGalleryMode = false; rvFiles.layoutManager = LinearLayoutManager(this@FileManagerActivity); applyFilterAndSort() }
-                    1 -> { isGalleryMode = true; rvFiles.layoutManager = GridLayoutManager(this@FileManagerActivity, 3); loadRealGallery() }
+                    0 -> { // ملفات
+                        isGalleryMode = false
+                        rvFiles.layoutManager = LinearLayoutManager(this@FileManagerActivity)
+                        rvFiles.adapter = fileAdapter
+                        clearSelection()
+                        applyFilterAndSort()
+                    }
+                    1 -> { // معرض
+                        isGalleryMode = true
+                        rvFiles.layoutManager = GridLayoutManager(this@FileManagerActivity, 3)
+                        rvFiles.adapter = imageAdapter
+                        clearSelection()
+                        loadRealGallery()
+                    }
                 }
             }
             override fun onTabUnselected(tab: TabLayout.Tab?) {}
@@ -125,9 +142,12 @@ class FileManagerActivity : AppCompatActivity() {
         btnCancelSelection.setOnClickListener { clearSelection() }
         btnSort.setOnClickListener { showSortDialog() }
         btnDeleteSelected.setOnClickListener { deleteSelectedFiles() }
+        
         btnZipSelected.setOnClickListener { 
             if (selectedFiles.isNotEmpty()) {
                 showCreateZipDialog(selectedFiles.toList()) 
+            } else {
+                Toast.makeText(this, "اختر ملفات أولاً لضغطها", Toast.LENGTH_SHORT).show()
             }
         }
 
@@ -148,19 +168,17 @@ class FileManagerActivity : AppCompatActivity() {
         handleBackPress()
     }
 
+    // ==========================================
+    // إدارة النقر (الملفات والصور)
+    // ==========================================
     private fun handleFileClick(file: File) {
         if (isSelectionMode) {
-            toggleSelection(file)
+            toggleFileSelection(file)
         } else {
             when {
                 file.isDirectory -> loadDirectory(file)
                 file.name.endsWith(".apk", ignoreCase = true) -> installApk(file)
                 file.name.endsWith(".zip", ignoreCase = true) -> handleZipFile(file)
-                file.name.endsWith(".jpg", true) || file.name.endsWith(".png", true) || file.name.endsWith(".jpeg", true) || file.name.endsWith(".gif", true) || file.name.endsWith(".webp", true) -> {
-                    val intent = Intent(this, ImageViewerActivity::class.java)
-                    intent.putExtra("image_uri", file.toURI().toString())
-                    startActivity(intent)
-                }
                 else -> {
                     try {
                         val uri = FileProvider.getUriForFile(this, "${packageName}.fileprovider", file)
@@ -178,47 +196,93 @@ class FileManagerActivity : AppCompatActivity() {
         }
     }
 
-    private fun handleFileLongClick(file: File) {
-        if (!isSelectionMode) {
-            isSelectionMode = true
-            topBarFileManager.visibility = View.GONE
-            topBarSelection.visibility = View.VISIBLE
-            fileAdapter.setSelectionMode(true)
-        }
-        toggleSelection(file)
-    }
-
-    private fun toggleSelection(file: File) {
-        if (selectedFiles.contains(file)) selectedFiles.remove(file) else selectedFiles.add(file)
-        if (selectedFiles.isEmpty()) {
-            clearSelection()
+    private fun handleImageClick(uri: Uri) {
+        if (isSelectionMode) {
+            toggleImageSelection(uri)
         } else {
-            tvSelectionCount.text = "تم تحديد ${selectedFiles.size} عنصر"
-            fileAdapter.updateSelection(selectedFiles)
+            val intent = Intent(this, ImageViewerActivity::class.java)
+            intent.putExtra("image_uri", uri.toString())
+            startActivity(intent)
         }
     }
 
-    private fun clearSelection() {
-        isSelectionMode = false
-        selectedFiles.clear()
-        topBarFileManager.visibility = View.VISIBLE
-        topBarSelection.visibility = View.GONE
-        fileAdapter.setSelectionMode(false)
+    // ==========================================
+    // إدارة التحديد المتعدد (ملفات وصور)
+    // ==========================================
+    private fun handleFileLongClick(file: File) {
+        if (!isSelectionMode) enterSelectionMode()
+        toggleFileSelection(file)
+    }
+
+    private fun handleImageLongClick(uri: Uri) {
+        if (!isSelectionMode) enterSelectionMode()
+        toggleImageSelection(uri)
+    }
+
+    private fun enterSelectionMode() {
+        isSelectionMode = true
+        topBarFileManager.visibility = View.GONE
+        topBarSelection.visibility = View.VISIBLE
+        fileAdapter.setSelectionMode(true)
+        imageAdapter.setSelectionMode(true)
+    }
+
+    private fun toggleFileSelection(file: File) {
+        if (selectedFiles.contains(file)) selectedFiles.remove(file) else selectedFiles.add(file)
+        updateSelectionCount()
         fileAdapter.updateSelection(selectedFiles)
     }
 
+    private fun toggleImageSelection(uri: Uri) {
+        if (selectedImages.contains(uri)) selectedImages.remove(uri) else selectedImages.add(uri)
+        updateSelectionCount()
+        imageAdapter.updateSelection(selectedImages)
+    }
+
+    private fun updateSelectionCount() {
+        val count = if (isGalleryMode) selectedImages.size else selectedFiles.size
+        if (count == 0) {
+            clearSelection()
+        } else {
+            tvSelectionCount.text = "تم تحديد $count عنصر"
+        }
+    }
+
+    fun clearSelection() {
+        isSelectionMode = false
+        selectedFiles.clear()
+        selectedImages.clear()
+        topBarFileManager.visibility = View.VISIBLE
+        topBarSelection.visibility = View.GONE
+        fileAdapter.setSelectionMode(false)
+        imageAdapter.setSelectionMode(false)
+    }
+
     private fun deleteSelectedFiles() {
+        val count = if (isGalleryMode) selectedImages.size else selectedFiles.size
+        if (count == 0) return
+
         AlertDialog.Builder(this)
             .setTitle("حذف العناصر")
-            .setMessage("هل أنت متأكد من حذف ${selectedFiles.size} عنصر؟")
+            .setMessage("هل أنت متأكد من حذف $count عنصر؟")
             .setPositiveButton("حذف") { _, _ ->
                 lifecycleScope.launch(Dispatchers.IO) {
-                    selectedFiles.forEach { 
-                        if (it.isDirectory) it.deleteRecursively() else it.delete() 
+                    if (isGalleryMode) {
+                        // حذف صور من MediaStore
+                        selectedImages.forEach { uri ->
+                            try {
+                                contentResolver.delete(uri, null, null)
+                            } catch (e: Exception) { e.printStackTrace() }
+                        }
+                    } else {
+                        // حذف ملفات من النظام
+                        selectedFiles.forEach { 
+                            if (it.isDirectory) it.deleteRecursively() else it.delete() 
+                        }
                     }
                     withContext(Dispatchers.Main) {
                         clearSelection()
-                        loadDirectory(currentDirectory)
+                        if (isGalleryMode) loadRealGallery() else loadDirectory(currentDirectory)
                         Toast.makeText(this@FileManagerActivity, "تم الحذف", Toast.LENGTH_SHORT).show()
                     }
                 }
@@ -227,6 +291,9 @@ class FileManagerActivity : AppCompatActivity() {
             .show()
     }
 
+    // ==========================================
+    // الفرز والفلترة
+    // ==========================================
     private fun showSortDialog() {
         val options = arrayOf("الاسم", "الحجم", "التاريخ", "عرض الملفات المخفية")
         AlertDialog.Builder(this)
@@ -250,8 +317,7 @@ class FileManagerActivity : AppCompatActivity() {
             var filteredUris = if (query.isEmpty()) galleryUris.toList() else galleryUris.filter { uri -> 
                 (uri.lastPathSegment ?: "").contains(query, ignoreCase = true)
             }
-            displayedFiles = filteredUris.map { uri -> FileItem(uri = uri) }
-            fileAdapter.submitList(displayedFiles, true)
+            imageAdapter.submitList(filteredUris)
             tvPathTitle.text = "معرض الصور"
         } else {
             val sourceList = allFiles
@@ -270,12 +336,14 @@ class FileManagerActivity : AppCompatActivity() {
             var sortedList = if (isSortAscending) filtered.sortedWith(comparator) else filtered.sortedWith(comparator).reversed()
             sortedList = sortedList.sortedBy { !it.isDirectory }
 
-            displayedFiles = sortedList.map { FileItem(file = it) }
-            fileAdapter.submitList(displayedFiles, false)
+            fileAdapter.submitList(sortedList.map { FileItem(file = it) }, false)
             tvPathTitle.text = currentDirectory.name
         }
     }
 
+    // ==========================================
+    // العمليات الأساسية
+    // ==========================================
     private fun installApk(apkFile: File) {
         try {
             val intent = Intent(Intent.ACTION_VIEW)
@@ -327,6 +395,9 @@ class FileManagerActivity : AppCompatActivity() {
         }
     }
 
+    // ==========================================
+    // محرك ZIP
+    // ==========================================
     private fun handleZipFile(zipFile: File) {
         try {
             if (ZipFile(zipFile).isEncrypted) showExtractPasswordDialog(zipFile) else executeExtraction(zipFile)
@@ -469,37 +540,33 @@ class FileManagerActivity : AppCompatActivity() {
     }
 }
 
-// كلاس جديد لتغليف الملفات والصور
+// كلاس FileItem (للملفات فقط الآن)
 data class FileItem(
-    val file: File? = null,
-    val uri: Uri? = null,
-    val name: String = file?.name ?: uri?.lastPathSegment ?: "Unknown",
-    val isDirectory: Boolean = file?.isDirectory ?: false,
-    val size: Long = file?.length() ?: 0L,
-    val lastModified: Long = file?.lastModified() ?: 0L
+    val file: File,
+    val name: String = file.name,
+    val isDirectory: Boolean = file.isDirectory,
+    val size: Long = file.length(),
+    val lastModified: Long = file.lastModified()
 )
 
+// ==========================================
+// محول الملفات (FileAdapter)
+// ==========================================
 class FileAdapter(
     private val onFileClick: (File) -> Unit,
     private val onFileLongClick: (File) -> Unit
 ) : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
     
     private var files: List<FileItem> = emptyList()
-    private var isGalleryMode = false
     private var isSelectionMode = false
     private var selectedFiles: Set<File> = emptySet()
 
-    fun submitList(newFiles: List<FileItem>, galleryMode: Boolean) { 
-        files = newFiles; isGalleryMode = galleryMode; notifyDataSetChanged() 
+    fun submitList(newFiles: List<FileItem>, isGallery: Boolean) { // isGallery لم يعد مستخدماً هنا
+        files = newFiles; notifyDataSetChanged() 
     }
     
-    fun setSelectionMode(mode: Boolean) {
-        isSelectionMode = mode; notifyDataSetChanged()
-    }
-
-    fun updateSelection(selected: Set<File>) {
-        selectedFiles = selected; notifyDataSetChanged()
-    }
+    fun setSelectionMode(mode: Boolean) { isSelectionMode = mode; notifyDataSetChanged() }
+    fun updateSelection(selected: Set<File>) { selectedFiles = selected; notifyDataSetChanged() }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): FileViewHolder {
         val view = LayoutInflater.from(parent.context).inflate(R.layout.item_file, parent, false)
@@ -508,7 +575,7 @@ class FileAdapter(
 
     override fun onBindViewHolder(holder: FileViewHolder, position: Int) {
         val item = files[position]
-        holder.bind(item, isGalleryMode, isSelectionMode, item.file != null && selectedFiles.contains(item.file), onFileClick, onFileLongClick)
+        holder.bind(item, isSelectionMode, selectedFiles.contains(item.file), onFileClick, onFileLongClick)
     }
 
     override fun getItemCount(): Int = files.size
@@ -519,22 +586,9 @@ class FileAdapter(
         private val tvFileDetails: TextView = itemView.findViewById(R.id.tvFileDetails)
         private val cbSelectFile: CheckBox = itemView.findViewById(R.id.cbSelectFile)
 
-        fun bind(item: FileItem, isGallery: Boolean, isSelectionMode: Boolean, isSelected: Boolean, onClick: (File) -> Unit, onLongClick: (File) -> Unit) {
+        fun bind(item: FileItem, isSelectionMode: Boolean, isSelected: Boolean, onClick: (File) -> Unit, onLongClick: (File) -> Unit) {
+            val file = item.file
             tvFileName.text = item.name
-            
-            if (item.file == null && item.uri != null) {
-                Glide.with(itemView.context).load(item.uri).centerCrop().into(ivFileIcon)
-                tvFileDetails.visibility = View.GONE
-                cbSelectFile.visibility = View.GONE
-                itemView.setOnClickListener { 
-                    val intent = Intent(itemView.context, ImageViewerActivity::class.java)
-                    intent.putExtra("image_uri", item.uri.toString())
-                    itemView.context.startActivity(intent)
-                }
-                return
-            }
-
-            val file = item.file!!
             val dateString = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(item.lastModified))
             cbSelectFile.visibility = if (isSelectionMode) View.VISIBLE else View.GONE
             cbSelectFile.isChecked = isSelected
@@ -546,20 +600,13 @@ class FileAdapter(
             } else {
                 val sizeInKb = file.length() / 1024
                 val sizeString = if (sizeInKb > 1024) "${sizeInKb / 1024} MB" else "$sizeInKb KB"
-                val isImage = file.extension.lowercase() in listOf("jpg", "jpeg", "png", "gif", "webp")
-                
-                if (isImage && isGallery) {
-                    Glide.with(itemView.context).load(file).centerCrop().into(ivFileIcon)
-                    tvFileDetails.visibility = View.GONE
-                } else {
-                    tvFileDetails.visibility = View.VISIBLE
-                    ivFileIcon.setColorFilter(android.graphics.Color.parseColor("#AAAAAA"))
-                    if (isImage) ivFileIcon.setImageResource(android.R.drawable.ic_menu_gallery)
-                    else if (file.name.endsWith(".zip", true)) { ivFileIcon.setImageResource(android.R.drawable.ic_menu_save); ivFileIcon.setColorFilter(android.graphics.Color.parseColor("#FFAA00")) }
-                    else if (file.name.endsWith(".apk", true)) { ivFileIcon.setImageResource(android.R.drawable.ic_menu_manage); ivFileIcon.setColorFilter(android.graphics.Color.parseColor("#00D4FF")) }
-                    else ivFileIcon.setImageResource(android.R.drawable.ic_menu_agenda)
-                    tvFileDetails.text = "$sizeString • $dateString"
-                }
+                tvFileDetails.visibility = View.VISIBLE
+                ivFileIcon.setColorFilter(android.graphics.Color.parseColor("#AAAAAA"))
+                if (file.name.endsWith(".zip", true)) { ivFileIcon.setImageResource(android.R.drawable.ic_menu_save); ivFileIcon.setColorFilter(android.graphics.Color.parseColor("#FFAA00")) }
+                else if (file.name.endsWith(".apk", true)) { ivFileIcon.setImageResource(android.R.drawable.ic_menu_manage); ivFileIcon.setColorFilter(android.graphics.Color.parseColor("#00D4FF")) }
+                else if (file.name.endsWith(".jpg", true) || file.name.endsWith(".png", true)) { ivFileIcon.setImageResource(android.R.drawable.ic_menu_gallery) }
+                else ivFileIcon.setImageResource(android.R.drawable.ic_menu_agenda)
+                tvFileDetails.text = "$sizeString • $dateString"
             }
             itemView.setOnClickListener { onClick(file) }
             itemView.setOnLongClickListener { onLongClick(file); true }
