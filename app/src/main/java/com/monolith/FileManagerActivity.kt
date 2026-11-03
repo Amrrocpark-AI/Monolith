@@ -1,6 +1,7 @@
 package com.monolith
 
 import android.app.AlertDialog
+import android.content.ContentUris
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -15,6 +16,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.animation.CycleInterpolator
 import android.view.animation.TranslateAnimation
+import android.webkit.MimeTypeMap
 import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -33,7 +35,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import net.lingala.zip4j.ZipFile
-import net.lingala.zip4j.exception.ZipException
 import net.lingala.zip4j.model.ZipParameters
 import net.lingala.zip4j.model.enums.AesKeyStrength
 import net.lingala.zip4j.model.enums.EncryptionMethod
@@ -49,7 +50,6 @@ class FileManagerActivity : AppCompatActivity() {
     private lateinit var tabLayoutFiles: TabLayout
     private lateinit var tvPathTitle: TextView
     
-    // شريط التحديد
     private lateinit var topBarFileManager: LinearLayout
     private lateinit var topBarSelection: LinearLayout
     private lateinit var tvSelectionCount: TextView
@@ -57,16 +57,14 @@ class FileManagerActivity : AppCompatActivity() {
     private var currentDirectory: File = Environment.getExternalStorageDirectory()
     private var allFiles: MutableList<File> = mutableListOf()
     private var galleryImages: MutableList<File> = mutableListOf()
-    
-    // تم الإصلاح: List بدلاً من MutableList لتجنب خطأ النوع
-    private var displayedFiles: List<File> = emptyList() 
+    private var galleryUris: MutableList<Uri> = mutableListOf()
+    private var displayedFiles: List<Any> = emptyList()
     
     private var isGalleryMode = false
     private var isSortAscending = true
-    private var sortType = "NAME" // NAME, SIZE, DATE
+    private var sortType = "NAME"
     private var showHiddenFiles = false
 
-    // حالة التحديد المتعدد
     private var isSelectionMode = false
     private val selectedFiles = mutableSetOf<File>()
 
@@ -124,14 +122,8 @@ class FileManagerActivity : AppCompatActivity() {
 
         btnBack.setOnClickListener { handleBackPress() }
         btnCancelSelection.setOnClickListener { clearSelection() }
-        
-        // الفرز
         btnSort.setOnClickListener { showSortDialog() }
-
-        // الحذف الجماعي
         btnDeleteSelected.setOnClickListener { deleteSelectedFiles() }
-        
-        // الضغط الجماعي (ZIP)
         btnZipSelected.setOnClickListener { 
             if (selectedFiles.isNotEmpty()) {
                 showCreateZipDialog(selectedFiles.toList()) 
@@ -167,7 +159,25 @@ class FileManagerActivity : AppCompatActivity() {
                 file.isDirectory -> loadDirectory(file)
                 file.name.endsWith(".apk", ignoreCase = true) -> installApk(file)
                 file.name.endsWith(".zip", ignoreCase = true) -> handleZipFile(file)
-                else -> Toast.makeText(this, "لا يمكن فتح هذا الملف.", Toast.LENGTH_SHORT).show()
+                file.name.endsWith(".jpg", true) || file.name.endsWith(".png", true) || file.name.endsWith(".jpeg", true) || file.name.endsWith(".gif", true) || file.name.endsWith(".webp", true) -> {
+                    val intent = Intent(this, ImageViewerActivity::class.java)
+                    intent.putExtra("image_uri", file.toURI().toString())
+                    startActivity(intent)
+                }
+                else -> {
+                    // فتح الملفات الأخرى بتطبيقات النظام
+                    try {
+                        val uri = FileProvider.getUriForFile(this, "${packageName}.fileprovider", file)
+                        val mimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension.lowercase()) ?: "*/*"
+                        val intent = Intent(Intent.ACTION_VIEW).apply {
+                            setDataAndType(uri, mimeType)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        startActivity(intent)
+                    } catch (e: Exception) {
+                        Toast.makeText(this, "لا يوجد تطبيق لفتح هذا الملف", Toast.LENGTH_SHORT).show()
+                    }
+                }
             }
         }
     }
@@ -177,7 +187,7 @@ class FileManagerActivity : AppCompatActivity() {
             isSelectionMode = true
             topBarFileManager.visibility = View.GONE
             topBarSelection.visibility = View.VISIBLE
-            fileAdapter.setSelectionMode(true) // إظهار كل مربعات الاختيار
+            fileAdapter.setSelectionMode(true)
         }
         toggleSelection(file)
     }
@@ -243,30 +253,42 @@ class FileManagerActivity : AppCompatActivity() {
 
     private fun applyFilterAndSort() {
         val query = etSearchFiles.text.toString()
-        val sourceList = if (isGalleryMode) galleryImages else allFiles
         
-        var filtered = if (query.isEmpty()) sourceList.toList() else sourceList.filter { it.name.contains(query, ignoreCase = true) }
-        
-        if (!isGalleryMode && !showHiddenFiles) {
-            filtered = filtered.filter { !it.name.startsWith(".") }
-        }
+        if (isGalleryMode) {
+            // جلب الصور بالـ Uri
+            var filteredUris = if (query.isEmpty()) galleryUris.toList() else galleryUris.filter { uri -> 
+                // محاولة البحث بالاسم
+                val name = uri.lastPathSegment ?: ""
+                name.contains(query, ignoreCase = true)
+            }
+            
+            // تحويل الـ Uri إلى FileItem للعرض (مؤقت)
+            val fileItems = filteredUris.map { uri -> FileItem(uri = uri) }
+            displayedFiles = fileItems
+            fileAdapter.submitList(displayedFiles, true)
+            tvPathTitle.text = "معرض الصور"
+            
+        } else {
+            val sourceList = allFiles
+            var filtered = if (query.isEmpty()) sourceList.toList() else sourceList.filter { it.name.contains(query, ignoreCase = true) }
+            
+            if (!showHiddenFiles) {
+                filtered = filtered.filter { !it.name.startsWith(".") }
+            }
 
-        val comparator = when (sortType) {
-            "SIZE" -> compareBy<File> { it.length() }
-            "DATE" -> compareBy { it.lastModified() }
-            else -> compareBy { it.name.lowercase() }
-        }
-        
-        var sortedList = if (isSortAscending) filtered.sortedWith(comparator) else filtered.sortedWith(comparator).reversed()
-        
-        // وضع المجلدات أولاً في تبويب الملفات
-        if (!isGalleryMode) {
+            val comparator = when (sortType) {
+                "SIZE" -> compareBy<File> { it.length() }
+                "DATE" -> compareBy { it.lastModified() }
+                else -> compareBy { it.name.lowercase() }
+            }
+            
+            var sortedList = if (isSortAscending) filtered.sortedWith(comparator) else filtered.sortedWith(comparator).reversed()
             sortedList = sortedList.sortedBy { !it.isDirectory }
-        }
 
-        displayedFiles = sortedList
-        fileAdapter.submitList(displayedFiles, isGalleryMode)
-        tvPathTitle.text = if (isGalleryMode) "معرض الصور" else currentDirectory.name
+            displayedFiles = sortedList.map { FileItem(file = it) }
+            fileAdapter.submitList(displayedFiles, false)
+            tvPathTitle.text = currentDirectory.name
+        }
     }
 
     // ==========================================
@@ -299,14 +321,26 @@ class FileManagerActivity : AppCompatActivity() {
 
     private fun loadRealGallery() {
         lifecycleScope.launch {
-            val images = withContext(Dispatchers.IO) {
-                val list = mutableListOf<File>()
-                val cursor = contentResolver.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, arrayOf(MediaStore.Images.Media.DATA), null, null, "${MediaStore.Images.Media.DATE_ADDED} DESC")
-                cursor?.use { while (it.moveToNext()) { val f = File(it.getString(it.getColumnIndexOrThrow(MediaStore.Images.Media.DATA))); if (f.exists()) list.add(f) } }
+            val uris = withContext(Dispatchers.IO) {
+                val list = mutableListOf<Uri>()
+                // استخدام MediaStore الحديث لجلب الصور
+                val projection = arrayOf(MediaStore.Images.Media._ID)
+                val cursor = contentResolver.query(
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    projection, null, null, "${MediaStore.Images.Media.DATE_ADDED} DESC"
+                )
+                cursor?.use {
+                    val idColumn = it.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
+                    while (it.moveToNext()) {
+                        val id = it.getLong(idColumn)
+                        val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
+                        list.add(uri)
+                    }
+                }
                 list
             }
             withContext(Dispatchers.Main) {
-                galleryImages = images
+                galleryUris = uris
                 applyFilterAndSort()
             }
         }
@@ -317,7 +351,7 @@ class FileManagerActivity : AppCompatActivity() {
     // ==========================================
     private fun handleZipFile(zipFile: File) {
         try {
-            if (ZipFile(zipFile).isEncrypted) showExtractPasswordDialog(zipFile) else executeExtraction(zipFile, null)
+            if (ZipFile(zipFile).isEncrypted) showExtractPasswordDialog(zipFile) else executeExtraction(zipFile)
         } catch (e: Exception) { Toast.makeText(this, "أرشيف غير صالح", Toast.LENGTH_SHORT).show() }
     }
 
@@ -368,14 +402,13 @@ class FileManagerActivity : AppCompatActivity() {
         dialog.show()
     }
 
-    private fun executeExtraction(zipFile: File, password: String?) {
+    private fun executeExtraction(zipFile: File) {
         lifecycleScope.launch {
             val success = withContext(Dispatchers.IO) {
                 try {
                     val dest = File(zipFile.parentFile, zipFile.nameWithoutExtension)
                     if (!dest.exists()) dest.mkdirs()
                     val zip = ZipFile(zipFile)
-                    if (password != null) zip.setPassword(password.toCharArray())
                     zip.extractAll(dest.absolutePath)
                     true
                 } catch (e: Exception) { false }
@@ -461,20 +494,30 @@ class FileManagerActivity : AppCompatActivity() {
     }
 }
 
+// كلاس جديد لتغليف الملفات والصور
+data class FileItem(
+    val file: File? = null,
+    val uri: Uri? = null,
+    val name: String = file?.name ?: uri?.lastPathSegment ?: "Unknown",
+    val isDirectory: Boolean = file?.isDirectory ?: false,
+    val size: Long = file?.length() ?: 0L,
+    val lastModified: Long = file?.lastModified() ?: 0L
+)
+
 // ==========================================
-// محول القائمة (المعدل لدعم التحديد)
+// محول القائمة (المعدل لدعم التحديد والـ Uri)
 // ==========================================
 class FileAdapter(
     private val onFileClick: (File) -> Unit,
     private val onFileLongClick: (File) -> Unit
 ) : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
     
-    private var files: List<File> = emptyList()
+    private var files: List<FileItem> = emptyList()
     private var isGalleryMode = false
     private var isSelectionMode = false
     private var selectedFiles: Set<File> = emptySet()
 
-    fun submitList(newFiles: List<File>, galleryMode: Boolean) { 
+    fun submitList(newFiles: List<FileItem>, galleryMode: Boolean) { 
         files = newFiles; isGalleryMode = galleryMode; notifyDataSetChanged() 
     }
     
@@ -492,7 +535,8 @@ class FileAdapter(
     }
 
     override fun onBindViewHolder(holder: FileViewHolder, position: Int) {
-        holder.bind(files[position], isGalleryMode, isSelectionMode, selectedFiles.contains(files[position]), onFileClick, onFileLongClick)
+        val item = files[position]
+        holder.bind(item, isGalleryMode, isSelectionMode, item.file != null && selectedFiles.contains(item.file), onFileClick, onFileLongClick)
     }
 
     override fun getItemCount(): Int = files.size
@@ -503,11 +547,25 @@ class FileAdapter(
         private val tvFileDetails: TextView = itemView.findViewById(R.id.tvFileDetails)
         private val cbSelectFile: CheckBox = itemView.findViewById(R.id.cbSelectFile)
 
-        fun bind(file: File, isGallery: Boolean, isSelectionMode: Boolean, isSelected: Boolean, onClick: (File) -> Unit, onLongClick: (File) -> Unit) {
-            tvFileName.text = file.name
-            val dateString = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(file.lastModified()))
+        fun bind(item: FileItem, isGallery: Boolean, isSelectionMode: Boolean, isSelected: Boolean, onClick: (File) -> Unit, onLongClick: (File) -> Unit) {
+            tvFileName.text = item.name
             
-            // إظهار/إخفاء مربع الاختيار بناءً على وضع التحديد
+            if (item.file == null && item.uri != null) {
+                // عرض صورة المعرض
+                Glide.with(itemView.context).load(item.uri).centerCrop().into(ivFileIcon)
+                tvFileDetails.visibility = View.GONE
+                cbSelectFile.visibility = View.GONE
+                itemView.setOnClickListener { 
+                    // عند الضغط على صورة في المعرض، نفتحها
+                    val intent = Intent(itemView.context, ImageViewerActivity::class.java)
+                    intent.putExtra("image_uri", item.uri.toString())
+                    itemView.context.startActivity(intent)
+                }
+                return
+            }
+
+            val file = item.file!!
+            val dateString = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(item.lastModified))
             cbSelectFile.visibility = if (isSelectionMode) View.VISIBLE else View.GONE
             cbSelectFile.isChecked = isSelected
 
