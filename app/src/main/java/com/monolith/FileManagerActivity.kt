@@ -1,7 +1,6 @@
 package com.monolith
 
 import android.app.AlertDialog
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -41,7 +40,6 @@ import net.lingala.zip4j.model.enums.EncryptionMethod
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
-import java.util.Collections
 
 class FileManagerActivity : AppCompatActivity() {
 
@@ -59,7 +57,10 @@ class FileManagerActivity : AppCompatActivity() {
     private var currentDirectory: File = Environment.getExternalStorageDirectory()
     private var allFiles: MutableList<File> = mutableListOf()
     private var galleryImages: MutableList<File> = mutableListOf()
-    private var displayedFiles: MutableList<File> = mutableListOf()
+    
+    // تم الإصلاح: List بدلاً من MutableList لتجنب خطأ النوع
+    private var displayedFiles: List<File> = emptyList() 
+    
     private var isGalleryMode = false
     private var isSortAscending = true
     private var sortType = "NAME" // NAME, SIZE, DATE
@@ -176,6 +177,7 @@ class FileManagerActivity : AppCompatActivity() {
             isSelectionMode = true
             topBarFileManager.visibility = View.GONE
             topBarSelection.visibility = View.VISIBLE
+            fileAdapter.setSelectionMode(true) // إظهار كل مربعات الاختيار
         }
         toggleSelection(file)
     }
@@ -196,6 +198,7 @@ class FileManagerActivity : AppCompatActivity() {
         selectedFiles.clear()
         topBarFileManager.visibility = View.VISIBLE
         topBarSelection.visibility = View.GONE
+        fileAdapter.setSelectionMode(false)
         fileAdapter.updateSelection(selectedFiles)
     }
 
@@ -254,13 +257,14 @@ class FileManagerActivity : AppCompatActivity() {
             else -> compareBy { it.name.lowercase() }
         }
         
-        displayedFiles = if (isSortAscending) filtered.sortedWith(comparator) else filtered.sortedWith(comparator).reversed()
+        var sortedList = if (isSortAscending) filtered.sortedWith(comparator) else filtered.sortedWith(comparator).reversed()
         
         // وضع المجلدات أولاً في تبويب الملفات
         if (!isGalleryMode) {
-            displayedFiles.sortBy { !it.isDirectory }
+            sortedList = sortedList.sortedBy { !it.isDirectory }
         }
 
+        displayedFiles = sortedList
         fileAdapter.submitList(displayedFiles, isGalleryMode)
         tvPathTitle.text = if (isGalleryMode) "معرض الصور" else currentDirectory.name
     }
@@ -323,34 +327,73 @@ class FileManagerActivity : AppCompatActivity() {
         val tilPassword = dialogView.findViewById<TextInputLayout>(R.id.tilExtractPassword)
         val etPassword = dialogView.findViewById<TextInputEditText>(R.id.etExtractPassword)
         val tvError = dialogView.findViewById<TextView>(R.id.tvErrorText)
+        val btnExtract = dialogView.findViewById<MaterialButton>(R.id.btnExtractZip)
 
         dialogView.findViewById<MaterialButton>(R.id.btnCancelExtract).setOnClickListener { dialog.dismiss() }
-        dialogView.findViewById<MaterialButton>(R.id.btnExtractZip).setOnClickListener {
+        btnExtract.setOnClickListener {
             val password = etPassword.text.toString()
-            if (password.isEmpty()) { tvError.text = "أدخل كلمة المرور"; tvError.visibility = View.VISIBLE; return@setOnClickListener }
+            if (password.isEmpty()) { 
+                tvError.text = "أدخل كلمة المرور"; tvError.visibility = View.VISIBLE; return@setOnClickListener 
+            }
             tvError.visibility = View.GONE
-            if (executeExtraction(zipFile, password)) dialog.dismiss() 
-            else { tvError.text = "كلمة المرور خاطئة"; tvError.visibility = View.VISIBLE; tilPassword.boxStrokeColor = android.graphics.Color.RED }
+            btnExtract.isEnabled = false
+            btnExtract.text = "جاري الفك..."
+            
+            lifecycleScope.launch {
+                val success = withContext(Dispatchers.IO) {
+                    try {
+                        val dest = File(zipFile.parentFile, zipFile.nameWithoutExtension)
+                        if (!dest.exists()) dest.mkdirs()
+                        val zip = ZipFile(zipFile)
+                        if (password.isNotEmpty()) zip.setPassword(password.toCharArray())
+                        zip.extractAll(dest.absolutePath)
+                        true
+                    } catch (e: Exception) { false }
+                }
+                
+                if (success) {
+                    dialog.dismiss()
+                    Toast.makeText(this@FileManagerActivity, "تم فك الضغط!", Toast.LENGTH_SHORT).show()
+                    loadDirectory(currentDirectory)
+                } else {
+                    tvError.text = "كلمة المرور خاطئة أو الملف تالف"
+                    tvError.visibility = View.VISIBLE
+                    tilPassword.boxStrokeColor = android.graphics.Color.RED
+                    shakeView(tilPassword)
+                    btnExtract.isEnabled = true
+                    btnExtract.text = "فك الضغط"
+                }
+            }
         }
         dialog.show()
     }
 
-    private fun executeExtraction(zipFile: File, password: String?): Boolean {
-        var success = false
+    private fun executeExtraction(zipFile: File, password: String?) {
         lifecycleScope.launch {
-            try {
-                withContext(Dispatchers.IO) {
+            val success = withContext(Dispatchers.IO) {
+                try {
                     val dest = File(zipFile.parentFile, zipFile.nameWithoutExtension)
                     if (!dest.exists()) dest.mkdirs()
                     val zip = ZipFile(zipFile)
                     if (password != null) zip.setPassword(password.toCharArray())
                     zip.extractAll(dest.absolutePath)
-                    success = true
-                }
-                if (success) { Toast.makeText(this@FileManagerActivity, "تم فك الضغط!", Toast.LENGTH_SHORT).show(); loadDirectory(currentDirectory) }
-            } catch (e: Exception) { success = false }
+                    true
+                } catch (e: Exception) { false }
+            }
+            if (success) {
+                Toast.makeText(this@FileManagerActivity, "تم فك الضغط!", Toast.LENGTH_SHORT).show()
+                loadDirectory(currentDirectory)
+            } else {
+                Toast.makeText(this@FileManagerActivity, "فشل فك الضغط", Toast.LENGTH_SHORT).show()
+            }
         }
-        return success
+    }
+
+    private fun shakeView(view: View) {
+        val shake = TranslateAnimation(0f, 10f, 0f, 0f)
+        shake.duration = 150
+        shake.interpolator = CycleInterpolator(7f)
+        view.startAnimation(shake)
     }
 
     private fun showCreateZipDialog(filesToZip: List<File>) {
@@ -428,11 +471,17 @@ class FileAdapter(
     
     private var files: List<File> = emptyList()
     private var isGalleryMode = false
+    private var isSelectionMode = false
     private var selectedFiles: Set<File> = emptySet()
 
     fun submitList(newFiles: List<File>, galleryMode: Boolean) { 
         files = newFiles; isGalleryMode = galleryMode; notifyDataSetChanged() 
     }
+    
+    fun setSelectionMode(mode: Boolean) {
+        isSelectionMode = mode; notifyDataSetChanged()
+    }
+
     fun updateSelection(selected: Set<File>) {
         selectedFiles = selected; notifyDataSetChanged()
     }
@@ -443,7 +492,7 @@ class FileAdapter(
     }
 
     override fun onBindViewHolder(holder: FileViewHolder, position: Int) {
-        holder.bind(files[position], isGalleryMode, selectedFiles.contains(files[position]), onFileClick, onFileLongClick)
+        holder.bind(files[position], isGalleryMode, isSelectionMode, selectedFiles.contains(files[position]), onFileClick, onFileLongClick)
     }
 
     override fun getItemCount(): Int = files.size
@@ -454,11 +503,12 @@ class FileAdapter(
         private val tvFileDetails: TextView = itemView.findViewById(R.id.tvFileDetails)
         private val cbSelectFile: CheckBox = itemView.findViewById(R.id.cbSelectFile)
 
-        fun bind(file: File, isGallery: Boolean, isSelected: Boolean, onClick: (File) -> Unit, onLongClick: (File) -> Unit) {
+        fun bind(file: File, isGallery: Boolean, isSelectionMode: Boolean, isSelected: Boolean, onClick: (File) -> Unit, onLongClick: (File) -> Unit) {
             tvFileName.text = file.name
             val dateString = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(file.lastModified()))
             
-            cbSelectFile.visibility = if (isSelected || isGallery) View.GONE else View.GONE // سيتم إظهاره برمجياً عند الحاجة لاحقاً
+            // إظهار/إخفاء مربع الاختيار بناءً على وضع التحديد
+            cbSelectFile.visibility = if (isSelectionMode) View.VISIBLE else View.GONE
             cbSelectFile.isChecked = isSelected
 
             if (file.isDirectory) {
