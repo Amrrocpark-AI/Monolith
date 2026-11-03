@@ -90,8 +90,15 @@ dependencies {
     // محرك الضغط والتشفير
     implementation 'net.lingala.zip4j:zip4j:2.11.5'
 
-    // *** تحسينات الأمان الخبيرة ***
-    implementation 'net.zetetic:android-database-sqlcipher:4.5.4' // تشفير قاعدة البيانات
-    implementation 'androidx.sqlite:sqlite-ktx:2.4.0' // دعم SQLCipher
-    implementation 'com.scottyab:rootbeer-lib:0.1.0' // كشف الروت والاختراق
+    // تحسينات الأمان الخبيرة
+    implementation 'net.zetetic:android-database-sqlcipher:4.5.4'
+    implementation 'androidx.sqlite:sqlite-ktx:2.4.0'
+    implementation 'com.scottyab:rootbeer-lib:0.1.0'
+
+    // *** محرك الوسائط السيادي الجديد (Media3 / ExoPlayer) ***
+    implementation 'androidx.media3:media3-exoplayer:1.3.1'
+    implementation 'androidx.media3:media3-ui:1.3.1'
+    implementation 'androidx.media3:media3-session:1.3.1'
+    implementation 'androidx.media3:media3-exoplayer-hls:1.3.1'
+    implementation 'androidx.media3:media3-exoplayer-dash:1.3.1'
 }
