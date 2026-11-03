@@ -75,13 +75,22 @@
             android:textSize="16sp"
             android:layout_marginStart="12dp"/>
             
-        <!-- زر تحديد الكل (تم تغيير الأيقونة) -->
+        <!-- زر تحديد الكل -->
         <ImageButton
             android:id="@+id/btnSelectAll"
             android:layout_width="40dp"
             android:layout_height="40dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_menu_agenda" 
+            android:src="@android:drawable/ic_menu_agenda"
+            app:tint="#00D4FF" />
+
+        <!-- *** زر ضغط الملفات (الذي كان مفقوداً) *** -->
+        <ImageButton
+            android:id="@+id/btnZipSelected"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_save"
             app:tint="#00D4FF" />
     </LinearLayout>
 
@@ -125,7 +134,7 @@
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
-    <!-- 4. شريط التبويبات (الملفات، الصور، الألبومات) -->
+    <!-- 4. شريط التبويبات -->
     <com.google.android.material.tabs.TabLayout
         android:id="@+id/tabLayoutFiles"
         android:layout_width="match_parent"
