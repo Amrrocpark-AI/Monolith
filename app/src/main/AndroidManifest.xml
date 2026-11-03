@@ -2,18 +2,27 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- 1. أذونات الشبكة -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    
+    <!-- 2. أذونات الوسائط (القديمة والحديثة) -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:ignore="ScopedStorage" />
+    
+    <!-- 3. أذونات أخرى -->
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    
+    <!-- *** 4. أذونات تشغيل الوسائط في الخلفية *** -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
-    <!-- تمت إضافة largeHeap و hardwareAccelerated لضمان أداء محرر الصور -->
     <application
         android:allowBackup="true"
         android:label="@string/app_name"
@@ -24,6 +33,7 @@
         android:hardwareAccelerated="true"
         android:theme="@style/Theme.Monolith">
 
+        <!-- شاشة البداية -->
         <activity
             android:name=".SplashActivity"
             android:exported="true"
@@ -34,33 +44,36 @@
             </intent-filter>
         </activity>
 
+        <!-- الشاشة الرئيسية -->
         <activity
             android:name=".MainActivity"
             android:exported="false"
             android:windowSoftInputMode="adjustResize"
             android:configChanges="orientation|screenSize|keyboardHidden" />
 
+        <!-- شاشة القفل -->
         <activity
             android:name=".LockScreenActivity"
             android:exported="false"
             android:configChanges="orientation|screenSize|keyboardHidden" />
 
+        <!-- باقي الشاشات -->
         <activity android:name=".FileManagerActivity" />
         <activity android:name=".ChatActivity" />
         <activity android:name=".SettingsActivity" />
         <activity android:name=".ImageViewerActivity" android:theme="@style/Theme.AppCompat.NoActionBar" />
-        
-        <!-- محرر الصور (مثبت على الوضع الرأسي) -->
-        <activity 
-            android:name=".ImageEditorActivity" 
-            android:theme="@style/Theme.Monolith"
-            android:screenOrientation="portrait" />
+        <activity android:name=".ImageEditorActivity" android:theme="@style/Theme.Monolith" android:screenOrientation="portrait" />
+        <activity android:name=".DispersionEditorActivity" android:theme="@style/Theme.Monolith" android:screenOrientation="portrait" />
 
-        <!-- *** شاشة أداة التشتت الجديدة *** -->
-        <activity 
-            android:name=".DispersionEditorActivity" 
-            android:theme="@style/Theme.Monolith"
-            android:screenOrientation="portrait" />
+        <!-- *** 5. خدمة تشغيل الوسائط في الخلفية (The Playback Service) *** -->
+        <service
+            android:name=".PlaybackService"
+            android:foregroundServiceType="mediaPlayback"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaSessionService" />
+            </intent-filter>
+        </service>
 
         <provider
             android:name="androidx.core.content.FileProvider"
