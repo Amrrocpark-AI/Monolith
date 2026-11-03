@@ -1,7 +1,8 @@
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
-    id 'kotlin-kapt' // ضروري لقاعدة البيانات (Room)
+    // تحسين الخبراء: استبدال kapt البطيء بـ ksp السريع
+    id 'com.google.devtools.ksp' version '1.9.0-1.0.13' 
 }
 
 android {
@@ -16,11 +17,16 @@ android {
         versionName "1.0"
         
         buildConfigField "String", "API_BASE_URL", "\"https://api.groq.com/openai/\""
+        
+        // تحسين الخبراء: دعم الأيقونات المتجهة (أخف وأجمل)
+        vectorDrawables.useSupportLibrary = true
     }
 
     buildTypes {
         release {
-            minifyEnabled false
+            // تحسين الخبراء: تفعيل الحماية وتقليص الحجم في النسخة النهائية
+            minifyEnabled true
+            shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
@@ -52,30 +58,39 @@ android {
 }
 
 dependencies {
+    // أساسيات أندرويد
     implementation 'androidx.core:core-ktx:1.12.0'
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'com.google.android.material:material:1.11.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
     
+    // الشبكة والذكاء الاصطناعي
     implementation 'com.squareup.retrofit2:retrofit:2.11.0'
     implementation 'com.squareup.retrofit2:converter-gson:2.11.0'
     implementation 'com.squareup.okhttp3:logging-interceptor:4.12.0'
     
+    // الصور والوسائط
     implementation 'com.github.bumptech.glide:glide:4.16.0'
     implementation 'com.github.yalantis:ucrop:2.2.8'
     
+    // الأمان والبصمة والرسوم
     implementation 'androidx.security:security-crypto:1.1.0-alpha06'
     implementation 'androidx.biometric:biometric:1.1.0'
     implementation 'com.airbnb.android:lottie:6.4.0'
     
+    // قاعدة البيانات (Room) باستخدام KSP السريع
     implementation 'androidx.room:room-runtime:2.6.1'
     implementation 'androidx.room:room-ktx:2.6.1'
-    kapt 'androidx.room:room-compiler:2.6.1'
+    ksp 'androidx.room:room-compiler:2.6.1'
     
+    // التجهيزات المستقبلية
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
     implementation 'androidx.work:work-runtime-ktx:2.9.0'
     implementation 'androidx.paging:paging-runtime-ktx:3.2.1'
     implementation 'androidx.room:room-paging:2.6.1'
     implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.7.0'
     implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0'
+
+    // *** محرك الضغط والتشفير العسكري (Zip4j) ***
+    implementation 'net.lingala.zip4j:zip4j:2.11.5'
 }
