@@ -1,519 +1,493 @@
 package com.monolith
 
 import android.app.AlertDialog
-import android.content.Context
+import android.content.ContentUris
 import android.content.Intent
-import android.content.SharedPreferences
-import android.graphics.BitmapFactory
-import android.graphics.Color
-import android.graphics.PorterDuff
-import android.graphics.drawable.BitmapDrawable
-import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.VibrationEffect
-import android.os.Vibrator
+import android.os.Environment
+import android.provider.MediaStore
+import android.provider.Settings
 import android.text.Editable
 import android.text.TextWatcher
-import android.view.Gravity
+import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
-import android.view.inputmethod.EditorInfo
-import android.view.inputmethod.InputMethodManager
-import android.widget.EditText
-import android.widget.ImageButton
-import android.widget.ImageView
-import android.widget.LinearLayout
-import android.widget.TextView
-import android.widget.Toast
+import android.view.animation.CycleInterpolator
+import android.view.animation.TranslateAnimation
+import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.AppCompatTextView
+import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
+import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
-import com.google.android.material.bottomsheet.BottomSheetDialog
-import com.google.android.material.card.MaterialCardView
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.floatingactionbutton.FloatingActionButton
+import com.google.android.material.tabs.TabLayout
+import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
-import java.io.InputStream
+import net.lingala.zip4j.ZipFile
+import net.lingala.zip4j.exception.ZipException
+import net.lingala.zip4j.model.ZipParameters
+import net.lingala.zip4j.model.enums.AesKeyStrength
+import net.lingala.zip4j.model.enums.EncryptionMethod
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.*
 
-class ChatActivity : AppCompatActivity() {
+class FileManagerActivity : AppCompatActivity() {
 
-    private val selectedImageUris = mutableListOf<Uri>()
-    private lateinit var etMessage: EditText
-    private lateinit var btnSend: ImageButton
-    private lateinit var imagePreviewContainer: android.widget.HorizontalScrollView
-    private lateinit var previewListContainer: LinearLayout
-    private lateinit var chatContainer: LinearLayout
-    private lateinit var chatScrollView: android.widget.ScrollView
-    private lateinit var tvAppTitle: TextView
+    private lateinit var rvFiles: RecyclerView
+    private lateinit var fileAdapter: FileAdapter
+    private lateinit var etSearchFiles: EditText
+    private lateinit var tabLayoutFiles: TabLayout
+    private lateinit var tvPathTitle: TextView
+    
+    // شريط التحديد
+    private lateinit var topBarFileManager: LinearLayout
+    private lateinit var topBarSelection: LinearLayout
+    private lateinit var tvSelectionCount: TextView
+    
+    private var currentDirectory: File = Environment.getExternalStorageDirectory()
+    private var allFiles: MutableList<File> = mutableListOf()
+    private var galleryImages: MutableList<File> = mutableListOf()
+    
+    // تم تصحيح هذا المتغير ليكون List بدلاً من MutableList
+    private var displayedFiles: List<File> = emptyList() 
+    
+    private var isGalleryMode = false
+    private var isSortAscending = true
+    private var sortType = "NAME" // NAME, SIZE, DATE
+    private var showHiddenFiles = false
 
-    // *** اللون الأزرق الكهربائي الجديد ***
-    private var themeColorHex = "#00D4FF" 
+    // حالة التحديد المتعدد
+    private var isSelectionMode = false
+    private val selectedFiles = mutableSetOf<File>()
 
-    private lateinit var securePrefs: SharedPreferences
-    private lateinit var messageDao: MessageDao
-    private var messageList: MutableList<ChatMessage> = mutableListOf()
-    private val currentConversationId = "main_chat" 
-
-    private val pickImagesLauncher = registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris: List<Uri> ->
-        if (uris.isNotEmpty()) {
-            selectedImageUris.addAll(uris)
-            updatePreviewUi()
-        }
-    }
-
-    private val pickDocumentLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
-        if (uri != null) {
-            try {
-                val mimeType = contentResolver.getType(uri)
-                if (mimeType != null && (mimeType.startsWith("text/") || mimeType.contains("json"))) {
-                    val inputStream: InputStream? = contentResolver.openInputStream(uri)
-                    val text = inputStream?.bufferedReader()?.use { it.readText() } ?: ""
-                    if (text.isNotEmpty()) {
-                        etMessage.setText("محتوى الملف:\n$text")
-                        Toast.makeText(this, "تم قراءة الملف النصي!", Toast.LENGTH_SHORT).show()
-                    }
-                } else {
-                    Toast.makeText(this, "يدعم التطبيق الملفات النصية فقط حالياً.", Toast.LENGTH_LONG).show()
-                }
-            } catch (e: Exception) {
-                Toast.makeText(this, "حدث خطأ أثناء قراءة الملف", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    private val imageViewerLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == RESULT_OK) {
-            val data = result.data
-            val newImageUri = data?.getStringExtra("new_image_uri")
-            val msgId = data?.getStringExtra("message_id")
-            val imgIndex = data?.getIntExtra("image_index", -1) ?: -1
-
-            if (newImageUri != null && msgId != null && imgIndex != -1) {
-                val msgIndex = messageList.indexOfFirst { it.id == msgId }
-                if (msgIndex != -1) {
-                    val msg = messageList[msgIndex]
-                    val newUris = msg.attachmentUris?.toMutableList()
-                    if (newUris != null && imgIndex < newUris.size) {
-                        newUris[imgIndex] = newImageUri
-                        val updatedMsg = msg.copy(attachmentUris = newUris)
-                        messageList[msgIndex] = updatedMsg
-                        saveMessageToDb(updatedMsg)
-                        
-                        chatContainer.removeAllViews()
-                        for (m in messageList) { addChatBubble(chatContainer, m) }
-                    }
-                }
-            }
+    private val requestPermissionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        if (Environment.isExternalStorageManager()) {
+            loadDirectory(currentDirectory)
+        } else {
+            Toast.makeText(this, "نحتاج إذن الوصول للملفات.", Toast.LENGTH_LONG).show()
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_chat)
+        setContentView(R.layout.activity_file_manager)
 
-        ApiClient.init(applicationContext)
-        
-        val db = AppDatabase.getDatabase(applicationContext)
-        messageDao = db.messageDao()
+        rvFiles = findViewById(R.id.rvFiles)
+        etSearchFiles = findViewById(R.id.etSearchFiles)
+        tabLayoutFiles = findViewById(R.id.tabLayoutFiles)
+        tvPathTitle = findViewById(R.id.tvPathTitle)
+        topBarFileManager = findViewById(R.id.topBarFileManager)
+        topBarSelection = findViewById(R.id.topBarSelection)
+        tvSelectionCount = findViewById(R.id.tvSelectionCount)
 
-        val masterKey = MasterKey.Builder(this).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build()
-        securePrefs = EncryptedSharedPreferences.create(
-            this, "SecureSettings", masterKey,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+        val btnBack = findViewById<ImageButton>(R.id.btnBackFileManager)
+        val btnSort = findViewById<ImageButton>(R.id.btnSort)
+        val btnCancelSelection = findViewById<ImageButton>(R.id.btnCancelSelection)
+        val btnDeleteSelected = findViewById<ImageButton>(R.id.btnDeleteSelected)
+        val btnZipSelected = findViewById<ImageButton>(R.id.btnZipSelected)
+        val fabCreateFolder = findViewById<FloatingActionButton>(R.id.fabCreateFolder)
+
+        fileAdapter = FileAdapter(
+            onFileClick = { file -> handleFileClick(file) },
+            onFileLongClick = { file -> handleFileLongClick(file) }
         )
+        
+        rvFiles.layoutManager = LinearLayoutManager(this)
+        rvFiles.adapter = fileAdapter
 
-        etMessage = findViewById(R.id.etMessage)
-        btnSend = findViewById(R.id.btnSend)
-        val btnSettings = findViewById<ImageButton>(R.id.btnSettings)
-        val btnBack = findViewById<ImageButton>(R.id.btnBack)
-        val btnAttach = findViewById<ImageButton>(R.id.btnAttach)
-        val btnMic = findViewById<ImageButton>(R.id.btnMic)
-        val btnVisionToggle = findViewById<ImageButton>(R.id.btnVisionToggle)
-        tvAppTitle = findViewById(R.id.tvAppTitle)
-
-        chatContainer = findViewById(R.id.chatContainer)
-        chatScrollView = findViewById(R.id.chatScrollView)
-        imagePreviewContainer = findViewById(R.id.imagePreviewContainer)
-        previewListContainer = findViewById(R.id.previewListContainer)
-
-        loadMessagesFromDb()
-
-        btnSend.isEnabled = false
-        btnSend.alpha = 0.5f
-
-        etMessage.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                val hasText = !s.isNullOrEmpty()
-                val hasImage = selectedImageUris.isNotEmpty()
-                btnSend.isEnabled = hasText || hasImage
-                btnSend.alpha = if (hasText || hasImage) 1.0f else 0.5f
+        tabLayoutFiles.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
+            override fun onTabSelected(tab: TabLayout.Tab?) {
+                when (tab?.position) {
+                    0 -> { isGalleryMode = false; rvFiles.layoutManager = LinearLayoutManager(this@FileManagerActivity); applyFilterAndSort() }
+                    1 -> { isGalleryMode = true; rvFiles.layoutManager = GridLayoutManager(this@FileManagerActivity, 3); loadRealGallery() }
+                }
             }
+            override fun onTabUnselected(tab: TabLayout.Tab?) {}
+            override fun onTabReselected(tab: TabLayout.Tab?) {}
+        })
+
+        etSearchFiles.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { applyFilterAndSort() }
             override fun afterTextChanged(s: Editable?) {}
         })
 
-        btnAttach.setOnClickListener {
-            hideKeyboard()
-            showAttachBottomSheet()
-        }
+        btnBack.setOnClickListener { handleBackPress() }
+        btnCancelSelection.setOnClickListener { clearSelection() }
+        
+        // الفرز
+        btnSort.setOnClickListener { showSortDialog() }
 
-        btnBack.setOnClickListener { finish() }
-        btnSettings.setOnClickListener { startActivity(Intent(this, SettingsActivity::class.java)) }
-        btnMic.setOnClickListener { Toast.makeText(this, "قريباً", Toast.LENGTH_SHORT).show() }
-        btnVisionToggle.setOnClickListener { Toast.makeText(this, "قريباً", Toast.LENGTH_SHORT).show() }
-
-        fun sendMessage() {
-            val apiKey = securePrefs.getString("api_key", null)
-            if (apiKey.isNullOrEmpty()) {
-                showSetupDialog()
-                return
-            }
-
-            try {
-                val message = etMessage.text.toString().trim()
-                if (message.isNotEmpty() || selectedImageUris.isNotEmpty()) {
-
-                    vibratePhone()
-
-                    val userMsg = ChatMessage(
-                        role = MessageRole.USER,
-                        content = message,
-                        attachmentUris = selectedImageUris.map { it.toString() },
-                        colorHex = themeColorHex
-                    )
-                    messageList.add(userMsg)
-                    saveMessageToDb(userMsg)
-                    addChatBubble(chatContainer, userMsg)
-
-                    selectedImageUris.clear()
-                    updatePreviewUi()
-                    etMessage.text.clear()
-                    hideKeyboard()
-
-                    val aiMsg = ChatMessage(role = MessageRole.AI, content = "جاري التفكير...", colorHex = "#2A2A2A")
-                    messageList.add(aiMsg)
-                    val aiMsgIndex = messageList.size - 1 
-                    addChatBubble(chatContainer, aiMsg)
-                    
-                    chatScrollView.post { chatScrollView.fullScroll(android.widget.ScrollView.FOCUS_DOWN) }
-
-                    val apiMessages = mutableListOf<Message>()
-                    apiMessages.add(Message(role = "system", content = "أنت Monolith، ذكاء اصطناعي سيادي متقدم."))
-                    val recentHistory = messageList.takeLast(15)
-                    for (msg in recentHistory) {
-                        if (msg.role == MessageRole.USER) {
-                            apiMessages.add(Message(role = "user", content = msg.content))
-                        } else if (msg.role == MessageRole.AI && msg.content != "جاري التفكير...") {
-                            apiMessages.add(Message(role = "assistant", content = msg.content))
-                        }
-                    }
-
-                    val request = ChatRequest(model = "llama3-8b-8192", messages = apiMessages, temperature = 0.7f, maxTokens = 2048)
-
-                    ApiClient.service.sendMessage(
-                        url = "v1/chat/completions", 
-                        headers = emptyMap(), 
-                        request = request
-                    ).enqueue(object : Callback<ChatResponse> {
-                        override fun onResponse(call: Call<ChatResponse>, response: Response<ChatResponse>) {
-                            runOnUiThread {
-                                if (response.isSuccessful) {
-                                    val reply = response.body()?.choices?.firstOrNull()?.message?.content ?: "لم يتم استلام رد."
-                                    val updatedMsg = aiMsg.copy(content = reply)
-                                    messageList[aiMsgIndex] = updatedMsg
-                                    saveMessageToDb(updatedMsg)
-                                    
-                                    chatContainer.removeAllViews()
-                                    for (m in messageList) { addChatBubble(chatContainer, m) }
-                                    chatScrollView.post { chatScrollView.fullScroll(android.widget.ScrollView.FOCUS_DOWN) }
-                                } else {
-                                    handleApiError(aiMsgIndex, "خطأ: ${response.code()}")
-                                }
-                            }
-                        }
-                        override fun onFailure(call: Call<ChatResponse>, t: Throwable) {
-                            runOnUiThread { handleApiError(aiMsgIndex, t.message ?: "خطأ غير معروف") }
-                        }
-                    })
-                }
-            } catch (e: Exception) {
-                Toast.makeText(this, "حدث خطأ: ${e.message}", Toast.LENGTH_LONG).show()
+        // الحذف الجماعي
+        btnDeleteSelected.setOnClickListener { deleteSelectedFiles() }
+        
+        // الضغط الجماعي (ZIP)
+        btnZipSelected.setOnClickListener { 
+            if (selectedFiles.isNotEmpty()) {
+                showCreateZipDialog(selectedFiles.toList()) 
             }
         }
 
-        btnSend.setOnClickListener { sendMessage() }
-        etMessage.setOnEditorActionListener { _, actionId, _ ->
-            if (actionId == EditorInfo.IME_ACTION_SEND) { sendMessage(); true } else { false }
+        fabCreateFolder.setOnClickListener { showCreateFolderDialog() }
+
+        checkAndRequestPermission()
+    }
+
+    private fun handleBackPress() {
+        if (isSelectionMode) {
+            clearSelection()
+        } else {
+            val parent = currentDirectory.parentFile
+            if (parent != null) loadDirectory(parent) else finish()
         }
     }
 
-    private fun loadMessagesFromDb() {
-        lifecycleScope.launch {
-            try {
-                val entities = messageDao.getMessagesForConversation(currentConversationId)
-                messageList = entities.map { it.toChatMessage() }.toMutableList()
-                withContext(Dispatchers.Main) {
-                    chatContainer.removeAllViews()
-                    for (msg in messageList) { addChatBubble(chatContainer, msg) }
-                    chatScrollView.post { chatScrollView.fullScroll(android.widget.ScrollView.FOCUS_DOWN) }
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
+    override fun onBackPressed() {
+        handleBackPress()
+    }
+
+    // ==========================================
+    // إدارة التحديد المتعدد
+    // ==========================================
+    private fun handleFileClick(file: File) {
+        if (isSelectionMode) {
+            toggleSelection(file)
+        } else {
+            when {
+                file.isDirectory -> loadDirectory(file)
+                file.name.endsWith(".apk", ignoreCase = true) -> installApk(file)
+                file.name.endsWith(".zip", ignoreCase = true) -> handleZipFile(file)
+                else -> Toast.makeText(this, "لا يمكن فتح هذا الملف.", Toast.LENGTH_SHORT).show()
             }
         }
     }
 
-    private fun saveMessageToDb(msg: ChatMessage) {
-        lifecycleScope.launch {
-            try {
-                messageDao.insertMessage(msg.toMessageEntity(currentConversationId))
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
+    private fun handleFileLongClick(file: File) {
+        if (!isSelectionMode) {
+            isSelectionMode = true
+            topBarFileManager.visibility = View.GONE
+            topBarSelection.visibility = View.VISIBLE
+        }
+        toggleSelection(file)
+    }
+
+    private fun toggleSelection(file: File) {
+        if (selectedFiles.contains(file)) selectedFiles.remove(file) else selectedFiles.add(file)
+        
+        if (selectedFiles.isEmpty()) {
+            clearSelection()
+        } else {
+            tvSelectionCount.text = "تم تحديد ${selectedFiles.size} عنصر"
+            fileAdapter.updateSelection(selectedFiles)
         }
     }
 
-    private fun MessageEntity.toChatMessage(): ChatMessage {
-        return ChatMessage(
-            id = this.id,
-            role = if (this.role == "USER") MessageRole.USER else MessageRole.AI,
-            content = this.content,
-            attachmentUris = this.attachmentUris?.split(",")?.filter { it.isNotEmpty() },
-            colorHex = if (this.role == "USER") themeColorHex else "#2A2A2A",
-            timestamp = this.timestamp
-        )
+    private fun clearSelection() {
+        isSelectionMode = false
+        selectedFiles.clear()
+        topBarFileManager.visibility = View.VISIBLE
+        topBarSelection.visibility = View.GONE
+        fileAdapter.updateSelection(selectedFiles)
     }
 
-    private fun ChatMessage.toMessageEntity(convId: String): MessageEntity {
-        return MessageEntity(
-            id = this.id,
-            conversationId = convId,
-            senderId = if (this.role == MessageRole.USER) "me" else "ai",
-            role = this.role.name,
-            content = this.content,
-            timestamp = this.timestamp,
-            attachmentUris = this.attachmentUris?.joinToString(","),
-            isEncrypted = false
-        )
-    }
-
-    private fun showSetupDialog() {
+    private fun deleteSelectedFiles() {
         AlertDialog.Builder(this)
-            .setTitle("المحرك غير متصل")
-            .setMessage("مرحباً بك في Monolith. يرجى تهيئة المحرك الذكي للبدء.")
-            .setPositiveButton("الذهاب للإعدادات") { _, _ -> startActivity(Intent(this, SettingsActivity::class.java)) }
+            .setTitle("حذف العناصر")
+            .setMessage("هل أنت متأكد من حذف ${selectedFiles.size} عنصر؟")
+            .setPositiveButton("حذف") { _, _ ->
+                lifecycleScope.launch(Dispatchers.IO) {
+                    selectedFiles.forEach { 
+                        if (it.isDirectory) it.deleteRecursively() else it.delete() 
+                    }
+                    withContext(Dispatchers.Main) {
+                        clearSelection()
+                        loadDirectory(currentDirectory)
+                        Toast.makeText(this@FileManagerActivity, "تم الحذف", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
             .setNegativeButton("إلغاء", null)
             .show()
     }
 
-    private fun handleApiError(aiMsgIndex: Int, errorMessage: String) {
-        if (aiMsgIndex < messageList.size) {
-            messageList.removeAt(aiMsgIndex)
-            chatContainer.removeAllViews()
-            for (m in messageList) { addChatBubble(chatContainer, m) }
-        }
-        Toast.makeText(this, errorMessage, Toast.LENGTH_LONG).show()
-        if (errorMessage.contains("مصادقة") || errorMessage.contains("مهيأ")) { showSetupDialog() }
-    }
-
-    private fun updatePreviewUi() {
-        previewListContainer.removeAllViews()
-        if (selectedImageUris.isEmpty()) {
-            imagePreviewContainer.visibility = LinearLayout.GONE
-            btnSend.isEnabled = etMessage.text.isNotEmpty()
-            btnSend.alpha = if (btnSend.isEnabled) 1.0f else 0.5f
-        } else {
-            imagePreviewContainer.visibility = LinearLayout.VISIBLE
-            btnSend.isEnabled = true
-            btnSend.alpha = 1.0f
-            for ((index, uri) in selectedImageUris.withIndex()) {
-                val cardView = MaterialCardView(this)
-                val cardParams = LinearLayout.LayoutParams(dpToPx(50), dpToPx(50))
-                cardParams.setMargins(0, 0, dpToPx(8), 0)
-                cardView.layoutParams = cardParams
-                cardView.radius = dpToPx(8).toFloat()
-                cardView.setCardElevation(0f)
-
-                val relativeLayout = android.widget.RelativeLayout(this)
-                val imageView = ImageView(this)
-                imageView.layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-                imageView.scaleType = ImageView.ScaleType.CENTER_CROP
-                Glide.with(this).load(uri).into(imageView)
-                relativeLayout.addView(imageView)
-
-                val btnRemove = AppCompatTextView(this)
-                val btnParams = android.widget.RelativeLayout.LayoutParams(dpToPx(18), dpToPx(18))
-                btnParams.addRule(android.widget.RelativeLayout.ALIGN_PARENT_TOP)
-                btnParams.addRule(android.widget.RelativeLayout.ALIGN_PARENT_END)
-                btnRemove.layoutParams = btnParams
-                btnRemove.text = "X"
-                btnRemove.setTextColor(Color.WHITE)
-                btnRemove.textSize = 10f
-                btnRemove.gravity = Gravity.CENTER
-                btnRemove.setBackgroundResource(R.drawable.bg_circle_dark)
-                btnRemove.setOnClickListener {
-                    selectedImageUris.removeAt(index)
-                    updatePreviewUi()
+    // ==========================================
+    // الفرز
+    // ==========================================
+    private fun showSortDialog() {
+        val options = arrayOf("الاسم", "الحجم", "التاريخ", "عرض الملفات المخفية")
+        AlertDialog.Builder(this)
+            .setTitle("ترتيب حسب")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> { sortType = "NAME"; isSortAscending = !isSortAscending }
+                    1 -> { sortType = "SIZE"; isSortAscending = !isSortAscending }
+                    2 -> { sortType = "DATE"; isSortAscending = !isSortAscending }
+                    3 -> { showHiddenFiles = !showHiddenFiles }
                 }
-                relativeLayout.addView(btnRemove)
-                cardView.addView(relativeLayout)
-                previewListContainer.addView(cardView)
+                applyFilterAndSort()
+            }
+            .show()
+    }
+
+    private fun applyFilterAndSort() {
+        val query = etSearchFiles.text.toString()
+        val sourceList = if (isGalleryMode) galleryImages else allFiles
+        
+        var filtered = if (query.isEmpty()) sourceList.toList() else sourceList.filter { it.name.contains(query, ignoreCase = true) }
+        
+        if (!isGalleryMode && !showHiddenFiles) {
+            filtered = filtered.filter { !it.name.startsWith(".") }
+        }
+
+        val comparator = when (sortType) {
+            "SIZE" -> compareBy<File> { it.length() }
+            "DATE" -> compareBy { it.lastModified() }
+            else -> compareBy { it.name.lowercase() }
+        }
+        
+        var sortedList = if (isSortAscending) filtered.sortedWith(comparator) else filtered.sortedWith(comparator).reversed()
+        
+        // وضع المجلدات أولاً في تبويب الملفات
+        if (!isGalleryMode) {
+            sortedList = sortedList.sortedBy { !it.isDirectory }
+        }
+
+        displayedFiles = sortedList
+        fileAdapter.submitList(displayedFiles, isGalleryMode)
+        tvPathTitle.text = if (isGalleryMode) "معرض الصور" else currentDirectory.name
+    }
+
+    // ==========================================
+    // العمليات الأساسية (تثبيت، إنشاء، معرض)
+    // ==========================================
+    private fun installApk(apkFile: File) {
+        try {
+            val intent = Intent(Intent.ACTION_VIEW)
+            intent.setDataAndType(FileProvider.getUriForFile(this, "${packageName}.fileprovider", apkFile), "application/vnd.android.package-archive")
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            startActivity(intent)
+        } catch (e: Exception) {
+            Toast.makeText(this, "فشل فتح المثبت: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun showCreateFolderDialog() {
+        val input = EditText(this).apply { hint = "اسم المجلد" }
+        AlertDialog.Builder(this)
+            .setTitle("إنشاء مجلد جديد").setView(input)
+            .setPositiveButton("إنشاء") { _, _ ->
+                val name = input.text.toString().trim()
+                if (name.isNotEmpty()) {
+                    val newFolder = File(currentDirectory, name)
+                    if (newFolder.mkdirs()) { loadDirectory(currentDirectory); Toast.makeText(this, "تم الإنشاء", Toast.LENGTH_SHORT).show() }
+                    else { Toast.makeText(this, "فشل (موجود مسبقاً)", Toast.LENGTH_SHORT).show() }
+                }
+            }.setNegativeButton("إلغاء", null).show()
+    }
+
+    private fun loadRealGallery() {
+        lifecycleScope.launch {
+            val images = withContext(Dispatchers.IO) {
+                val list = mutableListOf<File>()
+                val cursor = contentResolver.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, arrayOf(MediaStore.Images.Media.DATA), null, null, "${MediaStore.Images.Media.DATE_ADDED} DESC")
+                cursor?.use { while (it.moveToNext()) { val f = File(it.getString(it.getColumnIndexOrThrow(MediaStore.Images.Media.DATA))); if (f.exists()) list.add(f) } }
+                list
+            }
+            withContext(Dispatchers.Main) {
+                galleryImages = images
+                applyFilterAndSort()
             }
         }
     }
 
-    private fun dpToPx(dp: Int): Int = (dp * resources.displayMetrics.density).toInt()
-
-    private fun showAttachBottomSheet() {
-        val bottomSheetDialog = BottomSheetDialog(this)
-        val bottomSheetView = layoutInflater.inflate(R.layout.bottom_sheet_attach, null)
-        bottomSheetDialog.setContentView(bottomSheetView)
-
-        bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionImage)?.setOnClickListener {
-            bottomSheetDialog.dismiss(); pickImagesLauncher.launch("image/*")
-        }
-        bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionDocument)?.setOnClickListener {
-            bottomSheetDialog.dismiss(); pickDocumentLauncher.launch(arrayOf("text/plain", "text/*", "application/json"))
-        }
-        bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionAudio)?.setOnClickListener { bottomSheetDialog.dismiss() }
-        bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionSearch)?.setOnClickListener { bottomSheetDialog.dismiss() }
-        bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionCamera)?.setOnClickListener { bottomSheetDialog.dismiss() }
-        bottomSheetView.findViewById<LinearLayout>(R.id.btnOptionAI)?.setOnClickListener { bottomSheetDialog.dismiss() }
-
-        bottomSheetDialog.show()
-    }
-
-    private fun hideKeyboard() {
-        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-        imm.hideSoftInputFromWindow(etMessage.windowToken, 0)
-    }
-
-    private fun vibratePhone() {
+    // ==========================================
+    // محرك ZIP (الضغط والفك)
+    // ==========================================
+    private fun handleZipFile(zipFile: File) {
         try {
-            val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator.vibrate(VibrationEffect.createOneShot(40, VibrationEffect.DEFAULT_AMPLITUDE))
-            } else {
-                @Suppress("DEPRECATION")
-                vibrator.vibrate(40)
-            }
-        } catch (e: Exception) {}
+            if (ZipFile(zipFile).isEncrypted) showExtractPasswordDialog(zipFile) else executeExtraction(zipFile, null)
+        } catch (e: Exception) { Toast.makeText(this, "أرشيف غير صالح", Toast.LENGTH_SHORT).show() }
     }
 
-    override fun onResume() {
-        super.onResume()
-        try {
-            val settingsPrefs = getSharedPreferences("Settings", MODE_PRIVATE)
-            val rootLayout = findViewById<LinearLayout>(R.id.rootLayout)
-            // اللون الافتراضي أصبح أزرق كهربائي
-            themeColorHex = settingsPrefs.getString("AppThemeColor", "#00D4FF") ?: "#00D4FF"
-            val themeColor = Color.parseColor(themeColorHex)
+    private fun showExtractPasswordDialog(zipFile: File) {
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_extract_zip, null)
+        val dialog = AlertDialog.Builder(this).setView(dialogView).setCancelable(false).create()
+        val tilPassword = dialogView.findViewById<TextInputLayout>(R.id.tilExtractPassword)
+        val etPassword = dialogView.findViewById<TextInputEditText>(R.id.etExtractPassword)
+        val tvError = dialogView.findViewById<TextView>(R.id.tvErrorText)
 
-            tvAppTitle.setTextColor(themeColor)
-            btnSend.setColorFilter(themeColor, PorterDuff.Mode.SRC_IN)
-            findViewById<ImageButton>(R.id.btnAttach).setColorFilter(themeColor, PorterDuff.Mode.SRC_IN)
+        dialogView.findViewById<MaterialButton>(R.id.btnCancelExtract).setOnClickListener { dialog.dismiss() }
+        dialogView.findViewById<MaterialButton>(R.id.btnExtractZip).setOnClickListener {
+            val password = etPassword.text.toString()
+            if (password.isEmpty()) { tvError.text = "أدخل كلمة المرور"; tvError.visibility = View.VISIBLE; return@setOnClickListener }
+            tvError.visibility = View.GONE
+            if (executeExtraction(zipFile, password)) dialog.dismiss() 
+            else { tvError.text = "كلمة المرور خاطئة"; tvError.visibility = View.VISIBLE; tilPassword.boxStrokeColor = android.graphics.Color.RED }
+        }
+        dialog.show()
+    }
 
-            val imageUriString = settingsPrefs.getString("AppBackgroundImage", null)
-            if (imageUriString != null) {
-                try {
-                    val uri = Uri.parse(imageUriString)
-                    val inputStream = contentResolver.openInputStream(uri)
-                    val options = BitmapFactory.Options().apply { inSampleSize = 2 }
-                    rootLayout.background = BitmapDrawable(resources, BitmapFactory.decodeStream(inputStream, null, options))
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        rootLayout.foreground = android.graphics.drawable.ColorDrawable(Color.parseColor("#99000000"))
+    private fun executeExtraction(zipFile: File, password: String?): Boolean {
+        var success = false
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    val dest = File(zipFile.parentFile, zipFile.nameWithoutExtension)
+                    if (!dest.exists()) dest.mkdirs()
+                    val zip = ZipFile(zipFile)
+                    if (password != null) zip.setPassword(password.toCharArray())
+                    zip.extractAll(dest.absolutePath)
+                    success = true
+                }
+                if (success) { Toast.makeText(this@FileManagerActivity, "تم فك الضغط!", Toast.LENGTH_SHORT).show(); loadDirectory(currentDirectory) }
+            } catch (e: Exception) { success = false }
+        }
+        return success
+    }
+
+    private fun showCreateZipDialog(filesToZip: List<File>) {
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_create_zip, null)
+        val dialog = AlertDialog.Builder(this).setView(dialogView).create()
+        val etZipName = dialogView.findViewById<EditText>(R.id.etZipName)
+        val etZipPassword = dialogView.findViewById<TextInputEditText>(R.id.etZipPassword)
+        
+        etZipName.setText(if (filesToZip.size == 1) filesToZip[0].nameWithoutExtension else "Archive_${System.currentTimeMillis()}")
+        
+        dialogView.findViewById<MaterialButton>(R.id.btnCancelZip).setOnClickListener { dialog.dismiss() }
+        dialogView.findViewById<MaterialButton>(R.id.btnCreateZip).setOnClickListener {
+            val name = etZipName.text.toString().trim()
+            if (name.isEmpty()) return@setOnClickListener
+            dialog.dismiss()
+            executeZipCreation(filesToZip, name, etZipPassword.text.toString())
+        }
+        dialog.show()
+    }
+
+    private fun executeZipCreation(files: List<File>, zipName: String, password: String) {
+        Toast.makeText(this, "جاري الضغط...", Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    val dest = File(currentDirectory, "$zipName.zip")
+                    val params = ZipParameters().apply {
+                        if (password.isNotEmpty()) {
+                            isEncryptFiles = true; encryptionMethod = EncryptionMethod.AES; aesKeyStrength = AesKeyStrength.KEY_STRENGTH_256
+                        }
                     }
-                } catch (e: Exception) { applyColorBackground(settingsPrefs, rootLayout) }
-            } else {
-                applyColorBackground(settingsPrefs, rootLayout)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) rootLayout.foreground = null
-            }
-
-            val savedColor = settingsPrefs.getString("AppBackground", "#0A0A0A") ?: "#0A0A0A"
-            if (savedColor == "#FFFFFF" && imageUriString == null) {
-                etMessage.setTextColor(Color.BLACK); etMessage.setHintTextColor(Color.GRAY)
-                findViewById<ImageButton>(R.id.btnBack).setColorFilter(Color.BLACK, PorterDuff.Mode.SRC_IN)
-                findViewById<ImageButton>(R.id.btnSettings).setColorFilter(Color.BLACK, PorterDuff.Mode.SRC_IN)
-                findViewById<ImageButton>(R.id.btnVisionToggle).setColorFilter(Color.BLACK, PorterDuff.Mode.SRC_IN)
-            } else {
-                etMessage.setTextColor(Color.WHITE); etMessage.setHintTextColor(Color.parseColor("#666666"))
-                findViewById<ImageButton>(R.id.btnBack).setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN)
-                findViewById<ImageButton>(R.id.btnSettings).setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN)
-                findViewById<ImageButton>(R.id.btnVisionToggle).setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN)
-            }
-        } catch (e: Exception) { e.printStackTrace() }
+                    val zip = if (password.isNotEmpty()) ZipFile(dest, password.toCharArray()) else ZipFile(dest)
+                    files.forEach { if (it.isDirectory) zip.addFolder(it, params) else zip.addFile(it, params) }
+                }
+                withContext(Dispatchers.Main) { Toast.makeText(this@FileManagerActivity, "تم الضغط!", Toast.LENGTH_SHORT).show(); loadDirectory(currentDirectory) }
+            } catch (e: Exception) { withContext(Dispatchers.Main) { Toast.makeText(this@FileManagerActivity, "فشل: ${e.message}", Toast.LENGTH_LONG).show() } }
+        }
     }
 
-    private fun applyColorBackground(sharedPreferences: SharedPreferences, rootLayout: LinearLayout) {
-        rootLayout.setBackgroundColor(Color.parseColor(sharedPreferences.getString("AppBackground", "#0A0A0A") ?: "#0A0A0A"))
+    // ==========================================
+    // تحميل المجلدات والصلاحيات
+    // ==========================================
+    private fun checkAndRequestPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (Environment.isExternalStorageManager()) loadDirectory(currentDirectory)
+            else {
+                val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                    addCategory("android.intent.category.DEFAULT")
+                    data = Uri.parse("package:$packageName")
+                }
+                requestPermissionLauncher.launch(intent)
+            }
+        } else loadDirectory(currentDirectory)
     }
 
-    private fun addChatBubble(container: LinearLayout, msg: ChatMessage) {
-        val messageLayout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+    private fun loadDirectory(dir: File) {
+        currentDirectory = dir
+        lifecycleScope.launch {
+            val files = withContext(Dispatchers.IO) { dir.listFiles()?.toMutableList() ?: mutableListOf() }
+            withContext(Dispatchers.Main) {
+                allFiles = files
+                applyFilterAndSort()
+            }
         }
+    }
+}
 
-        if (!msg.attachmentUris.isNullOrEmpty()) {
-            val scrollView = android.widget.HorizontalScrollView(this)
-            val imageContainer = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-            val imageSizePx = dpToPx(180)
+// ==========================================
+// محول القائمة (المعدل لدعم التحديد)
+// ==========================================
+class FileAdapter(
+    private val onFileClick: (File) -> Unit,
+    private val onFileLongClick: (File) -> Unit
+) : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
+    
+    private var files: List<File> = emptyList()
+    private var isGalleryMode = false
+    private var selectedFiles: Set<File> = emptySet()
 
-            for ((index, uriString) in msg.attachmentUris.withIndex()) {
-                val imageView = ImageView(this).apply {
-                    layoutParams = LinearLayout.LayoutParams(imageSizePx, imageSizePx).apply { setMargins(0, 0, 16, 16) }
-                    scaleType = ImageView.ScaleType.CENTER_CROP
-                    val clip = GradientDrawable().apply { cornerRadius = dpToPx(16).toFloat(); setColor(Color.TRANSPARENT) }
-                    background = clip
-                    clipToOutline = true
+    fun submitList(newFiles: List<File>, galleryMode: Boolean) { 
+        files = newFiles; isGalleryMode = galleryMode; notifyDataSetChanged() 
+    }
+    fun updateSelection(selected: Set<File>) {
+        selectedFiles = selected; notifyDataSetChanged()
+    }
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): FileViewHolder {
+        val view = LayoutInflater.from(parent.context).inflate(R.layout.item_file, parent, false)
+        return FileViewHolder(view)
+    }
+
+    override fun onBindViewHolder(holder: FileViewHolder, position: Int) {
+        holder.bind(files[position], isGalleryMode, selectedFiles.contains(files[position]), onFileClick, onFileLongClick)
+    }
+
+    override fun getItemCount(): Int = files.size
+
+    class FileViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+        private val ivFileIcon: ImageView = itemView.findViewById(R.id.ivFileIcon)
+        private val tvFileName: TextView = itemView.findViewById(R.id.tvFileName)
+        private val tvFileDetails: TextView = itemView.findViewById(R.id.tvFileDetails)
+        private val cbSelectFile: CheckBox = itemView.findViewById(R.id.cbSelectFile)
+
+        fun bind(file: File, isGallery: Boolean, isSelected: Boolean, onClick: (File) -> Unit, onLongClick: (File) -> Unit) {
+            tvFileName.text = file.name
+            val dateString = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(file.lastModified()))
+            
+            cbSelectFile.visibility = if (isSelected) View.VISIBLE else View.GONE
+            cbSelectFile.isChecked = isSelected
+
+            if (file.isDirectory) {
+                ivFileIcon.setImageResource(android.R.drawable.ic_menu_set_as)
+                ivFileIcon.setColorFilter(android.graphics.Color.parseColor("#00D4FF"))
+                tvFileDetails.text = "مجلد • $dateString"
+            } else {
+                val sizeInKb = file.length() / 1024
+                val sizeString = if (sizeInKb > 1024) "${sizeInKb / 1024} MB" else "$sizeInKb KB"
+                val isImage = file.extension.lowercase() in listOf("jpg", "jpeg", "png", "gif", "webp")
+                
+                if (isImage && isGallery) {
+                    Glide.with(itemView.context).load(file).centerCrop().into(ivFileIcon)
+                    tvFileDetails.visibility = View.GONE
+                } else {
+                    tvFileDetails.visibility = View.VISIBLE
+                    ivFileIcon.setColorFilter(android.graphics.Color.parseColor("#AAAAAA"))
+                    if (isImage) ivFileIcon.setImageResource(android.R.drawable.ic_menu_gallery)
+                    else if (file.name.endsWith(".zip", true)) { ivFileIcon.setImageResource(android.R.drawable.ic_menu_save); ivFileIcon.setColorFilter(android.graphics.Color.parseColor("#FFAA00")) }
+                    else if (file.name.endsWith(".apk", true)) { ivFileIcon.setImageResource(android.R.drawable.ic_menu_manage); ivFileIcon.setColorFilter(android.graphics.Color.parseColor("#00D4FF")) }
+                    else ivFileIcon.setImageResource(android.R.drawable.ic_menu_agenda)
+                    tvFileDetails.text = "$sizeString • $dateString"
                 }
-                Glide.with(this).load(uriString).into(imageView)
-                imageView.setOnClickListener {
-                    val intent = Intent(this, ImageViewerActivity::class.java)
-                    intent.putExtra("image_uri", uriString)
-                    intent.putExtra("message_id", msg.id)
-                    intent.putExtra("image_index", index)
-                    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    imageViewerLauncher.launch(intent)
-                }
-                imageContainer.addView(imageView)
             }
-            scrollView.addView(imageContainer)
-            messageLayout.addView(scrollView)
+            itemView.setOnClickListener { onClick(file) }
+            itemView.setOnLongClickListener { onLongClick(file); true }
         }
-
-        if (msg.content.isNotEmpty()) {
-            val textBubble = LinearLayout(this).apply {
-                setPadding(32, 24, 32, 24)
-                background = GradientDrawable().apply { setColor(Color.parseColor(msg.colorHex)); cornerRadius = 40f }
-            }
-            val textView = TextView(this).apply {
-                text = msg.content
-                textSize = 16f
-                setTextColor(if (msg.role == MessageRole.USER) Color.BLACK else Color.WHITE)
-                textDirection = if (msg.role == MessageRole.USER) TextView.TEXT_DIRECTION_RTL else TextView.TEXT_DIRECTION_LOCALE
-                textAlignment = TextView.TEXT_ALIGNMENT_VIEW_START
-            }
-            textBubble.addView(textView)
-            messageLayout.addView(textBubble)
-        }
-
-        if (msg.role == MessageRole.USER) {
-            messageLayout.gravity = Gravity.END
-            messageLayout.setPadding(0, dpToPx(8), 0, dpToPx(8))
-        } else {
-            messageLayout.gravity = Gravity.START
-            messageLayout.setPadding(0, dpToPx(8), 0, dpToPx(8))
-        }
-        container.addView(messageLayout)
     }
 }
