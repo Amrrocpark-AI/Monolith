@@ -1,8 +1,4 @@
-// ميزة الخبراء: تحميل نسخة Java 17 تلقائياً في GitHub Actions
-plugins {
-    id("org.gradle.toolchains.foojay-resolver-convention") version "0.8.0"
-}
-
+// 1. يجب أن يكون هذا القسم أول شيء في الملف (قاعدة Gradle)
 pluginManagement {
     repositories {
         google {
@@ -17,12 +13,17 @@ pluginManagement {
     }
 }
 
+// 2. إضافة Java Toolchains (تأتي بعد pluginManagement)
+plugins {
+    id("org.gradle.toolchains.foojay-resolver-convention") version "0.8.0"
+}
+
+// 3. إدارة المستودعات
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
         google()
         mavenCentral()
-        // مستودع JitPack (ضروري لـ uCrop وبعض المكتبات الأخرى)
         maven { url 'https://jitpack.io' }
     }
 }
