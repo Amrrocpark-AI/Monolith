@@ -4,7 +4,9 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.SystemClock
 import android.view.HapticFeedbackConstants
+import android.view.View
 import android.widget.ImageButton
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.card.MaterialCardView
 
@@ -16,36 +18,42 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        val btnSettings = findViewById<ImageButton>(R.id.btnSettings)
+        // ربط العناصر الجديدة
+        val btnGalleryTop = findViewById<ImageButton>(R.id.btnGalleryTop)
         val btnAIChat = findViewById<MaterialCardView>(R.id.btnAIChat)
-        val btnFileManager = findViewById<android.view.View>(R.id.btnFileManager)
-        val btnImageStudio = findViewById<android.view.View>(R.id.btnImageStudio)
-        val btnTextEditor = findViewById<android.view.View>(R.id.btnTextEditor)
+        val btnImageStudio = findViewById<View>(R.id.btnImageStudio)
+        val btnTextEditor = findViewById<View>(R.id.btnTextEditor)
+        val btnSettings = findViewById<View>(R.id.btnSettings)
 
-        // الانتقالات مع الحماية
-        btnSettings.setOnClickListener { navigateTo(SettingsActivity::class.java) }
-        btnAIChat.setOnClickListener { navigateTo(ChatActivity::class.java) }
-        btnFileManager.setOnClickListener { navigateTo(FileManagerActivity::class.java) }
+        // الانتقالات
+        // 1. زر المعرض (في الأعلى)
+        btnGalleryTop.setOnClickListener { navigateTo(FileManagerActivity::class.java) }
         
-        // استوديو الصور (فوتوشوب) - سنقوم بتطويره لاحقاً، حالياً يفتح محرر الألوان
+        // 2. زر الدردشة (في الأعلى)
+        btnAIChat.setOnClickListener { navigateTo(ChatActivity::class.java) }
+        
+        // 3. استوديو الصور (في الشبكة)
         btnImageStudio.setOnClickListener { navigateTo(ImageEditorActivity::class.java) }
         
-        // محرر النصوص - سنقوم بإنشائه لاحقاً، حالياً يعرض رسالة
+        // 4. محرر النصوص (في الشبكة)
         btnTextEditor.setOnClickListener { 
-            android.widget.Toast.makeText(this, "محرر النصوص قيد التطوير...", android.widget.Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "محرر النصوص قيد التطوير...", Toast.LENGTH_SHORT).show()
         }
+        
+        // 5. الإعدادات (في الشبكة)
+        btnSettings.setOnClickListener { navigateTo(SettingsActivity::class.java) }
     }
 
     private fun navigateTo(targetActivity: Class<*>) {
-        // 1. منع النقر المزدوج
+        // منع النقر المزدوج
         val currentTime = SystemClock.elapsedRealtime()
         if (currentTime - lastClickTime < 1500) return
         lastClickTime = currentTime
 
-        // 2. اهتزاز خفيف
+        // اهتزاز خفيف
         window.decorView.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
 
-        // 3. الانتقال مع تأثير Fade
+        // الانتقال مع تأثير Fade
         startActivity(Intent(this, targetActivity))
         overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
     }
