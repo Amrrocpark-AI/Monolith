@@ -10,22 +10,21 @@
 
     <!-- الدائرة الزجاجية -->
     <com.google.android.material.card.MaterialCardView
-        android:layout_width="72dp"
-        android:layout_height="72dp"
-        app:cardCornerRadius="36dp"
-        app:cardBackgroundColor="#1A1A1A"
-        app:strokeColor="#333333"
-        app:strokeWidth="1dp"
+        android:layout_width="64dp"
+        android:layout_height="64dp"
+        app:cardCornerRadius="32dp"
+        app:cardBackgroundColor="#1A1A1A" 
+        app:strokeWidth="0dp" 
         app:cardElevation="0dp"
-        app:rippleColor="#3300D4FF">
+        app:rippleColor="#33FFFFFF">
 
         <ImageView
             android:id="@+id/ivPinnedIcon"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
             android:layout_gravity="center"
             android:src="@android:drawable/ic_menu_agenda"
-            app:tint="#FFFFFF" />
+            app:tint="#EEEEEE" />
     </com.google.android.material.card.MaterialCardView>
 
     <!-- النص أسفل الدائرة -->
@@ -35,8 +34,8 @@
         android:layout_height="wrap_content"
         android:text="المهملات"
         android:textColor="#AAAAAA"
-        android:textSize="12sp"
-        android:layout_marginTop="8dp"
+        android:textSize="11sp"
+        android:layout_marginTop="6dp"
         android:maxLines="1"
         android:ellipsize="end"/>
 </LinearLayout>
