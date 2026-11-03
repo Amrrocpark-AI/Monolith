@@ -12,6 +12,9 @@ import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.animation.CycleInterpolator
+import android.view.animation.TranslateAnimation
+import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.ImageView
@@ -28,10 +31,12 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import net.lingala.zip4j.ZipFile
+import net.lingala.zip4j.exception.ZipException
 import net.lingala.zip4j.model.ZipParameters
 import net.lingala.zip4j.model.enums.AesKeyStrength
 import net.lingala.zip4j.model.enums.EncryptionMethod
@@ -70,11 +75,13 @@ class FileManagerActivity : AppCompatActivity() {
         val btnBack = findViewById<ImageButton>(R.id.btnBackFileManager)
         val fabCreateFolder = findViewById<FloatingActionButton>(R.id.fabCreateFolder)
 
-        // هنا نضيف حدث الضغط المطول (Long Click) لفتح نافذة ZIP
         fileAdapter = FileAdapter(
             onFileClick = { file ->
                 if (file.isDirectory) {
                     loadDirectory(file)
+                } else if (file.name.endsWith(".zip", ignoreCase = true)) {
+                    // فتح نافذة فك الضغط
+                    handleZipFile(file)
                 } else {
                     Toast.makeText(this, "فتح الملف: ${file.name}", Toast.LENGTH_SHORT).show()
                 }
@@ -127,13 +134,112 @@ class FileManagerActivity : AppCompatActivity() {
     }
 
     // ==========================================
-    // نافذة إنشاء ZIP والتشفير
+    // محرك فك الضغط الحقيقي (The Extraction Engine)
+    // ==========================================
+    private fun handleZipFile(zipFile: File) {
+        try {
+            val zip = ZipFile(zipFile)
+            if (zip.isEncrypted) {
+                // إذا كان مشفراً، نطلب كلمة المرور
+                showExtractPasswordDialog(zipFile)
+            } else {
+                // إذا كان عادياً، نفك الضغط مباشرة
+                executeExtraction(zipFile, null)
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "الملف ليس أرشيفاً صالحاً.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun showExtractPasswordDialog(zipFile: File) {
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_extract_zip, null)
+        val alertDialog = AlertDialog.Builder(this)
+            .setView(dialogView)
+            .setCancelable(false) // لا يمكن إغلاقه إلا بزر الإلغاء
+            .create()
+
+        val tilPassword = dialogView.findViewById<TextInputLayout>(R.id.tilExtractPassword)
+        val etPassword = dialogView.findViewById<TextInputEditText>(R.id.etExtractPassword)
+        val tvError = dialogView.findViewById<TextView>(R.id.tvErrorText)
+        val btnExtract = dialogView.findViewById<MaterialButton>(R.id.btnExtractZip)
+        val btnCancel = dialogView.findViewById<MaterialButton>(R.id.btnCancelExtract)
+
+        btnCancel.setOnClickListener { alertDialog.dismiss() }
+
+        btnExtract.setOnClickListener {
+            val password = etPassword.text.toString()
+            if (password.isEmpty()) {
+                tvError.text = "الرجاء إدخال كلمة المرور"
+                tvError.visibility = View.VISIBLE
+                shakeView(tilPassword)
+                return@setOnClickListener
+            }
+
+            // إخفاء الخطأ
+            tvError.visibility = View.GONE
+            tilPassword.boxStrokeColor = android.graphics.Color.parseColor("#1A1A1A") // لون افتراضي
+
+            // محاولة الفك
+            val success = executeExtraction(zipFile, password)
+            if (success) {
+                alertDialog.dismiss()
+            } else {
+                // كلمة مرور خاطئة!
+                tvError.text = "كلمة المرور غير صحيحة، حاول مجدداً"
+                tvError.visibility = View.VISIBLE
+                tilPassword.boxStrokeColor = android.graphics.Color.RED
+                shakeView(tilPassword)
+            }
+        }
+
+        alertDialog.show()
+    }
+
+    private fun executeExtraction(zipFile: File, password: String?): Boolean {
+        var isSuccess = false
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    val destinationDir = File(zipFile.parentFile, zipFile.nameWithoutExtension)
+                    if (!destinationDir.exists()) destinationDir.mkdirs()
+
+                    val zip = ZipFile(zipFile)
+                    if (password != null) {
+                        zip.setPassword(password.toCharArray())
+                    }
+                    zip.extractAll(destinationDir.absolutePath)
+                    isSuccess = true
+                }
+
+                if (isSuccess) {
+                    Toast.makeText(this@FileManagerActivity, "تم فك الضغط بنجاح!", Toast.LENGTH_SHORT).show()
+                    loadDirectory(currentDirectory)
+                }
+            } catch (e: ZipException) {
+                // خطأ في كلمة المرور أو الملف
+                isSuccess = false
+            } catch (e: Exception) {
+                isSuccess = false
+            }
+        }
+        return isSuccess
+    }
+
+    // تأثير الاهتزاز (Shake Animation)
+    private fun shakeView(view: View) {
+        val shake = TranslateAnimation(0f, 10f, 0f, 0f)
+        shake.duration = 150
+        shake.interpolator = CycleInterpolator(7f)
+        view.startAnimation(shake)
+    }
+
+    // ==========================================
+    // نافذة إنشاء ZIP
     // ==========================================
     private fun showCreateZipDialog(fileToZip: File) {
         val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_create_zip, null)
         val alertDialog = AlertDialog.Builder(this)
             .setView(dialogView)
-            .setCancelable(true)
             .create()
 
         val etZipName = dialogView.findViewById<EditText>(R.id.etZipName)
@@ -142,10 +248,8 @@ class FileManagerActivity : AppCompatActivity() {
         val btnCreate = dialogView.findViewById<MaterialButton>(R.id.btnCreateZip)
         val btnCancel = dialogView.findViewById<MaterialButton>(R.id.btnCancelZip)
 
-        // تعيين اسم افتراضي
         etZipName.setText(fileToZip.nameWithoutExtension)
 
-        // مؤشر قوة كلمة المرور
         etZipPassword.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
@@ -156,11 +260,11 @@ class FileManagerActivity : AppCompatActivity() {
                         tvPasswordStrength.setTextColor(android.graphics.Color.parseColor("#AAAAAA"))
                     }
                     password.length < 6 -> {
-                        tvPasswordStrength.text = "ضعيفة جداً (Red)"
+                        tvPasswordStrength.text = "ضعيفة جداً"
                         tvPasswordStrength.setTextColor(android.graphics.Color.RED)
                     }
                     password.length < 10 -> {
-                        tvPasswordStrength.text = "متوسطة (Yellow)"
+                        tvPasswordStrength.text = "متوسطة"
                         tvPasswordStrength.setTextColor(android.graphics.Color.YELLOW)
                     }
                     else -> {
@@ -190,9 +294,6 @@ class FileManagerActivity : AppCompatActivity() {
         alertDialog.show()
     }
 
-    // ==========================================
-    // محرك الضغط والتشفير (في الخلفية)
-    // ==========================================
     private fun executeZipCreation(sourceFile: File, zipName: String, password: String) {
         Toast.makeText(this, "جاري الضغط...", Toast.LENGTH_SHORT).show()
 
@@ -200,8 +301,6 @@ class FileManagerActivity : AppCompatActivity() {
             try {
                 withContext(Dispatchers.IO) {
                     val destinationFile = File(currentDirectory, "$zipName.zip")
-                    
-                    // إعدادات الضغط
                     val parameters = ZipParameters()
                     if (password.isNotEmpty()) {
                         parameters.isEncryptFiles = true
@@ -215,7 +314,6 @@ class FileManagerActivity : AppCompatActivity() {
                         ZipFile(destinationFile)
                     }
 
-                    // تنفيذ الضغط
                     if (sourceFile.isDirectory) {
                         zipFile.addFolder(sourceFile, parameters)
                     } else {
@@ -225,7 +323,7 @@ class FileManagerActivity : AppCompatActivity() {
 
                 withContext(Dispatchers.Main) {
                     Toast.makeText(this@FileManagerActivity, "تم إنشاء الأرشيف بنجاح!", Toast.LENGTH_LONG).show()
-                    loadDirectory(currentDirectory) // تحديث القائمة
+                    loadDirectory(currentDirectory)
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
@@ -286,7 +384,7 @@ class FileManagerActivity : AppCompatActivity() {
 }
 
 // ==========================================
-// محول القائمة (تم تحديثه لدعم الضغط المطول)
+// محول القائمة
 // ==========================================
 class FileAdapter(
     private val onFileClick: (File) -> Unit,
@@ -344,6 +442,9 @@ class FileAdapter(
                     ivFileIcon.setColorFilter(android.graphics.Color.parseColor("#AAAAAA"))
                     if (isImage) {
                         ivFileIcon.setImageResource(android.R.drawable.ic_menu_gallery)
+                    } else if (file.name.endsWith(".zip", ignoreCase = true)) {
+                        ivFileIcon.setImageResource(android.R.drawable.ic_menu_save) // أيقونة أرشيف
+                        ivFileIcon.setColorFilter(android.graphics.Color.parseColor("#FFAA00")) // لون برتقالي للأرشيف
                     } else {
                         ivFileIcon.setImageResource(android.R.drawable.ic_menu_agenda)
                     }
@@ -351,7 +452,6 @@ class FileAdapter(
                 }
             }
 
-            // ربط أحداث النقر
             itemView.setOnClickListener { onClick(file) }
             itemView.setOnLongClickListener { 
                 onLongClick(file)
