@@ -80,7 +80,8 @@ class FileManagerActivity : AppCompatActivity() {
     private val selectedFiles = mutableSetOf<File>()
     private val selectedImages = mutableSetOf<Uri>()
 
-    private lateinit var virtualAlbumDao: VirtualAlbumDao
+    // تم تغييرها إلى nullable عشان نفتحها في الخلفية
+    private var virtualAlbumDao: VirtualAlbumDao? = null
 
     private val requestPermissionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         if (Environment.isExternalStorageManager()) {
@@ -107,7 +108,7 @@ class FileManagerActivity : AppCompatActivity() {
         // تحميل مكتبة التشفير الجديدة
         System.loadLibrary("sqlcipher")
 
-        // شبكة الأمان: إذا حدث أي خطأ فادح، سيتم عرض رسالته بدلاً من إغلاق التطبيق!
+        // شبكة الأمان
         Thread.setDefaultUncaughtExceptionHandler { _, e ->
             e.printStackTrace()
             runOnUiThread {
@@ -121,12 +122,17 @@ class FileManagerActivity : AppCompatActivity() {
 
         setContentView(R.layout.activity_file_manager)
         
-        try {
-            virtualAlbumDao = AppDatabase.getDatabase(applicationContext).virtualAlbumDao()
-        } catch (e: Exception) {
-            Toast.makeText(this, "خطأ في قاعدة البيانات", Toast.LENGTH_SHORT).show()
-            finish()
-            return
+        // *** الحل السحري: فتح قاعدة البيانات في الخلفية ***
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val db = AppDatabase.getDatabase(applicationContext)
+                virtualAlbumDao = db.virtualAlbumDao()
+            } catch (e: Exception) {
+                e.printStackTrace()
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@FileManagerActivity, "تأخر تحميل قاعدة البيانات", Toast.LENGTH_SHORT).show()
+                }
+            }
         }
 
         initViews()
@@ -632,6 +638,12 @@ class FileManagerActivity : AppCompatActivity() {
     }
 
     private fun loadAlbums() {
+        val dao = virtualAlbumDao
+        if (dao == null) {
+            Toast.makeText(this, "قاعدة البيانات قيد التحميل، حاول بعد لحظات", Toast.LENGTH_SHORT).show()
+            return
+        }
+
         lifecycleScope.launch {
             try {
                 val albumsList = mutableListOf<AlbumItem>()
@@ -655,9 +667,11 @@ class FileManagerActivity : AppCompatActivity() {
                     }
                     bucketMap.forEach { (id, pair) -> albumsList.add(AlbumItem(id, pair.first, pair.second, countMap[id] ?: 0)) }
                 }
-                val virtualAlbums = virtualAlbumDao.getAllAlbums()
+                
+                // استخدام الـ dao هنا
+                val virtualAlbums = dao.getAllAlbums()
                 for (vAlbum in virtualAlbums) {
-                    val mediaUris = virtualAlbumDao.getMediaForAlbum(vAlbum.id)
+                    val mediaUris = dao.getMediaForAlbum(vAlbum.id)
                     val cover = if (mediaUris.isNotEmpty()) Uri.parse(mediaUris.first()) else null
                     albumsList.add(AlbumItem(vAlbum.id, vAlbum.name, cover, mediaUris.size, vAlbum.isVault))
                 }
@@ -691,11 +705,17 @@ class FileManagerActivity : AppCompatActivity() {
     }
 
     private fun showCreateVirtualAlbumDialog() {
+        val dao = virtualAlbumDao
+        if (dao == null) {
+            Toast.makeText(this, "قاعدة البيانات قيد التحميل...", Toast.LENGTH_SHORT).show()
+            return
+        }
+
         try {
             val input = EditText(this).apply { hint = "اسم الألبوم" }
             AlertDialog.Builder(this).setTitle("إنشاء ألبوم").setView(input).setPositiveButton("إنشاء") { _, _ ->
                 val name = input.text.toString().trim()
-                if (name.isNotEmpty()) { lifecycleScope.launch { virtualAlbumDao.insertAlbum(VirtualAlbumEntity(name = name)); loadAlbums() } }
+                if (name.isNotEmpty()) { lifecycleScope.launch { dao.insertAlbum(VirtualAlbumEntity(name = name)); loadAlbums() } }
             }.setNegativeButton("إلغاء", null).show()
         } catch (e: Exception) { e.printStackTrace() }
     }
