@@ -1,5 +1,6 @@
 package com.monolith
 
+import android.app.AlertDialog
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -8,6 +9,8 @@ import android.os.Environment
 import android.provider.Settings
 import android.text.Editable
 import android.text.TextWatcher
+import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.ImageButton
@@ -20,12 +23,22 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.bumptech.glide.Glide
+import com.google.android.material.button.MaterialButton
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.tabs.TabLayout
+import com.google.android.material.textfield.TextInputEditText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import net.lingala.zip4j.ZipFile
+import net.lingala.zip4j.model.ZipParameters
+import net.lingala.zip4j.model.enums.AesKeyStrength
+import net.lingala.zip4j.model.enums.EncryptionMethod
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class FileManagerActivity : AppCompatActivity() {
 
@@ -53,31 +66,36 @@ class FileManagerActivity : AppCompatActivity() {
         rvFiles = findViewById(R.id.rvFiles)
         etSearchFiles = findViewById(R.id.etSearchFiles)
         tabLayoutFiles = findViewById(R.id.tabLayoutFiles)
+        
         val btnBack = findViewById<ImageButton>(R.id.btnBackFileManager)
         val fabCreateFolder = findViewById<FloatingActionButton>(R.id.fabCreateFolder)
 
-        fileAdapter = FileAdapter { file ->
-            if (file.isDirectory) {
-                loadDirectory(file)
-            } else {
-                Toast.makeText(this, "فتح الملف: ${file.name}", Toast.LENGTH_SHORT).show()
+        // هنا نضيف حدث الضغط المطول (Long Click) لفتح نافذة ZIP
+        fileAdapter = FileAdapter(
+            onFileClick = { file ->
+                if (file.isDirectory) {
+                    loadDirectory(file)
+                } else {
+                    Toast.makeText(this, "فتح الملف: ${file.name}", Toast.LENGTH_SHORT).show()
+                }
+            },
+            onFileLongClick = { file ->
+                showCreateZipDialog(file)
             }
-        }
+        )
         
-        // الإعداد الافتراضي: عرض قائمة (List)
         rvFiles.layoutManager = LinearLayoutManager(this)
         rvFiles.adapter = fileAdapter
 
-        // منطق التبويبات (ملفات / معرض)
         tabLayoutFiles.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
             override fun onTabSelected(tab: TabLayout.Tab?) {
                 when (tab?.position) {
-                    0 -> { // تبويب الملفات
+                    0 -> {
                         isGalleryMode = false
                         rvFiles.layoutManager = LinearLayoutManager(this@FileManagerActivity)
                         applyFilter(etSearchFiles.text.toString())
                     }
-                    1 -> { // تبويب المعرض
+                    1 -> {
                         isGalleryMode = true
                         rvFiles.layoutManager = GridLayoutManager(this@FileManagerActivity, 3)
                         applyFilter(etSearchFiles.text.toString())
@@ -88,7 +106,6 @@ class FileManagerActivity : AppCompatActivity() {
             override fun onTabReselected(tab: TabLayout.Tab?) {}
         })
 
-        // منطق البحث
         etSearchFiles.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
@@ -107,6 +124,115 @@ class FileManagerActivity : AppCompatActivity() {
         }
 
         checkAndRequestPermission()
+    }
+
+    // ==========================================
+    // نافذة إنشاء ZIP والتشفير
+    // ==========================================
+    private fun showCreateZipDialog(fileToZip: File) {
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_create_zip, null)
+        val alertDialog = AlertDialog.Builder(this)
+            .setView(dialogView)
+            .setCancelable(true)
+            .create()
+
+        val etZipName = dialogView.findViewById<EditText>(R.id.etZipName)
+        val etZipPassword = dialogView.findViewById<TextInputEditText>(R.id.etZipPassword)
+        val tvPasswordStrength = dialogView.findViewById<TextView>(R.id.tvPasswordStrength)
+        val btnCreate = dialogView.findViewById<MaterialButton>(R.id.btnCreateZip)
+        val btnCancel = dialogView.findViewById<MaterialButton>(R.id.btnCancelZip)
+
+        // تعيين اسم افتراضي
+        etZipName.setText(fileToZip.nameWithoutExtension)
+
+        // مؤشر قوة كلمة المرور
+        etZipPassword.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                val password = s.toString()
+                when {
+                    password.isEmpty() -> {
+                        tvPasswordStrength.text = "بدون تشفير"
+                        tvPasswordStrength.setTextColor(android.graphics.Color.parseColor("#AAAAAA"))
+                    }
+                    password.length < 6 -> {
+                        tvPasswordStrength.text = "ضعيفة جداً (Red)"
+                        tvPasswordStrength.setTextColor(android.graphics.Color.RED)
+                    }
+                    password.length < 10 -> {
+                        tvPasswordStrength.text = "متوسطة (Yellow)"
+                        tvPasswordStrength.setTextColor(android.graphics.Color.YELLOW)
+                    }
+                    else -> {
+                        tvPasswordStrength.text = "قوية (AES-256)"
+                        tvPasswordStrength.setTextColor(android.graphics.Color.GREEN)
+                    }
+                }
+            }
+            override fun afterTextChanged(s: Editable?) {}
+        })
+
+        btnCancel.setOnClickListener { alertDialog.dismiss() }
+
+        btnCreate.setOnClickListener {
+            val zipName = etZipName.text.toString().trim()
+            val password = etZipPassword.text.toString()
+
+            if (zipName.isEmpty()) {
+                Toast.makeText(this, "الرجاء إدخال اسم الملف", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            alertDialog.dismiss()
+            executeZipCreation(fileToZip, zipName, password)
+        }
+
+        alertDialog.show()
+    }
+
+    // ==========================================
+    // محرك الضغط والتشفير (في الخلفية)
+    // ==========================================
+    private fun executeZipCreation(sourceFile: File, zipName: String, password: String) {
+        Toast.makeText(this, "جاري الضغط...", Toast.LENGTH_SHORT).show()
+
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    val destinationFile = File(currentDirectory, "$zipName.zip")
+                    
+                    // إعدادات الضغط
+                    val parameters = ZipParameters()
+                    if (password.isNotEmpty()) {
+                        parameters.isEncryptFiles = true
+                        parameters.encryptionMethod = EncryptionMethod.AES
+                        parameters.aesKeyStrength = AesKeyStrength.KEY_STRENGTH_256
+                    }
+
+                    val zipFile = if (password.isNotEmpty()) {
+                        ZipFile(destinationFile, password.toCharArray())
+                    } else {
+                        ZipFile(destinationFile)
+                    }
+
+                    // تنفيذ الضغط
+                    if (sourceFile.isDirectory) {
+                        zipFile.addFolder(sourceFile, parameters)
+                    } else {
+                        zipFile.addFile(sourceFile, parameters)
+                    }
+                }
+
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@FileManagerActivity, "تم إنشاء الأرشيف بنجاح!", Toast.LENGTH_LONG).show()
+                    loadDirectory(currentDirectory) // تحديث القائمة
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@FileManagerActivity, "فشل الضغط: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
     }
 
     private fun checkAndRequestPermission() {
@@ -141,7 +267,6 @@ class FileManagerActivity : AppCompatActivity() {
         }
     }
 
-    // دالة الفلترة (تعمل مع الملفات والصور)
     private fun applyFilter(query: String) {
         val filteredFiles = if (query.isEmpty()) {
             allFiles
@@ -150,70 +275,88 @@ class FileManagerActivity : AppCompatActivity() {
         }
 
         if (isGalleryMode) {
-            // فلترة الصور فقط في وضع المعرض
             val imageFiles = filteredFiles.filter { 
                 it.extension.lowercase() in listOf("jpg", "jpeg", "png", "gif", "webp") 
             }
-            fileAdapter.submitList(imageFiles)
+            fileAdapter.submitList(imageFiles, isGalleryMode)
         } else {
-            fileAdapter.submitList(filteredFiles)
+            fileAdapter.submitList(filteredFiles, isGalleryMode)
         }
     }
 }
 
-// محول القائمة (تم تعديله ليدعم الأيقونات الخطية الأنيقة)
-class FileAdapter(private val onFileClick: (File) -> Unit) : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
+// ==========================================
+// محول القائمة (تم تحديثه لدعم الضغط المطول)
+// ==========================================
+class FileAdapter(
+    private val onFileClick: (File) -> Unit,
+    private val onFileLongClick: (File) -> Unit
+) : RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
+    
     private var files: List<File> = emptyList()
-    fun submitList(newFiles: List<File>) { files = newFiles; notifyDataSetChanged() }
+    private var isGalleryMode = false
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): FileViewHolder {
-        val layout = android.widget.LinearLayout(parent.context).apply {
-            orientation = android.widget.LinearLayout.HORIZONTAL
-            setPadding(32, 32, 32, 32)
-            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-            gravity = android.view.Gravity.CENTER_VERTICAL
-        }
-        val icon = ImageView(parent.context).apply {
-            layoutParams = ViewGroup.LayoutParams(56, 56)
-            setColorFilter(android.graphics.Color.parseColor("#00D4FF"))
-        }
-        val textLayout = android.widget.LinearLayout(parent.context).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
-            setPadding(24, 0, 0, 0)
-            layoutParams = android.widget.LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-        }
-        val titleText = TextView(parent.context).apply {
-            setTextColor(android.graphics.Color.WHITE)
-            textSize = 16f
-        }
-        val subtitleText = TextView(parent.context).apply {
-            setTextColor(android.graphics.Color.parseColor("#666666"))
-            textSize = 12f
-        }
-        textLayout.addView(titleText)
-        textLayout.addView(subtitleText)
-        layout.addView(icon)
-        layout.addView(textLayout)
-        
-        return FileViewHolder(layout, icon, titleText, subtitleText)
+    fun submitList(newFiles: List<File>, galleryMode: Boolean) { 
+        files = newFiles
+        isGalleryMode = galleryMode
+        notifyDataSetChanged() 
     }
 
-    override fun onBindViewHolder(holder: FileViewHolder, position: Int) = holder.bind(files[position], onFileClick)
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): FileViewHolder {
+        val view = LayoutInflater.from(parent.context).inflate(R.layout.item_file, parent, false)
+        return FileViewHolder(view)
+    }
+
+    override fun onBindViewHolder(holder: FileViewHolder, position: Int) {
+        holder.bind(files[position], isGalleryMode, onFileClick, onFileLongClick)
+    }
+
     override fun getItemCount(): Int = files.size
 
-    class FileViewHolder(itemView: android.view.View, private val icon: ImageView, private val title: TextView, private val subtitle: TextView) : RecyclerView.ViewHolder(itemView) {
-        fun bind(file: File, onClick: (File) -> Unit) {
-            title.text = file.name
+    class FileViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+        private val ivFileIcon: ImageView = itemView.findViewById(R.id.ivFileIcon)
+        private val tvFileName: TextView = itemView.findViewById(R.id.tvFileName)
+        private val tvFileDetails: TextView = itemView.findViewById(R.id.tvFileDetails)
+
+        fun bind(file: File, isGallery: Boolean, onClick: (File) -> Unit, onLongClick: (File) -> Unit) {
+            tvFileName.text = file.name
+
+            val date = Date(file.lastModified())
+            val format = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+            val dateString = format.format(date)
+
             if (file.isDirectory) {
-                icon.setImageResource(android.R.drawable.ic_menu_set_as)
-                subtitle.text = "مجلد"
+                ivFileIcon.setImageResource(android.R.drawable.ic_menu_set_as)
+                ivFileIcon.setColorFilter(android.graphics.Color.parseColor("#00D4FF"))
+                tvFileDetails.text = "مجلد • $dateString"
             } else {
-                icon.setImageResource(android.R.drawable.ic_menu_agenda)
-                // عرض حجم الملف (تقريبي)
                 val sizeInKb = file.length() / 1024
-                subtitle.text = if (sizeInKb > 1024) "${sizeInKb / 1024} MB" else "$sizeInKb KB"
+                val sizeString = if (sizeInKb > 1024) "${sizeInKb / 1024} MB" else "$sizeInKb KB"
+
+                val isImage = file.extension.lowercase() in listOf("jpg", "jpeg", "png", "gif", "webp")
+                
+                if (isImage && isGallery) {
+                    Glide.with(itemView.context)
+                        .load(file)
+                        .centerCrop()
+                        .into(ivFileIcon)
+                } else {
+                    ivFileIcon.setColorFilter(android.graphics.Color.parseColor("#AAAAAA"))
+                    if (isImage) {
+                        ivFileIcon.setImageResource(android.R.drawable.ic_menu_gallery)
+                    } else {
+                        ivFileIcon.setImageResource(android.R.drawable.ic_menu_agenda)
+                    }
+                    tvFileDetails.text = "$sizeString • $dateString"
+                }
             }
+
+            // ربط أحداث النقر
             itemView.setOnClickListener { onClick(file) }
+            itemView.setOnLongClickListener { 
+                onLongClick(file)
+                true 
+            }
         }
     }
 }
