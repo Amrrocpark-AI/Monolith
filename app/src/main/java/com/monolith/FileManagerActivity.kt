@@ -56,9 +56,10 @@ class FileManagerActivity : AppCompatActivity() {
     
     private var currentDirectory: File = Environment.getExternalStorageDirectory()
     private var allFiles: MutableList<File> = mutableListOf()
-    private var galleryImages: MutableList<File> = mutableListOf()
     private var galleryUris: MutableList<Uri> = mutableListOf()
-    private var displayedFiles: List<Any> = emptyList()
+    
+    // *** تم الإصلاح: List<FileItem> بدلاً من List<Any> ***
+    private var displayedFiles: List<FileItem> = emptyList()
     
     private var isGalleryMode = false
     private var isSortAscending = true
@@ -131,7 +132,6 @@ class FileManagerActivity : AppCompatActivity() {
         }
 
         fabCreateFolder.setOnClickListener { showCreateFolderDialog() }
-
         checkAndRequestPermission()
     }
 
@@ -148,9 +148,6 @@ class FileManagerActivity : AppCompatActivity() {
         handleBackPress()
     }
 
-    // ==========================================
-    // إدارة التحديد المتعدد
-    // ==========================================
     private fun handleFileClick(file: File) {
         if (isSelectionMode) {
             toggleSelection(file)
@@ -165,7 +162,6 @@ class FileManagerActivity : AppCompatActivity() {
                     startActivity(intent)
                 }
                 else -> {
-                    // فتح الملفات الأخرى بتطبيقات النظام
                     try {
                         val uri = FileProvider.getUriForFile(this, "${packageName}.fileprovider", file)
                         val mimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension.lowercase()) ?: "*/*"
@@ -194,7 +190,6 @@ class FileManagerActivity : AppCompatActivity() {
 
     private fun toggleSelection(file: File) {
         if (selectedFiles.contains(file)) selectedFiles.remove(file) else selectedFiles.add(file)
-        
         if (selectedFiles.isEmpty()) {
             clearSelection()
         } else {
@@ -232,9 +227,6 @@ class FileManagerActivity : AppCompatActivity() {
             .show()
     }
 
-    // ==========================================
-    // الفرز
-    // ==========================================
     private fun showSortDialog() {
         val options = arrayOf("الاسم", "الحجم", "التاريخ", "عرض الملفات المخفية")
         AlertDialog.Builder(this)
@@ -255,19 +247,12 @@ class FileManagerActivity : AppCompatActivity() {
         val query = etSearchFiles.text.toString()
         
         if (isGalleryMode) {
-            // جلب الصور بالـ Uri
             var filteredUris = if (query.isEmpty()) galleryUris.toList() else galleryUris.filter { uri -> 
-                // محاولة البحث بالاسم
-                val name = uri.lastPathSegment ?: ""
-                name.contains(query, ignoreCase = true)
+                (uri.lastPathSegment ?: "").contains(query, ignoreCase = true)
             }
-            
-            // تحويل الـ Uri إلى FileItem للعرض (مؤقت)
-            val fileItems = filteredUris.map { uri -> FileItem(uri = uri) }
-            displayedFiles = fileItems
+            displayedFiles = filteredUris.map { uri -> FileItem(uri = uri) }
             fileAdapter.submitList(displayedFiles, true)
             tvPathTitle.text = "معرض الصور"
-            
         } else {
             val sourceList = allFiles
             var filtered = if (query.isEmpty()) sourceList.toList() else sourceList.filter { it.name.contains(query, ignoreCase = true) }
@@ -291,9 +276,6 @@ class FileManagerActivity : AppCompatActivity() {
         }
     }
 
-    // ==========================================
-    // العمليات الأساسية (تثبيت، إنشاء، معرض)
-    // ==========================================
     private fun installApk(apkFile: File) {
         try {
             val intent = Intent(Intent.ACTION_VIEW)
@@ -323,7 +305,6 @@ class FileManagerActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val uris = withContext(Dispatchers.IO) {
                 val list = mutableListOf<Uri>()
-                // استخدام MediaStore الحديث لجلب الصور
                 val projection = arrayOf(MediaStore.Images.Media._ID)
                 val cursor = contentResolver.query(
                     MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
@@ -346,9 +327,6 @@ class FileManagerActivity : AppCompatActivity() {
         }
     }
 
-    // ==========================================
-    // محرك ZIP (الضغط والفك)
-    // ==========================================
     private fun handleZipFile(zipFile: File) {
         try {
             if (ZipFile(zipFile).isEncrypted) showExtractPasswordDialog(zipFile) else executeExtraction(zipFile)
@@ -466,9 +444,6 @@ class FileManagerActivity : AppCompatActivity() {
         }
     }
 
-    // ==========================================
-    // تحميل المجلدات والصلاحيات
-    // ==========================================
     private fun checkAndRequestPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             if (Environment.isExternalStorageManager()) loadDirectory(currentDirectory)
@@ -504,9 +479,6 @@ data class FileItem(
     val lastModified: Long = file?.lastModified() ?: 0L
 )
 
-// ==========================================
-// محول القائمة (المعدل لدعم التحديد والـ Uri)
-// ==========================================
 class FileAdapter(
     private val onFileClick: (File) -> Unit,
     private val onFileLongClick: (File) -> Unit
@@ -551,12 +523,10 @@ class FileAdapter(
             tvFileName.text = item.name
             
             if (item.file == null && item.uri != null) {
-                // عرض صورة المعرض
                 Glide.with(itemView.context).load(item.uri).centerCrop().into(ivFileIcon)
                 tvFileDetails.visibility = View.GONE
                 cbSelectFile.visibility = View.GONE
                 itemView.setOnClickListener { 
-                    // عند الضغط على صورة في المعرض، نفتحها
                     val intent = Intent(itemView.context, ImageViewerActivity::class.java)
                     intent.putExtra("image_uri", item.uri.toString())
                     itemView.context.startActivity(intent)
