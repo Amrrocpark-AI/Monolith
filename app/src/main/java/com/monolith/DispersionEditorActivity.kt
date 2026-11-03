@@ -1,115 +1,103 @@
-package com.monolith
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#050505">
 
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.Color
-import android.net.Uri
-import android.os.Bundle
-import android.view.View
-import android.widget.Button
-import android.widget.ImageButton
-import android.widget.ImageView
-import android.widget.SeekBar
-import android.widget.TextView
-import android.widget.Toast
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AppCompatActivity
-import com.google.android.material.button.MaterialButton
-import java.io.InputStream
+    <!-- الشريط العلوي -->
+    <LinearLayout
+        android:id="@+id/topBarDispersion"
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="8dp"
+        android:background="#111111"
+        app:layout_constraintTop_toTopOf="parent">
+        <ImageButton android:id="@+id/btnCloseDispersion" android:layout_width="40dp" android:layout_height="40dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@android:drawable/ic_menu_close_clear_cancel" app:tint="#FFFFFF" />
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="محرك التشتت" android:textColor="#00D4FF" android:textSize="18sp" android:textStyle="bold" android:gravity="center"/>
+        <ImageButton android:id="@+id/btnUndoDispersion" android:layout_width="40dp" android:layout_height="40dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@android:drawable/ic_menu_revert" app:tint="#FFFFFF" />
+        <ImageButton android:id="@+id/btnRedoDispersion" android:layout_width="40dp" android:layout_height="40dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@android:drawable/ic_menu_rotate" app:tint="#FFFFFF" />
+        <Button android:id="@+id/btnApplyDispersion" android:layout_width="wrap_content" android:layout_height="36dp" android:text="تطبيق" android:textColor="#000000" android:backgroundTint="#00D4FF" android:textStyle="bold" android:layout_marginStart="8dp"/>
+    </LinearLayout>
 
-class DispersionEditorActivity : AppCompatActivity() {
+    <!-- شريط اختيار الوضع (فرشاة / سحب / نص) -->
+    <com.google.android.material.tabs.TabLayout
+        android:id="@+id/tabModeDispersion"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#0A0A0A"
+        app:tabIndicatorColor="#00D4FF"
+        app:tabSelectedTextColor="#00D4FF"
+        app:tabTextColor="#666666"
+        app:layout_constraintTop_toBottomOf="@+id/topBarDispersion">
+        <com.google.android.material.tabs.TabItem android:text="فرشاة (تلقائي)" />
+        <com.google.android.material.tabs.TabItem android:text="سحب يدوي" />
+        <com.google.android.material.tabs.TabItem android:text="نص" />
+    </com.google.android.material.tabs.TabLayout>
 
-    private lateinit var ivDispersionImage: ImageView
-    private lateinit var maskDrawingView: MaskDrawingView
-    private lateinit var btnBrushTool: MaterialButton
-    private lateinit var btnEraserTool: MaterialButton
-    private lateinit var sbParticleSize: SeekBar
-    private lateinit var btnPickImageForDispersion: Button
+    <!-- منطقة الصورة والرسم -->
+    <FrameLayout
+        android:id="@+id/imageContainerDispersion"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        app:layout_constraintTop_toBottomOf="@+id/tabModeDispersion"
+        app:layout_constraintBottom_toTopOf="@+id/bottomPanelDispersion">
 
-    private var selectedBitmap: Bitmap? = null
+        <ImageView android:id="@+id/ivDispersionImage" android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="fitCenter" android:background="#000000" />
+        
+        <!-- محرك الجزيئات -->
+        <com.monolith.SovereignParticleView
+            android:id="@+id/particleView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone" />
 
-    // اختيار الصورة من المعرض
-    private val pickImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        if (uri != null) {
-            try {
-                val inputStream: InputStream? = contentResolver.openInputStream(uri)
-                val bitmap = BitmapFactory.decodeStream(inputStream)
-                selectedBitmap = bitmap
-                ivDispersionImage.setImageBitmap(bitmap)
-                btnPickImageForDispersion.visibility = View.GONE // إخفاء الزر بعد اختيار الصورة
-            } catch (e: Exception) {
-                Toast.makeText(this, "فشل تحميل الصورة", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_dispersion_editor)
-
-        // ربط العناصر
-        ivDispersionImage = findViewById(R.id.ivDispersionImage)
-        maskDrawingView = findViewById(R.id.maskDrawingView)
-        btnBrushTool = findViewById(R.id.btnBrushTool)
-        btnEraserTool = findViewById(R.id.btnEraserTool)
-        sbParticleSize = findViewById(R.id.sbParticleSize)
-        btnPickImageForDispersion = findViewById(R.id.btnPickImageForDispersion)
-
-        val btnClose = findViewById<ImageButton>(R.id.btnCloseDispersion)
-        val btnUndo = findViewById<ImageButton>(R.id.btnUndoDispersion)
-        val btnRedo = findViewById<ImageButton>(R.id.btnRedoDispersion)
-        val btnApply = findViewById<Button>(R.id.btnApplyDispersion)
-
-        // 1. اختيار الصورة
-        btnPickImageForDispersion.setOnClickListener {
-            pickImageLauncher.launch("image/*")
-        }
-
-        // 2. أدوات الرسم (فرشاة وممحاة)
-        btnBrushTool.setOnClickListener {
-            maskDrawingView.setEraserMode(false)
-            btnBrushTool.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#00D4FF"))
-            btnBrushTool.setTextColor(Color.BLACK)
+        <!-- فرشاة التحديد -->
+        <com.monolith.MaskDrawingView
+            android:id="@+id/maskDrawingView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
             
-            btnEraserTool.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#333333"))
-            btnEraserTool.setTextColor(Color.WHITE)
-        }
+        <Button android:id="@+id/btnPickImageForDispersion" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="اختر صورة للتشتيت" android:textColor="#000000" android:backgroundTint="#00D4FF" android:layout_gravity="center" />
+    </FrameLayout>
 
-        btnEraserTool.setOnClickListener {
-            maskDrawingView.setEraserMode(true)
-            btnEraserTool.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#00D4FF"))
-            btnEraserTool.setTextColor(Color.BLACK)
-            
-            btnBrushTool.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#333333"))
-            btnBrushTool.setTextColor(Color.WHITE)
-        }
+    <!-- لوحة التحكم السفلية -->
+    <LinearLayout
+        android:id="@+id/bottomPanelDispersion"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#111111"
+        app:layout_constraintBottom_toBottomOf="parent">
 
-        // 3. حجم الفرشاة
-        sbParticleSize.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                // تحويل القيمة إلى حجم مناسب للفرشاة (من 10 إلى 100)
-                val brushSize = (progress + 10).toFloat()
-                maskDrawingView.setBrushSize(brushSize)
-            }
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
-        })
+        <!-- أدوات الفرشاة (تظهر فقط في وضع الفرشاة) -->
+        <LinearLayout
+            android:id="@+id/layoutBrushTools"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:padding="8dp">
+            <Button android:id="@+id/btnBrushTool" android:layout_width="0dp" android:layout_weight="1" android:layout_height="40dp" android:text="فرشاة" android:backgroundTint="#00D4FF" android:textColor="#000000"/>
+            <Button android:id="@+id/btnEraserTool" android:layout_width="0dp" android:layout_weight="1" android:layout_height="40dp" android:layout_marginStart="8dp" android:text="ممحاة" android:backgroundTint="#333333" android:textColor="#FFFFFF"/>
+        </LinearLayout>
 
-        // 4. أزرار التراجع والإعادة
-        btnUndo.setOnClickListener { maskDrawingView.undo() }
-        btnRedo.setOnClickListener { maskDrawingView.redo() }
+        <!-- أشرطة التحكم في التأثير -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
 
-        // 5. زر الإغلاق
-        btnClose.setOnClickListener { finish() }
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="شدة التشتت (Dispersion)" android:textColor="#FFFFFF" android:textSize="14sp" />
+            <SeekBar android:id="@+id/sbDispersionAmount" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" android:progress="50" android:progressTint="#00D4FF" />
 
-        // 6. زر التطبيق (مؤقتاً - سنربطه بمحرك التشتت لاحقاً)
-        btnApply.setOnClickListener {
-            if (selectedBitmap == null) {
-                Toast.makeText(this, "الرجاء اختيار صورة أولاً", Toast.LENGTH_SHORT).show()
-            } else {
-                // هنا سنضع كود محرك التشتت الفعلي
-                Toast.makeText(this, "جاري تجهيز محرك التشتت... (قيد التطوير)", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-}
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="حجم الشظايا (Size)" android:textColor="#FFFFFF" android:textSize="14sp" android:layout_marginTop="8dp"/>
+            <SeekBar android:id="@+id/sbParticleSize" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" android:progress="20" android:progressTint="#00D4FF" />
+
+        </LinearLayout>
+    </LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>
