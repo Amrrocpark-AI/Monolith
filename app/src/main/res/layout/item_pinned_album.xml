@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:paddingHorizontal="8dp"
+    android:layout_marginEnd="4dp">
+
+    <!-- الدائرة الزجاجية -->
+    <com.google.android.material.card.MaterialCardView
+        android:layout_width="72dp"
+        android:layout_height="72dp"
+        app:cardCornerRadius="36dp"
+        app:cardBackgroundColor="#1A1A1A"
+        app:strokeColor="#333333"
+        app:strokeWidth="1dp"
+        app:cardElevation="0dp"
+        app:rippleColor="#3300D4FF">
+
+        <ImageView
+            android:id="@+id/ivPinnedIcon"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_gravity="center"
+            android:src="@android:drawable/ic_menu_agenda"
+            app:tint="#FFFFFF" />
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- النص أسفل الدائرة -->
+    <TextView
+        android:id="@+id/tvPinnedName"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="المهملات"
+        android:textColor="#AAAAAA"
+        android:textSize="12sp"
+        android:layout_marginTop="8dp"
+        android:maxLines="1"
+        android:ellipsize="end"/>
+</LinearLayout>
