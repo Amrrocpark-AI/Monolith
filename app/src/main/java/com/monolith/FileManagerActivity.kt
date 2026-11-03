@@ -51,13 +51,11 @@ class FileManagerActivity : AppCompatActivity() {
     private lateinit var etSearchFiles: EditText
     private lateinit var tabLayoutFiles: TabLayout
     private lateinit var tvPathTitle: TextView
-    
     private lateinit var topBarFileManager: LinearLayout
     private lateinit var topBarSelection: LinearLayout
     private lateinit var tvSelectionCount: TextView
     private lateinit var bottomSelectionBar: LinearLayout
     private lateinit var btnSelectAll: ImageButton
-    
     private lateinit var actionDelete: LinearLayout
     private lateinit var actionShare: LinearLayout
     private lateinit var actionMove: LinearLayout
@@ -95,12 +93,11 @@ class FileManagerActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_file_manager)
         
-        // حماية قاعدة البيانات من الانهيار
         try {
             virtualAlbumDao = AppDatabase.getDatabase(applicationContext).virtualAlbumDao()
         } catch (e: Exception) {
-            Toast.makeText(this, "خطأ في قاعدة البيانات: ${e.message}", Toast.LENGTH_LONG).show()
-            finish() // إغلاق الشاشة بأمان إذا فشلت قاعدة البيانات
+            Toast.makeText(this, "خطأ في قاعدة البيانات", Toast.LENGTH_SHORT).show()
+            finish()
             return
         }
         
@@ -135,17 +132,17 @@ class FileManagerActivity : AppCompatActivity() {
         rvFiles.layoutManager = LinearLayoutManager(this)
         rvFiles.adapter = fileAdapter
 
-        applyCustomColors() // الآن آمنة 100%
-
         tabLayoutFiles.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
             override fun onTabSelected(tab: TabLayout.Tab?) {
-                clearSelection()
-                currentAlbumId = null
-                when (tab?.position) {
-                    0 -> { isGalleryMode = false; isAlbumMode = false; rvFiles.layoutManager = LinearLayoutManager(this@FileManagerActivity); rvFiles.adapter = fileAdapter; fabCreateFolder.visibility = View.VISIBLE; applyFilterAndSort() }
-                    1 -> { isGalleryMode = true; isAlbumMode = false; rvFiles.layoutManager = GridLayoutManager(this@FileManagerActivity, 3); rvFiles.adapter = imageAdapter; fabCreateFolder.visibility = View.GONE; loadRealGallery() }
-                    2 -> { isGalleryMode = false; isAlbumMode = true; rvFiles.layoutManager = GridLayoutManager(this@FileManagerActivity, 2); rvFiles.adapter = albumAdapter; fabCreateFolder.visibility = View.VISIBLE; loadAlbums() }
-                }
+                try {
+                    clearSelection()
+                    currentAlbumId = null
+                    when (tab?.position) {
+                        0 -> { isGalleryMode = false; isAlbumMode = false; rvFiles.layoutManager = LinearLayoutManager(this@FileManagerActivity); rvFiles.adapter = fileAdapter; fabCreateFolder.visibility = View.VISIBLE; applyFilterAndSort() }
+                        1 -> { isGalleryMode = true; isAlbumMode = false; rvFiles.layoutManager = GridLayoutManager(this@FileManagerActivity, 3); rvFiles.adapter = imageAdapter; fabCreateFolder.visibility = View.GONE; loadRealGallery() }
+                        2 -> { isGalleryMode = false; isAlbumMode = true; rvFiles.layoutManager = GridLayoutManager(this@FileManagerActivity, 2); rvFiles.adapter = albumAdapter; fabCreateFolder.visibility = View.VISIBLE; loadAlbums() }
+                    }
+                } catch (e: Exception) { e.printStackTrace() }
             }
             override fun onTabUnselected(tab: TabLayout.Tab?) {}
             override fun onTabReselected(tab: TabLayout.Tab?) {}
@@ -167,9 +164,15 @@ class FileManagerActivity : AppCompatActivity() {
 
         actionDelete.setOnClickListener { deleteSelectedFiles() }
         actionShare.setOnClickListener { shareSelectedFiles() }
-        actionMove.setOnClickListener { Toast.makeText(this, "ميزة النقل قيد التطوير...", Toast.LENGTH_SHORT).show() }
-        actionCopy.setOnClickListener { Toast.makeText(this, "ميزة النسخ قيد التطوير...", Toast.LENGTH_SHORT).show() }
-        actionAddAlbum.setOnClickListener { showAddToAlbumDialog() }
+        actionMove.setOnClickListener { Toast.makeText(this, "قيد التطوير", Toast.LENGTH_SHORT).show() }
+        actionCopy.setOnClickListener { Toast.makeText(this, "قيد التطوير", Toast.LENGTH_SHORT).show() }
+        actionAddAlbum.setOnClickListener { Toast.makeText(this, "قيد التطوير", Toast.LENGTH_SHORT).show() }
+
+        // *** أزرار "ملفاتي" الجديدة ***
+        findViewById<LinearLayout>(R.id.btnPinnedNew)?.setOnClickListener { showCreateVirtualAlbumDialog() }
+        findViewById<LinearLayout>(R.id.btnPinnedFavorites)?.setOnClickListener { Toast.makeText(this, "قريباً: المفضلة", Toast.LENGTH_SHORT).show() }
+        findViewById<LinearLayout>(R.id.btnPinnedScreenshots)?.setOnClickListener { Toast.makeText(this, "قريباً: لقطات الشاشة", Toast.LENGTH_SHORT).show() }
+        findViewById<LinearLayout>(R.id.btnPinnedTrash)?.setOnClickListener { Toast.makeText(this, "قريباً: المهملات", Toast.LENGTH_SHORT).show() }
 
         btnSelectAll.setOnClickListener {
             if (isGalleryMode) { selectedImages.addAll(galleryUris); imageAdapter.updateSelection(selectedImages) }
@@ -184,22 +187,6 @@ class FileManagerActivity : AppCompatActivity() {
         checkAndRequestPermission()
     }
 
-    // الحل الاحترافي: استخدام findViewById و Safe Call
-    private fun applyCustomColors() {
-        try {
-            val colorStr = sharedPreferences.getString("selection_bar_color", "BLUE")
-            val colorRes = when (colorStr) {
-                "PINK" -> android.graphics.Color.parseColor("#FF00FF")
-                "GREEN" -> android.graphics.Color.parseColor("#00FF00")
-                else -> android.graphics.Color.parseColor("#00D4FF")
-            }
-            findViewById<ImageView>(R.id.ivActionShare)?.setColorFilter(colorRes)
-            findViewById<ImageView>(R.id.ivActionAlbum)?.setColorFilter(colorRes)
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
     private fun handleBackPress() {
         if (isSelectionMode) { clearSelection() }
         else if (currentAlbumId != null) { currentAlbumId = null; loadAlbums() }
@@ -210,24 +197,15 @@ class FileManagerActivity : AppCompatActivity() {
     override fun onBackPressed() { handleBackPress() }
 
     private fun enterSelectionMode() {
-        isSelectionMode = true
-        topBarFileManager.visibility = View.GONE
-        topBarSelection.visibility = View.VISIBLE
-        bottomSelectionBar.visibility = View.VISIBLE
-        fileAdapter.setSelectionMode(true)
-        imageAdapter.setSelectionMode(true)
+        isSelectionMode = true; topBarFileManager.visibility = View.GONE; topBarSelection.visibility = View.VISIBLE
+        bottomSelectionBar.visibility = View.VISIBLE; fileAdapter.setSelectionMode(true); imageAdapter.setSelectionMode(true)
     }
 
     fun clearSelection() {
-        isSelectionMode = false
-        selectedFiles.clear()
-        selectedImages.clear()
-        topBarFileManager.visibility = View.VISIBLE
-        topBarSelection.visibility = View.GONE
-        bottomSelectionBar.visibility = View.GONE
-        fileAdapter.setSelectionMode(false)
-        imageAdapter.setSelectionMode(false)
-        updateSelectionCount()
+        isSelectionMode = false; selectedFiles.clear(); selectedImages.clear()
+        topBarFileManager.visibility = View.VISIBLE; topBarSelection.visibility = View.GONE
+        bottomSelectionBar.visibility = View.GONE; fileAdapter.setSelectionMode(false)
+        imageAdapter.setSelectionMode(false); updateSelectionCount()
     }
 
     private fun handleFileClick(file: File) {
@@ -242,7 +220,7 @@ class FileManagerActivity : AppCompatActivity() {
                         val uri = FileProvider.getUriForFile(this, "${packageName}.fileprovider", file)
                         val mimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension.lowercase()) ?: "*/*"
                         startActivity(Intent(Intent.ACTION_VIEW).apply { setDataAndType(uri, mimeType); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) })
-                    } catch (e: Exception) { Toast.makeText(this, "لا يوجد تطبيق لفتح هذا الملف", Toast.LENGTH_SHORT).show() }
+                    } catch (e: Exception) { Toast.makeText(this, "لا يوجد تطبيق لفتح الملف", Toast.LENGTH_SHORT).show() }
                 }
             }
         }
@@ -278,18 +256,16 @@ class FileManagerActivity : AppCompatActivity() {
     private fun deleteSelectedFiles() {
         val count = if (isGalleryMode) selectedImages.size else selectedFiles.size
         if (count == 0) return
-        AlertDialog.Builder(this).setTitle("حذف العناصر").setMessage("هل أنت متأكد من حذف $count عنصر؟")
-            .setPositiveButton("حذف") { _, _ ->
-                lifecycleScope.launch(Dispatchers.IO) {
-                    if (isGalleryMode) { selectedImages.forEach { try { contentResolver.delete(it, null, null) } catch (e: Exception) {} } }
-                    else { selectedFiles.forEach { if (it.isDirectory) it.deleteRecursively() else it.delete() } }
-                    withContext(Dispatchers.Main) {
-                        clearSelection()
-                        if (isGalleryMode) loadRealGallery() else loadDirectory(currentDirectory)
-                        Toast.makeText(this@FileManagerActivity, "تم الحذف", Toast.LENGTH_SHORT).show()
-                    }
+        AlertDialog.Builder(this).setTitle("حذف").setMessage("حذف $count عنصر؟").setPositiveButton("حذف") { _, _ ->
+            lifecycleScope.launch(Dispatchers.IO) {
+                if (isGalleryMode) { selectedImages.forEach { try { contentResolver.delete(it, null, null) } catch (e: Exception) {} } }
+                else { selectedFiles.forEach { if (it.isDirectory) it.deleteRecursively() else it.delete() } }
+                withContext(Dispatchers.Main) {
+                    clearSelection()
+                    if (isGalleryMode) loadRealGallery() else loadDirectory(currentDirectory)
                 }
-            }.setNegativeButton("إلغاء", null).show()
+            }
+        }.setNegativeButton("إلغاء", null).show()
     }
 
     private fun shareSelectedFiles() {
@@ -300,91 +276,97 @@ class FileManagerActivity : AppCompatActivity() {
         val intent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
             type = "*/*"; putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(urisToShare)); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        startActivity(Intent.createChooser(intent, "مشاركة الملفات عبر"))
+        startActivity(Intent.createChooser(intent, "مشاركة عبر"))
     }
 
-    private fun showAddToAlbumDialog() { Toast.makeText(this, "سيتم إضافة الصور إلى الألبوم قريباً...", Toast.LENGTH_SHORT).show() }
-
     private fun showSortDialog() {
-        val options = arrayOf("الاسم", "الحجم", "التاريخ", "عرض الملفات المخفية")
-        AlertDialog.Builder(this).setTitle("ترتيب حسب").setItems(options) { _, which ->
+        val options = arrayOf("الاسم", "الحجم", "التاريخ", "عرض المخفي")
+        AlertDialog.Builder(this).setTitle("ترتيب").setItems(options) { _, which ->
             when (which) { 0 -> { sortType = "NAME"; isSortAscending = !isSortAscending }; 1 -> { sortType = "SIZE"; isSortAscending = !isSortAscending }; 2 -> { sortType = "DATE"; isSortAscending = !isSortAscending }; 3 -> { showHiddenFiles = !showHiddenFiles } }
             applyFilterAndSort()
         }.show()
     }
 
     private fun applyFilterAndSort() {
-        if (isAlbumMode) return
-        val query = etSearchFiles.text.toString()
-        if (isGalleryMode) {
-            var filteredUris = if (query.isEmpty()) galleryUris.toList() else galleryUris.filter { (it.lastPathSegment ?: "").contains(query, ignoreCase = true) }
-            imageAdapter.submitList(filteredUris)
-            tvPathTitle.text = "معرض الصور"
-        } else {
-            var filtered = if (query.isEmpty()) allFiles.toList() else allFiles.filter { it.name.contains(query, ignoreCase = true) }
-            if (!showHiddenFiles) filtered = filtered.filter { !it.name.startsWith(".") }
-            val comparator = when (sortType) { "SIZE" -> compareBy<File> { it.length() }; "DATE" -> compareBy { it.lastModified() }; else -> compareBy { it.name.lowercase() } }
-            var sortedList = if (isSortAscending) filtered.sortedWith(comparator) else filtered.sortedWith(comparator).reversed()
-            sortedList = sortedList.sortedBy { !it.isDirectory }
-            fileAdapter.submitList(sortedList.map { FileItem(file = it) }, false)
-            tvPathTitle.text = currentDirectory.name
-        }
+        try {
+            if (isAlbumMode) return
+            val query = etSearchFiles.text.toString()
+            if (isGalleryMode) {
+                var filteredUris = if (query.isEmpty()) galleryUris.toList() else galleryUris.filter { (it.lastPathSegment ?: "").contains(query, ignoreCase = true) }
+                imageAdapter.submitList(filteredUris)
+                tvPathTitle.text = "معرض الصور"
+            } else {
+                var filtered = if (query.isEmpty()) allFiles.toList() else allFiles.filter { it.name.contains(query, ignoreCase = true) }
+                if (!showHiddenFiles) filtered = filtered.filter { !it.name.startsWith(".") }
+                val comparator = when (sortType) { "SIZE" -> compareBy<File> { it.length() }; "DATE" -> compareBy { it.lastModified() }; else -> compareBy { it.name.lowercase() } }
+                var sortedList = if (isSortAscending) filtered.sortedWith(comparator) else filtered.sortedWith(comparator).reversed()
+                sortedList = sortedList.sortedBy { !it.isDirectory }
+                fileAdapter.submitList(sortedList.map { FileItem(file = it) }, false)
+                tvPathTitle.text = currentDirectory.name
+            }
+        } catch (e: Exception) { e.printStackTrace() }
     }
 
     private fun installApk(apkFile: File) {
-        try { startActivity(Intent(Intent.ACTION_VIEW).apply { setDataAndType(FileProvider.getUriForFile(this@FileManagerActivity, "${packageName}.fileprovider", apkFile), "application/vnd.android.package-archive"); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) }) }
-        catch (e: Exception) { Toast.makeText(this, "فشل فتح المثبت", Toast.LENGTH_LONG).show() }
+        try { startActivity(Intent(Intent.ACTION_VIEW).apply { setDataAndType(FileProvider.getUriForFile(this, "${packageName}.fileprovider", apkFile), "application/vnd.android.package-archive"); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) }) }
+        catch (e: Exception) { Toast.makeText(this, "فشل فتح المثبت", Toast.LENGTH_SHORT).show() }
     }
 
     private fun showCreateFolderDialog() {
         val input = EditText(this).apply { hint = "اسم المجلد" }
-        AlertDialog.Builder(this).setTitle("إنشاء مجلد جديد").setView(input)
-            .setPositiveButton("إنشاء") { _, _ -> val name = input.text.toString().trim(); if (name.isNotEmpty()) { val newFolder = File(currentDirectory, name); if (newFolder.mkdirs()) { loadDirectory(currentDirectory) } } }.setNegativeButton("إلغاء", null).show()
+        AlertDialog.Builder(this).setTitle("إنشاء مجلد").setView(input).setPositiveButton("إنشاء") { _, _ -> 
+            val name = input.text.toString().trim()
+            if (name.isNotEmpty()) { val newFolder = File(currentDirectory, name); if (newFolder.mkdirs()) { loadDirectory(currentDirectory) } }
+        }.setNegativeButton("إلغاء", null).show()
     }
 
     private fun loadRealGallery() {
         lifecycleScope.launch {
-            val uris = withContext(Dispatchers.IO) {
-                val list = mutableListOf<Uri>()
-                val cursor = contentResolver.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, arrayOf(MediaStore.Images.Media._ID), null, null, "${MediaStore.Images.Media.DATE_ADDED} DESC")
-                cursor?.use { val idCol = it.getColumnIndexOrThrow(MediaStore.Images.Media._ID); while (it.moveToNext()) { list.add(ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, it.getLong(idCol))) } }
-                list
-            }
-            withContext(Dispatchers.Main) { galleryUris = uris; applyFilterAndSort() }
+            try {
+                val uris = withContext(Dispatchers.IO) {
+                    val list = mutableListOf<Uri>()
+                    val cursor = contentResolver.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, arrayOf(MediaStore.Images.Media._ID), null, null, "${MediaStore.Images.Media.DATE_ADDED} DESC")
+                    cursor?.use { val idCol = it.getColumnIndexOrThrow(MediaStore.Images.Media._ID); while (it.moveToNext()) { list.add(ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, it.getLong(idCol))) } }
+                    list
+                }
+                withContext(Dispatchers.Main) { galleryUris = uris; applyFilterAndSort() }
+            } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
     private fun loadAlbums() {
         tvPathTitle.text = "الألبومات"
         lifecycleScope.launch {
-            val albumsList = mutableListOf<AlbumItem>()
-            withContext(Dispatchers.IO) {
-                val projection = arrayOf(MediaStore.Images.Media.BUCKET_ID, MediaStore.Images.Media.BUCKET_DISPLAY_NAME, MediaStore.Images.Media._ID)
-                val cursor = contentResolver.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, projection, null, null, "${MediaStore.Images.Media.DATE_ADDED} DESC")
-                val bucketMap = mutableMapOf<String, Pair<String, Uri>>()
-                val countMap = mutableMapOf<String, Int>()
-                cursor?.use {
-                    val idCol = it.getColumnIndexOrThrow(MediaStore.Images.Media.BUCKET_ID)
-                    val nameCol = it.getColumnIndexOrThrow(MediaStore.Images.Media.BUCKET_DISPLAY_NAME)
-                    val imgIdCol = it.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
-                    while (it.moveToNext()) {
-                        val bucketId = it.getString(idCol) ?: "unknown"
-                        val bucketName = it.getString(nameCol) ?: "غير معروف"
-                        val imgId = it.getLong(imgIdCol)
-                        val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, imgId)
-                        if (!bucketMap.containsKey(bucketId)) bucketMap[bucketId] = Pair(bucketName, uri)
-                        countMap[bucketId] = (countMap[bucketId] ?: 0) + 1
+            try {
+                val albumsList = mutableListOf<AlbumItem>()
+                withContext(Dispatchers.IO) {
+                    val projection = arrayOf(MediaStore.Images.Media.BUCKET_ID, MediaStore.Images.Media.BUCKET_DISPLAY_NAME, MediaStore.Images.Media._ID)
+                    val cursor = contentResolver.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, projection, null, null, "${MediaStore.Images.Media.DATE_ADDED} DESC")
+                    val bucketMap = mutableMapOf<String, Pair<String, Uri>>()
+                    val countMap = mutableMapOf<String, Int>()
+                    cursor?.use {
+                        val idCol = it.getColumnIndexOrThrow(MediaStore.Images.Media.BUCKET_ID)
+                        val nameCol = it.getColumnIndexOrThrow(MediaStore.Images.Media.BUCKET_DISPLAY_NAME)
+                        val imgIdCol = it.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
+                        while (it.moveToNext()) {
+                            val bucketId = it.getString(idCol) ?: "unknown"
+                            val bucketName = it.getString(nameCol) ?: "غير معروف"
+                            val imgId = it.getLong(imgIdCol)
+                            val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, imgId)
+                            if (!bucketMap.containsKey(bucketId)) bucketMap[bucketId] = Pair(bucketName, uri)
+                            countMap[bucketId] = (countMap[bucketId] ?: 0) + 1
+                        }
                     }
+                    bucketMap.forEach { (id, pair) -> albumsList.add(AlbumItem(id, pair.first, pair.second, countMap[id] ?: 0)) }
                 }
-                bucketMap.forEach { (id, pair) -> albumsList.add(AlbumItem(id, pair.first, pair.second, countMap[id] ?: 0)) }
-            }
-            val virtualAlbums = virtualAlbumDao.getAllAlbums()
-            for (vAlbum in virtualAlbums) {
-                val mediaUris = virtualAlbumDao.getMediaForAlbum(vAlbum.id)
-                val cover = if (mediaUris.isNotEmpty()) Uri.parse(mediaUris.first()) else null
-                albumsList.add(AlbumItem(vAlbum.id, vAlbum.name, cover, mediaUris.size, vAlbum.isVault))
-            }
-            withContext(Dispatchers.Main) { albumAdapter.submitList(albumsList) }
+                val virtualAlbums = virtualAlbumDao.getAllAlbums()
+                for (vAlbum in virtualAlbums) {
+                    val mediaUris = virtualAlbumDao.getMediaForAlbum(vAlbum.id)
+                    val cover = if (mediaUris.isNotEmpty()) Uri.parse(mediaUris.first()) else null
+                    albumsList.add(AlbumItem(vAlbum.id, vAlbum.name, cover, mediaUris.size, vAlbum.isVault))
+                }
+                withContext(Dispatchers.Main) { albumAdapter.submitList(albumsList) }
+            } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
@@ -393,49 +375,40 @@ class FileManagerActivity : AppCompatActivity() {
     }
 
     private fun loadImagesForSystemAlbum(album: AlbumItem) {
-        currentAlbumId = album.bucketId
-        tvPathTitle.text = album.name
-        rvFiles.layoutManager = GridLayoutManager(this, 3)
-        rvFiles.adapter = imageAdapter
+        currentAlbumId = album.bucketId; tvPathTitle.text = album.name
+        rvFiles.layoutManager = GridLayoutManager(this, 3); rvFiles.adapter = imageAdapter
         lifecycleScope.launch {
-            val uris = withContext(Dispatchers.IO) {
-                val list = mutableListOf<Uri>()
-                val projection = arrayOf(MediaStore.Images.Media._ID)
-                val selection = "${MediaStore.Images.Media.BUCKET_ID} = ?"
-                val selectionArgs = arrayOf(album.bucketId)
-                val cursor = contentResolver.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, projection, selection, selectionArgs, "${MediaStore.Images.Media.DATE_ADDED} DESC")
-                cursor?.use { val idCol = it.getColumnIndexOrThrow(MediaStore.Images.Media._ID); while (it.moveToNext()) { list.add(ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, it.getLong(idCol))) } }
-                list
-            }
-            withContext(Dispatchers.Main) { imageAdapter.submitList(uris) }
+            try {
+                val uris = withContext(Dispatchers.IO) {
+                    val list = mutableListOf<Uri>()
+                    val selection = "${MediaStore.Images.Media.BUCKET_ID} = ?"
+                    val cursor = contentResolver.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, arrayOf(MediaStore.Images.Media._ID), selection, arrayOf(album.bucketId), "${MediaStore.Images.Media.DATE_ADDED} DESC")
+                    cursor?.use { val idCol = it.getColumnIndexOrThrow(MediaStore.Images.Media._ID); while (it.moveToNext()) { list.add(ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, it.getLong(idCol))) } }
+                    list
+                }
+                withContext(Dispatchers.Main) { imageAdapter.submitList(uris) }
+            } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
     private fun loadImagesForVirtualAlbum(album: AlbumItem) {
-        currentAlbumId = album.bucketId
-        tvPathTitle.text = album.name
-        rvFiles.layoutManager = GridLayoutManager(this, 3)
-        rvFiles.adapter = imageAdapter
+        currentAlbumId = album.bucketId; tvPathTitle.text = album.name
+        rvFiles.layoutManager = GridLayoutManager(this, 3); rvFiles.adapter = imageAdapter
         lifecycleScope.launch {
-            val mediaUris = virtualAlbumDao.getMediaForAlbum(album.bucketId)
-            val uris = mediaUris.map { Uri.parse(it) }
-            withContext(Dispatchers.Main) { imageAdapter.submitList(uris) }
+            try {
+                val mediaUris = virtualAlbumDao.getMediaForAlbum(album.bucketId)
+                val uris = mediaUris.map { Uri.parse(it) }
+                withContext(Dispatchers.Main) { imageAdapter.submitList(uris) }
+            } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
     private fun showCreateVirtualAlbumDialog() {
-        val input = EditText(this).apply { hint = "اسم الألبوم الجديد" }
-        AlertDialog.Builder(this).setTitle("إنشاء ألبوم افتراضي").setView(input)
-            .setPositiveButton("إنشاء") { _, _ ->
-                val name = input.text.toString().trim()
-                if (name.isNotEmpty()) {
-                    lifecycleScope.launch {
-                        virtualAlbumDao.insertAlbum(VirtualAlbumEntity(name = name))
-                        loadAlbums()
-                        Toast.makeText(this@FileManagerActivity, "تم إنشاء الألبوم", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }.setNegativeButton("إلغاء", null).show()
+        val input = EditText(this).apply { hint = "اسم الألبوم" }
+        AlertDialog.Builder(this).setTitle("إنشاء ألبوم").setView(input).setPositiveButton("إنشاء") { _, _ ->
+            val name = input.text.toString().trim()
+            if (name.isNotEmpty()) { lifecycleScope.launch { virtualAlbumDao.insertAlbum(VirtualAlbumEntity(name = name)); loadAlbums() } }
+        }.setNegativeButton("إلغاء", null).show()
     }
 
     private fun handleZipFile(zipFile: File) {
@@ -454,22 +427,19 @@ class FileManagerActivity : AppCompatActivity() {
         btnExtract.setOnClickListener {
             val password = etPassword.text.toString()
             if (password.isEmpty()) { tvError.text = "أدخل كلمة المرور"; tvError.visibility = View.VISIBLE; return@setOnClickListener }
-            tvError.visibility = View.GONE
-            btnExtract.isEnabled = false
-            btnExtract.text = "جاري الفك..."
+            tvError.visibility = View.GONE; btnExtract.isEnabled = false; btnExtract.text = "جاري الفك..."
             lifecycleScope.launch {
                 val success = withContext(Dispatchers.IO) {
                     try {
                         val dest = File(zipFile.parentFile, zipFile.nameWithoutExtension)
                         if (!dest.exists()) dest.mkdirs()
-                        val zip = ZipFile(zipFile)
-                        if (password.isNotEmpty()) zip.setPassword(password.toCharArray())
+                        val zip = ZipFile(zipFile); if (password.isNotEmpty()) zip.setPassword(password.toCharArray())
                         zip.extractAll(dest.absolutePath)
                         true
                     } catch (e: Exception) { false }
                 }
-                if (success) { dialog.dismiss(); Toast.makeText(this@FileManagerActivity, "تم فك الضغط!", Toast.LENGTH_SHORT).show(); loadDirectory(currentDirectory) }
-                else { tvError.text = "كلمة المرور خاطئة"; tvError.visibility = View.VISIBLE; tilPassword.boxStrokeColor = android.graphics.Color.RED; shakeView(tilPassword); btnExtract.isEnabled = true; btnExtract.text = "فك الضغط" }
+                if (success) { dialog.dismiss(); Toast.makeText(this@FileManagerActivity, "تم الفك!", Toast.LENGTH_SHORT).show(); loadDirectory(currentDirectory) }
+                else { tvError.text = "كلمة مرور خاطئة"; tvError.visibility = View.VISIBLE; tilPassword.boxStrokeColor = android.graphics.Color.RED; shakeView(tilPassword); btnExtract.isEnabled = true; btnExtract.text = "فك الضغط" }
             }
         }
         dialog.show()
@@ -485,8 +455,8 @@ class FileManagerActivity : AppCompatActivity() {
                     true
                 } catch (e: Exception) { false }
             }
-            if (success) { Toast.makeText(this@FileManagerActivity, "تم فك الضغط!", Toast.LENGTH_SHORT).show(); loadDirectory(currentDirectory) }
-            else { Toast.makeText(this@FileManagerActivity, "فشل فك الضغط", Toast.LENGTH_SHORT).show() }
+            if (success) { Toast.makeText(this@FileManagerActivity, "تم الفك!", Toast.LENGTH_SHORT).show(); loadDirectory(currentDirectory) }
+            else { Toast.makeText(this@FileManagerActivity, "فشل الفك", Toast.LENGTH_SHORT).show() }
         }
     }
 
@@ -505,8 +475,7 @@ class FileManagerActivity : AppCompatActivity() {
         dialogView.findViewById<MaterialButton>(R.id.btnCreateZip).setOnClickListener {
             val name = etZipName.text.toString().trim()
             if (name.isEmpty()) return@setOnClickListener
-            dialog.dismiss()
-            executeZipCreation(filesToZip, name, etZipPassword.text.toString())
+            dialog.dismiss(); executeZipCreation(filesToZip, name, etZipPassword.text.toString())
         }
         dialog.show()
     }
@@ -517,9 +486,7 @@ class FileManagerActivity : AppCompatActivity() {
             try {
                 withContext(Dispatchers.IO) {
                     val dest = File(currentDirectory, "$zipName.zip")
-                    val params = ZipParameters().apply {
-                        if (password.isNotEmpty()) { isEncryptFiles = true; encryptionMethod = EncryptionMethod.AES; aesKeyStrength = AesKeyStrength.KEY_STRENGTH_256 }
-                    }
+                    val params = ZipParameters().apply { if (password.isNotEmpty()) { isEncryptFiles = true; encryptionMethod = EncryptionMethod.AES; aesKeyStrength = AesKeyStrength.KEY_STRENGTH_256 } }
                     val zip = if (password.isNotEmpty()) ZipFile(dest, password.toCharArray()) else ZipFile(dest)
                     files.forEach { if (it.isDirectory) zip.addFolder(it, params) else zip.addFile(it, params) }
                 }
