@@ -43,12 +43,13 @@ import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
 
+// 1. تعريف أوضاع التطبيق (المصدر الوحيد للحقيقة)
 enum class ViewMode { FILES, GALLERY, SCREENSHOTS, ALBUMS, TRASH }
 
 class FileManagerActivity : AppCompatActivity() {
 
     private var currentMode: ViewMode = ViewMode.FILES
-    private var isTabChangeInternal = false 
+    private var isTabChangeInternal = false // القفل لمنع الحلقة اللانهائية
 
     private lateinit var rvFiles: RecyclerView
     private lateinit var fileAdapter: FileAdapter
@@ -649,6 +650,8 @@ class FileManagerActivity : AppCompatActivity() {
     }
 }
 
+// --- الملف ينتهي هنا. لا يوجد كلاسات مكررة. ---
+
 data class FileItem(
     val file: File,
     val name: String = file.name,
@@ -716,85 +719,6 @@ class FileAdapter(
             }
             itemView.setOnClickListener { onClick(file) }
             itemView.setOnLongClickListener { onLongClick(file); true }
-        }
-    }
-}
-
-class ImageAdapter(
-    private val onImageClick: (Uri) -> Unit,
-    private val onImageLongClick: (Uri) -> Unit
-) : RecyclerView.Adapter<ImageAdapter.ImageViewHolder>() {
-    private var images: List<Uri> = emptyList()
-    private var isSelectionMode = false
-    private var selectedUris: Set<Uri> = emptySet()
-
-    fun submitList(newImages: List<Uri>) { images = newImages; notifyDataSetChanged() }
-    fun setSelectionMode(mode: Boolean) { isSelectionMode = mode; if (!mode) selectedUris = emptySet(); notifyDataSetChanged() }
-    fun updateSelection(selected: Set<Uri>) { selectedUris = selected; notifyDataSetChanged() }
-
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ImageViewHolder {
-        val view = LayoutInflater.from(parent.context).inflate(R.layout.item_image, parent, false)
-        return ImageViewHolder(view)
-    }
-
-    override fun onBindViewHolder(holder: ImageViewHolder, position: Int) {
-        holder.bind(images[position], isSelectionMode, selectedUris.contains(images[position]))
-    }
-
-    override fun getItemCount(): Int = images.size
-
-    inner class ImageViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-        private val ivGalleryImage: ImageView = itemView.findViewById(R.id.ivGalleryImage)
-        private val cbSelectImage: CheckBox = itemView.findViewById(R.id.cbSelectImage)
-
-        fun bind(uri: Uri, isSelectionMode: Boolean, isSelected: Boolean) {
-            Glide.with(itemView.context).load(uri).placeholder(android.R.drawable.ic_menu_gallery).error(android.R.drawable.ic_menu_report_image).centerCrop().into(ivGalleryImage)
-            cbSelectImage.visibility = if (isSelectionMode) View.VISIBLE else View.GONE
-            cbSelectImage.isChecked = isSelected
-
-            itemView.setOnClickListener {
-                if (isSelectionMode) {
-                    val newSelection = selectedUris.toMutableSet()
-                    if (newSelection.contains(uri)) newSelection.remove(uri) else newSelection.add(uri)
-                    (itemView.context as? FileManagerActivity)?.let { activity ->
-                        // لا توجد دالة مباشرة، لذا نستخدم onImageLongClick
-                    }
-                    onImageLongClick(uri) // نستخدم هذه الدالة كـ toggle
-                } else {
-                    onImageClick(uri)
-                }
-            }
-            itemView.setOnLongClickListener { onImageLongClick(uri); true }
-        }
-    }
-}
-
-data class AlbumItem(
-    val bucketId: String,
-    val name: String,
-    val coverUri: Uri?,
-    val imageCount: Int,
-    val isVault: Boolean = false
-)
-
-class AlbumAdapter(private val onAlbumClick: (AlbumItem) -> Unit) : RecyclerView.Adapter<AlbumAdapter.AlbumViewHolder>() {
-    private var albums: List<AlbumItem> = emptyList()
-    fun submitList(newAlbums: List<AlbumItem>) { albums = newAlbums; notifyDataSetChanged() }
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): AlbumViewHolder {
-        val view = LayoutInflater.from(parent.context).inflate(R.layout.item_album, parent, false)
-        return AlbumViewHolder(view)
-    }
-    override fun onBindViewHolder(holder: AlbumViewHolder, position: Int) { holder.bind(albums[position], onAlbumClick) }
-    override fun getItemCount(): Int = albums.size
-    class AlbumViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-        private val ivAlbumCover: ImageView = itemView.findViewById(R.id.ivAlbumCover)
-        private val tvAlbumName: TextView = itemView.findViewById(R.id.tvAlbumName)
-        private val tvImageCount: TextView = itemView.findViewById(R.id.tvImageCount)
-        fun bind(album: AlbumItem, onClick: (AlbumItem) -> Unit) {
-            tvAlbumName.text = album.name
-            tvImageCount.text = "${album.imageCount} صورة"
-            if (album.coverUri != null) Glide.with(itemView.context).load(album.coverUri).centerCrop().into(ivAlbumCover) else ivAlbumCover.setImageResource(android.R.drawable.ic_menu_gallery)
-            itemView.setOnClickListener { onClick(album) }
         }
     }
 }
