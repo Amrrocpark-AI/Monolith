@@ -5,7 +5,6 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.Rect
 import android.os.Handler
 import android.os.Looper
 import android.util.AttributeSet
@@ -25,28 +24,23 @@ class SovereignParticleView @JvmOverloads constructor(
     private var thread: Thread? = null
     @Volatile private var isRunning = false
 
-    // الفيزياء الأساسية
     private val particles = mutableListOf<Particle>()
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private var originalBitmap: Bitmap? = null
     private var maskBitmap: Bitmap? = null
 
-    // أوضاع التشغيل
     enum class Mode { AUTO_MASK, MANUAL_SWIPE, TEXT_MORPH }
     var currentMode = Mode.AUTO_MASK
 
-    // إعدادات الشظايا
     private var dispersionPower = 15f
     private var particleSize = 8f
     private var targetText = "MONOLITH"
     private var textColor = Color.parseColor("#00D4FF")
 
-    // أدوات اللمس اليدوي
     private var velocityTracker: VelocityTracker? = null
     private var lastX = 0f
     private var lastY = 0f
 
-    // المغناطيسية (تتبع الإصبع)
     private var touchX = -1000f
     private var touchY = -1000f
     private var isTouching = false
@@ -69,27 +63,31 @@ class SovereignParticleView @JvmOverloads constructor(
         }
     }
 
+    // *** هذه هي الدالة التي كانت ناقصة ***
+    fun setTextAndMode(text: String) {
+        this.targetText = text
+        this.currentMode = Mode.TEXT_MORPH
+        particles.clear()
+        generateTextParticles()
+    }
+
     fun setDispersionPower(power: Float) { dispersionPower = power }
     fun setParticleSize(size: Float) { particleSize = size }
 
-    // 1. توليد الشظايا (بناءً على القناع أو الصورة)
     private fun resetParticles() {
         particles.clear()
         val bmp = originalBitmap ?: return
         val mask = maskBitmap
-        val step = 10 // كلما قل، زادت الشظايا (احذر الأداء)
+        val step = 10
 
         for (x in 0 until bmp.width step step) {
             for (y in 0 until bmp.height step step) {
                 if (mask != null) {
                     val pixel = mask.getPixel(x, y)
-                    // إذا كان البكسل أحمر (القناع)، أنشئ شظية
                     if (Color.red(pixel) > 150 && Color.alpha(pixel) > 0) {
                         createParticle(x, y, bmp.getPixel(x, y))
                     }
                 } else {
-                    // في الوضع اليدوي، نحتفظ بالشظايا مخزنة أو نولدها عند اللمس
-                    // هنا نولدها كلها لسهولة السحب
                     createParticle(x, y, bmp.getPixel(x, y))
                 }
             }
@@ -106,7 +104,6 @@ class SovereignParticleView @JvmOverloads constructor(
         ))
     }
 
-    // 2. توليد النص (تحويل الحروف إلى بكسلات)
     private fun generateTextParticles() {
         particles.clear()
         val width = width.takeIf { it > 0 } ?: 1080
@@ -128,7 +125,7 @@ class SovereignParticleView @JvmOverloads constructor(
             for (y in 0 until height step 8) {
                 if (Color.alpha(textBitmap.getPixel(x, y)) > 0) {
                     particles.add(Particle(
-                        Random.nextFloat() * width, // تبدأ من أماكن عشوائية
+                        Random.nextFloat() * width,
                         Random.nextFloat() * height,
                         0f, 0f,
                         textColor,
@@ -146,13 +143,12 @@ class SovereignParticleView @JvmOverloads constructor(
             updatePhysics()
             drawParticles(canvas)
             holder.unlockCanvasAndPost(canvas)
-            Thread.sleep(16) // ~60 FPS
+            Thread.sleep(16)
         }
     }
 
     private fun updatePhysics() {
         for (p in particles) {
-            // إذا كان وضع النص، نجذب الشظايا نحو الهدف
             if (currentMode == Mode.TEXT_MORPH) {
                 val dx = p.targetX - p.x
                 val dy = p.targetY - p.y
@@ -161,14 +157,12 @@ class SovereignParticleView @JvmOverloads constructor(
                 p.vx *= 0.85f
                 p.vy *= 0.85f
             } else {
-                // الوضع الطبيعي (تطاير)
                 p.x += p.vx
                 p.y += p.vy
-                p.vx *= 0.98f // احتكاك
+                p.vx *= 0.98f
                 p.vy *= 0.98f
             }
 
-            // تأثير المغناطيسية (إذا كان الإصبع على الشاشة)
             if (isTouching && currentMode != Mode.TEXT_MORPH) {
                 val dx = touchX - p.x
                 val dy = touchY - p.y
@@ -183,16 +177,15 @@ class SovereignParticleView @JvmOverloads constructor(
     }
 
     private fun drawParticles(canvas: Canvas) {
-        canvas.drawColor(Color.BLACK) // أو شفاف إذا أردت
+        canvas.drawColor(Color.BLACK)
         for (p in particles) {
             paint.color = p.color
             canvas.drawCircle(p.x, p.y, particleSize, paint)
         }
     }
 
-    // 3. معالجة اللمس (الوضع اليدوي والمغناطيسي)
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        if (currentMode == Mode.TEXT_MORPH) return true // لا نسمح باللمس في وضع النص
+        if (currentMode == Mode.TEXT_MORPH) return true
 
         when (event.action) {
             MotionEvent.ACTION_DOWN -> {
@@ -228,7 +221,6 @@ class SovereignParticleView @JvmOverloads constructor(
         thread?.join()
     }
 
-    // كلاس الشظية
     data class Particle(
         var x: Float, var y: Float,
         var vx: Float, var vy: Float,
