@@ -1,6 +1,5 @@
 package com.monolith
 
-import android.content.Intent
 import android.net.Uri
 import android.view.LayoutInflater
 import android.view.View
@@ -18,7 +17,7 @@ class ImageAdapter(
 
     private var images: List<Uri> = emptyList()
     private var isSelectionMode = false
-    private val selectedUris = mutableSetOf<Uri>()
+    private var selectedUris: Set<Uri> = emptySet()
 
     fun submitList(newImages: List<Uri>) {
         images = newImages
@@ -27,17 +26,13 @@ class ImageAdapter(
 
     fun setSelectionMode(mode: Boolean) {
         isSelectionMode = mode
-        if (!mode) selectedUris.clear()
         notifyDataSetChanged()
     }
 
     fun updateSelection(selected: Set<Uri>) {
-        selectedUris.clear()
-        selectedUris.addAll(selected)
+        selectedUris = selected
         notifyDataSetChanged()
     }
-
-    fun getSelectedUris(): Set<Uri> = selectedUris
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ImageViewHolder {
         val view = LayoutInflater.from(parent.context).inflate(R.layout.item_image, parent, false)
@@ -45,7 +40,12 @@ class ImageAdapter(
     }
 
     override fun onBindViewHolder(holder: ImageViewHolder, position: Int) {
-        holder.bind(images[position], isSelectionMode, selectedUris.contains(images[position]))
+        try {
+            val uri = images[position]
+            holder.bind(uri, isSelectionMode, selectedUris.contains(uri))
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     override fun getItemCount(): Int = images.size
@@ -55,34 +55,29 @@ class ImageAdapter(
         private val cbSelectImage: CheckBox = itemView.findViewById(R.id.cbSelectImage)
 
         fun bind(uri: Uri, isSelectionMode: Boolean, isSelected: Boolean) {
-            // حل مشكلة المربعات الزرقاء: استخدام Glide مع DiskCacheStrategy و Placeholder
-            Glide.with(itemView.context)
-                .load(uri)
-                .placeholder(android.R.drawable.ic_menu_gallery)
-                .error(android.R.drawable.ic_menu_report_image)
-                .diskCacheStrategy(DiskCacheStrategy.ALL)
-                .centerCrop()
-                .into(ivGalleryImage)
+            try {
+                // تحميل الصورة بجودتها الكاملة وبدون تصغير (Glide سيتكفل بتحسين الأداء تلقائياً)
+                Glide.with(itemView.context)
+                    .load(uri)
+                    .placeholder(android.R.drawable.ic_menu_gallery)
+                    .error(android.R.drawable.ic_menu_report_image)
+                    .diskCacheStrategy(DiskCacheStrategy.ALL)
+                    .centerCrop()
+                    .into(ivGalleryImage)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
 
             cbSelectImage.visibility = if (isSelectionMode) View.VISIBLE else View.GONE
             cbSelectImage.isChecked = isSelected
 
+            // إصلاح جذري: نمرر الحدث للـ Activity فقط، والـ Activity هي التي تقرر ماذا تفعل
             itemView.setOnClickListener {
-                if (isSelectionMode) {
-                    if (selectedUris.contains(uri)) selectedUris.remove(uri) else selectedUris.add(uri)
-                    if (selectedUris.isEmpty()) {
-                        (itemView.context as? FileManagerActivity)?.clearSelection()
-                    } else {
-                        onImageLongClick(uri) // سنستخدم هذا كـ toggleSelection
-                        notifyDataSetChanged()
-                    }
-                } else {
-                    onImageClick(uri)
-                }
+                onImageClick(uri) 
             }
 
             itemView.setOnLongClickListener {
-                onImageLongClick(uri)
+                onImageLongClick(uri) 
                 true
             }
         }
