@@ -3,6 +3,7 @@ package com.monolith
 import android.app.AlertDialog
 import android.content.ContentUris
 import android.content.Intent
+import android.media.MediaScannerConnection // مهم جداً لتحديث المعرض
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -43,13 +44,12 @@ import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
 
-// 1. تعريف أوضاع التطبيق (المصدر الوحيد للحقيقة)
 enum class ViewMode { FILES, GALLERY, SCREENSHOTS, ALBUMS, TRASH }
 
 class FileManagerActivity : AppCompatActivity() {
 
     private var currentMode: ViewMode = ViewMode.FILES
-    private var isTabChangeInternal = false // القفل لمنع الحلقة اللانهائية
+    private var isTabChangeInternal = false 
 
     private lateinit var rvFiles: RecyclerView
     private lateinit var fileAdapter: FileAdapter
@@ -140,7 +140,6 @@ class FileManagerActivity : AppCompatActivity() {
         tabLayoutFiles.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
             override fun onTabSelected(tab: TabLayout.Tab?) {
                 if (isTabChangeInternal) return 
-                
                 when (tab?.position) {
                     0 -> if (currentMode != ViewMode.FILES) setViewMode(ViewMode.FILES)
                     1 -> if (currentMode != ViewMode.GALLERY) setViewMode(ViewMode.GALLERY)
@@ -175,11 +174,9 @@ class FileManagerActivity : AppCompatActivity() {
 
         btnSelectAll.setOnClickListener {
             if (currentMode == ViewMode.GALLERY || currentMode == ViewMode.SCREENSHOTS) {
-                selectedImages.addAll(galleryUris)
-                imageAdapter.updateSelection(selectedImages)
+                selectedImages.addAll(galleryUris); imageAdapter.updateSelection(selectedImages)
             } else {
-                selectedFiles.addAll(allFiles)
-                fileAdapter.updateSelection(selectedFiles)
+                selectedFiles.addAll(allFiles); fileAdapter.updateSelection(selectedFiles)
             }
             updateSelectionCount()
         }
@@ -290,6 +287,20 @@ class FileManagerActivity : AppCompatActivity() {
         return trashDir
     }
 
+    // دالة مساعدة لجلب مسار الملف من الـ URI
+    private fun getPathFromUri(uri: Uri): String? {
+        val projection = arrayOf(MediaStore.Images.Media.DATA)
+        val cursor = contentResolver.query(uri, projection, null, null, null)
+        var path: String? = null
+        cursor?.use {
+            if (it.moveToFirst()) {
+                val columnIndex = it.getColumnIndexOrThrow(MediaStore.Images.Media.DATA)
+                path = it.getString(columnIndex)
+            }
+        }
+        return path
+    }
+
     private fun moveSelectedToTrash() {
         val count = if (currentMode == ViewMode.GALLERY || currentMode == ViewMode.SCREENSHOTS) selectedImages.size else selectedFiles.size
         if (count == 0) return
@@ -300,17 +311,28 @@ class FileManagerActivity : AppCompatActivity() {
                     if (currentMode == ViewMode.GALLERY || currentMode == ViewMode.SCREENSHOTS) {
                         selectedImages.forEach { uri ->
                             try {
-                                val mimeType = contentResolver.getType(uri) ?: "image/jpeg"
-                                val ext = MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType) ?: "jpg"
-                                val fileName = System.currentTimeMillis().toString() + "_img.$ext"
-                                val destFile = File(trashDir, fileName)
-                                contentResolver.openInputStream(uri)?.use { input -> FileOutputStream(destFile).use { output -> input.copyTo(output) } }
-                                contentResolver.delete(uri, null, null)
+                                val path = getPathFromUri(uri)
+                                if (path != null) {
+                                    val originalFile = File(path)
+                                    if (originalFile.exists()) {
+                                        val destFile = File(trashDir, "${System.currentTimeMillis()}_${originalFile.name}")
+                                        originalFile.copyTo(destFile, overwrite = true)
+                                        if (originalFile.delete()) {
+                                            // تحديث المعرض بعد الحذف
+                                            MediaScannerConnection.scanFile(this@FileManagerActivity, arrayOf(path), null, null)
+                                        }
+                                    }
+                                }
                             } catch (e: Exception) { e.printStackTrace() }
                         }
                     } else {
                         selectedFiles.forEach { file ->
-                            try { file.renameTo(File(trashDir, "${System.currentTimeMillis()}_${file.name}")) } catch (e: Exception) { e.printStackTrace() }
+                            try {
+                                val destFile = File(trashDir, "${System.currentTimeMillis()}_${file.name}")
+                                if (file.renameTo(destFile)) {
+                                    MediaScannerConnection.scanFile(this@FileManagerActivity, arrayOf(file.absolutePath), null, null)
+                                }
+                            } catch (e: Exception) { e.printStackTrace() }
                         }
                     }
                     withContext(Dispatchers.Main) {
@@ -358,9 +380,28 @@ class FileManagerActivity : AppCompatActivity() {
             if (currentMode == ViewMode.TRASH) {
                 AlertDialog.Builder(this).setTitle(file.name).setItems(arrayOf("استعادة", "حذف نهائي")) { _, which ->
                     if (which == 0) {
-                        val restoredFile = File(currentDirectory, file.name.substringAfter("_"))
-                        if (file.renameTo(restoredFile)) { Toast.makeText(this, "تمت الاستعادة", Toast.LENGTH_SHORT).show(); loadTrashDirectory() }
-                    } else { file.delete(); loadTrashDirectory(); Toast.makeText(this, "تم الحذف نهائياً", Toast.LENGTH_SHORT).show() }
+                        val originalName = file.name.substringAfter("_")
+                        val isImage = originalName.endsWith(".jpg", true) || originalName.endsWith(".png", true) || originalName.endsWith(".jpeg", true) || originalName.endsWith(".webp", true)
+                        // إصلاح: استعادة الصور إلى مجلد الصور لكي تظهر في المعرض
+                        val restoreDir = if (isImage) {
+                            val picturesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+                            val restoredDir = File(picturesDir, "MonolithRestored")
+                            if (!restoredDir.exists()) restoredDir.mkdirs()
+                            restoredDir
+                        } else {
+                            currentDirectory
+                        }
+                        val restoredFile = File(restoreDir, originalName)
+                        if (file.renameTo(restoredFile)) {
+                            MediaScannerConnection.scanFile(this@FileManagerActivity, arrayOf(restoredFile.absolutePath), null, null)
+                            Toast.makeText(this, "تمت الاستعادة إلى ${restoreDir.name}", Toast.LENGTH_SHORT).show()
+                            loadTrashDirectory() 
+                        }
+                    } else { 
+                        file.delete()
+                        loadTrashDirectory()
+                        Toast.makeText(this, "تم الحذف نهائياً", Toast.LENGTH_SHORT).show() 
+                    }
                 }.show()
                 return
             }
@@ -461,8 +502,9 @@ class FileManagerActivity : AppCompatActivity() {
             try {
                 val uris = withContext(Dispatchers.IO) {
                     val list = mutableListOf<Uri>()
+                    // إصلاح: تقليل عدد قيم selectionArgs لتطابق علامات الاستفهام
                     val selection = "${MediaStore.Images.Media.RELATIVE_PATH} LIKE ? OR ${MediaStore.Images.Media.BUCKET_DISPLAY_NAME} LIKE ?"
-                    val selectionArgs = arrayOf("%Screenshot%", "%Screenshot%", "%screenshot%", "%لقطة%")
+                    val selectionArgs = arrayOf("%Screenshot%", "%Screenshot%")
                     val cursor = contentResolver.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, arrayOf(MediaStore.Images.Media._ID), selection, selectionArgs, "${MediaStore.Images.Media.DATE_ADDED} DESC")
                     cursor?.use { val idCol = it.getColumnIndexOrThrow(MediaStore.Images.Media._ID); while (it.moveToNext()) { list.add(ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, it.getLong(idCol))) } }
                     list
@@ -650,8 +692,7 @@ class FileManagerActivity : AppCompatActivity() {
     }
 }
 
-// --- الملف ينتهي هنا. لا يوجد كلاسات مكررة. ---
-
+// --- كلاس FileItem و FileAdapter ---
 data class FileItem(
     val file: File,
     val name: String = file.name,
