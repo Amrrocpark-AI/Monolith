@@ -5,7 +5,7 @@
     android:layout_height="match_parent"
     android:background="#050505">
 
-    <!-- 1. الشريط العلوي -->
+    <!-- الشريط العلوي العادي -->
     <LinearLayout
         android:id="@+id/topBarFileManager"
         android:layout_width="match_parent"
@@ -24,25 +24,75 @@
             app:tint="#00D4FF" />
 
         <TextView
+            android:id="@+id/tvPathTitle"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="مركز الملفات"
             android:textColor="#FFFFFF"
-            android:textSize="20sp"
+            android:textSize="18sp"
             android:textStyle="bold"
-            android:layout_marginStart="16dp" />
+            android:layout_marginStart="12dp"
+            android:singleLine="true"
+            android:ellipsize="start"/>
 
         <ImageButton
-            android:id="@+id/btnSettingsFileManager"
+            android:id="@+id/btnSort"
             android:layout_width="40dp"
             android:layout_height="40dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_menu_preferences"
+            android:src="@android:drawable/ic_menu_sort_by_size"
             app:tint="#FFFFFF" />
     </LinearLayout>
 
-    <!-- 2. شريط البحث الكبسولة (Pill Shape) -->
+    <!-- شريط التحديد المتعدد (يظهر فقط عند تحديد ملفات) -->
+    <LinearLayout
+        android:id="@+id/topBarSelection"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="16dp"
+        android:background="#111111"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <ImageButton
+            android:id="@+id/btnCancelSelection"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_close_clear_cancel"
+            app:tint="#FF0000" />
+
+        <TextView
+            android:id="@+id/tvSelectionCount"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="تم تحديد 0 عنصر"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp"
+            android:layout_marginStart="12dp"/>
+
+        <ImageButton
+            android:id="@+id/btnDeleteSelected"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_delete"
+            app:tint="#FFFFFF" />
+
+        <ImageButton
+            android:id="@+id/btnZipSelected"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_save"
+            app:tint="#00D4FF" />
+    </LinearLayout>
+
+    <!-- شريط البحث -->
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/searchCard"
         android:layout_width="match_parent"
@@ -82,30 +132,22 @@
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
-    <!-- 3. شريط التبويبات (ملفات / معرض) -->
+    <!-- شريط التبويبات -->
     <com.google.android.material.tabs.TabLayout
         android:id="@+id/tabLayoutFiles"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
+        android:layout_marginTop="12dp"
         android:background="#0A0A0A"
         app:tabIndicatorColor="#00D4FF"
         app:tabSelectedTextColor="#00D4FF"
         app:tabTextColor="#666666"
         app:layout_constraintTop_toBottomOf="@+id/searchCard">
-
-        <com.google.android.material.tabs.TabItem
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="الملفات" />
-
-        <com.google.android.material.tabs.TabItem
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="المعرض" />
+        <com.google.android.material.tabs.TabItem android:text="الملفات" />
+        <com.google.android.material.tabs.TabItem android:text="المعرض" />
     </com.google.android.material.tabs.TabLayout>
 
-    <!-- 4. منطقة العرض (RecyclerView) -->
+    <!-- قائمة الملفات -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rvFiles"
         android:layout_width="match_parent"
@@ -115,7 +157,7 @@
         app:layout_constraintTop_toBottomOf="@+id/tabLayoutFiles"
         app:layout_constraintBottom_toBottomOf="parent" />
 
-    <!-- 5. الزر العائم -->
+    <!-- الزر العائم -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/fabCreateFolder"
         android:layout_width="wrap_content"
