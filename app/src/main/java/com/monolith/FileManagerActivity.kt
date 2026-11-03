@@ -3,7 +3,7 @@ package com.monolith
 import android.app.AlertDialog
 import android.content.ContentUris
 import android.content.Intent
-import android.media.MediaScannerConnection // مهم جداً لتحديث المعرض
+import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -12,6 +12,7 @@ import android.provider.MediaStore
 import android.provider.Settings
 import android.text.Editable
 import android.text.TextWatcher
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -87,7 +88,9 @@ class FileManagerActivity : AppCompatActivity() {
             loadDataForCurrentMode()
         } else {
             Toast.makeText(this, "نحتاج إذن الوصول للملفات.", Toast.LENGTH_LONG).show()
-            finish()
+            // بدلاً من إغلاق التطبيق، نبقى في وضع الملفات الافتراضي
+            currentMode = ViewMode.FILES
+            updateUIForMode()
         }
     }
     
@@ -95,7 +98,8 @@ class FileManagerActivity : AppCompatActivity() {
         if (isGranted) {
             if (currentMode == ViewMode.SCREENSHOTS) loadScreenshots() else loadRealGallery()
         } else {
-            Toast.makeText(this, "نحتاج إذن الصور.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "نحتاج إذن الصور لعرض المعرض.", Toast.LENGTH_SHORT).show()
+            // العودة لوضع الملفات بدلاً من الانهيار
             setViewMode(ViewMode.FILES)
         }
     }
@@ -118,33 +122,40 @@ class FileManagerActivity : AppCompatActivity() {
     }
 
     private fun initViews() {
-        rvFiles = findViewById(R.id.rvFiles)
-        etSearchFiles = findViewById(R.id.etSearchFiles)
-        tabLayoutFiles = findViewById(R.id.tabLayoutFiles)
-        tvPathTitle = findViewById(R.id.tvPathTitle)
-        topBarFileManager = findViewById(R.id.topBarFileManager)
-        topBarSelection = findViewById(R.id.topBarSelection)
-        tvSelectionCount = findViewById(R.id.tvSelectionCount)
-        bottomSelectionBar = findViewById(R.id.bottomSelectionBar)
-        btnSelectAll = findViewById(R.id.btnSelectAll)
-        fabCreateFolder = findViewById(R.id.fabCreateFolder)
-        actionDelete = findViewById(R.id.actionDelete)
-        actionShare = findViewById(R.id.actionShare)
+        try {
+            rvFiles = findViewById(R.id.rvFiles)
+            etSearchFiles = findViewById(R.id.etSearchFiles)
+            tabLayoutFiles = findViewById(R.id.tabLayoutFiles)
+            tvPathTitle = findViewById(R.id.tvPathTitle)
+            topBarFileManager = findViewById(R.id.topBarFileManager)
+            topBarSelection = findViewById(R.id.topBarSelection)
+            tvSelectionCount = findViewById(R.id.tvSelectionCount)
+            bottomSelectionBar = findViewById(R.id.bottomSelectionBar)
+            btnSelectAll = findViewById(R.id.btnSelectAll)
+            fabCreateFolder = findViewById(R.id.fabCreateFolder)
+            actionDelete = findViewById(R.id.actionDelete)
+            actionShare = findViewById(R.id.actionShare)
 
-        fileAdapter = FileAdapter({ file -> handleFileClick(file) }, { file -> handleFileLongClick(file) })
-        imageAdapter = ImageAdapter({ uri -> handleImageClick(uri) }, { uri -> handleImageLongClick(uri) })
-        albumAdapter = AlbumAdapter { album -> handleAlbumClick(album) }
+            fileAdapter = FileAdapter({ file -> handleFileClick(file) }, { file -> handleFileLongClick(file) })
+            imageAdapter = ImageAdapter({ uri -> handleImageClick(uri) }, { uri -> handleImageLongClick(uri) })
+            albumAdapter = AlbumAdapter { album -> handleAlbumClick(album) }
+        } catch (e: Exception) {
+            Toast.makeText(this, "خطأ في تهيئة الواجهة", Toast.LENGTH_SHORT).show()
+            finish()
+        }
     }
 
     private fun setupListeners() {
         tabLayoutFiles.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
             override fun onTabSelected(tab: TabLayout.Tab?) {
                 if (isTabChangeInternal) return 
-                when (tab?.position) {
-                    0 -> if (currentMode != ViewMode.FILES) setViewMode(ViewMode.FILES)
-                    1 -> if (currentMode != ViewMode.GALLERY) setViewMode(ViewMode.GALLERY)
-                    2 -> if (currentMode != ViewMode.ALBUMS) setViewMode(ViewMode.ALBUMS)
-                }
+                try {
+                    when (tab?.position) {
+                        0 -> if (currentMode != ViewMode.FILES) setViewMode(ViewMode.FILES)
+                        1 -> if (currentMode != ViewMode.GALLERY) setViewMode(ViewMode.GALLERY)
+                        2 -> if (currentMode != ViewMode.ALBUMS) setViewMode(ViewMode.ALBUMS)
+                    }
+                } catch (e: Exception) { e.printStackTrace() }
             }
             override fun onTabUnselected(tab: TabLayout.Tab?) {}
             override fun onTabReselected(tab: TabLayout.Tab?) {}
@@ -169,8 +180,14 @@ class FileManagerActivity : AppCompatActivity() {
         
         findViewById<LinearLayout>(R.id.btnPinnedNew)?.setOnClickListener { showCreateVirtualAlbumDialog() }
         findViewById<LinearLayout>(R.id.btnPinnedFavorites)?.setOnClickListener { Toast.makeText(this, "قريباً", Toast.LENGTH_SHORT).show() }
-        findViewById<LinearLayout>(R.id.btnPinnedScreenshots)?.setOnClickListener { setViewMode(ViewMode.SCREENSHOTS) }
-        findViewById<LinearLayout>(R.id.btnPinnedTrash)?.setOnClickListener { setViewMode(ViewMode.TRASH) }
+        
+        // أزرار المعرض والمهملات
+        findViewById<LinearLayout>(R.id.btnPinnedScreenshots)?.setOnClickListener { 
+            try { setViewMode(ViewMode.SCREENSHOTS) } catch (e: Exception) { Toast.makeText(this, "لا يمكن فتح لقطات الشاشة", Toast.LENGTH_SHORT).show() }
+        }
+        findViewById<LinearLayout>(R.id.btnPinnedTrash)?.setOnClickListener { 
+            try { setViewMode(ViewMode.TRASH) } catch (e: Exception) { Toast.makeText(this, "لا يمكن فتح المهملات", Toast.LENGTH_SHORT).show() }
+        }
 
         btnSelectAll.setOnClickListener {
             if (currentMode == ViewMode.GALLERY || currentMode == ViewMode.SCREENSHOTS) {
@@ -204,77 +221,100 @@ class FileManagerActivity : AppCompatActivity() {
     }
 
     private fun updateUIForMode() {
-        when (currentMode) {
-            ViewMode.FILES -> {
-                rvFiles.layoutManager = LinearLayoutManager(this)
-                rvFiles.adapter = fileAdapter
-                fabCreateFolder.visibility = View.VISIBLE
-                tvPathTitle.text = currentDirectory.name
+        try {
+            when (currentMode) {
+                ViewMode.FILES -> {
+                    rvFiles.layoutManager = LinearLayoutManager(this)
+                    rvFiles.adapter = fileAdapter
+                    fabCreateFolder.visibility = View.VISIBLE
+                    tvPathTitle.text = currentDirectory.name
+                }
+                ViewMode.TRASH -> {
+                    rvFiles.layoutManager = LinearLayoutManager(this)
+                    rvFiles.adapter = fileAdapter
+                    fabCreateFolder.visibility = View.GONE
+                    tvPathTitle.text = "سلة المهملات"
+                }
+                ViewMode.GALLERY -> {
+                    rvFiles.layoutManager = GridLayoutManager(this, 3)
+                    rvFiles.adapter = imageAdapter
+                    fabCreateFolder.visibility = View.GONE
+                    tvPathTitle.text = "معرض الصور"
+                }
+                ViewMode.SCREENSHOTS -> {
+                    rvFiles.layoutManager = GridLayoutManager(this, 3)
+                    rvFiles.adapter = imageAdapter
+                    fabCreateFolder.visibility = View.GONE
+                    tvPathTitle.text = "لقطات الشاشة"
+                }
+                ViewMode.ALBUMS -> {
+                    rvFiles.layoutManager = GridLayoutManager(this, 2)
+                    rvFiles.adapter = albumAdapter
+                    fabCreateFolder.visibility = View.VISIBLE
+                    tvPathTitle.text = "الألبومات"
+                }
             }
-            ViewMode.TRASH -> {
-                rvFiles.layoutManager = LinearLayoutManager(this)
-                rvFiles.adapter = fileAdapter
-                fabCreateFolder.visibility = View.GONE
-                tvPathTitle.text = "سلة المهملات"
-            }
-            ViewMode.GALLERY -> {
-                rvFiles.layoutManager = GridLayoutManager(this, 3)
-                rvFiles.adapter = imageAdapter
-                fabCreateFolder.visibility = View.GONE
-                tvPathTitle.text = "معرض الصور"
-            }
-            ViewMode.SCREENSHOTS -> {
-                rvFiles.layoutManager = GridLayoutManager(this, 3)
-                rvFiles.adapter = imageAdapter
-                fabCreateFolder.visibility = View.GONE
-                tvPathTitle.text = "لقطات الشاشة"
-            }
-            ViewMode.ALBUMS -> {
-                rvFiles.layoutManager = GridLayoutManager(this, 2)
-                rvFiles.adapter = albumAdapter
-                fabCreateFolder.visibility = View.VISIBLE
-                tvPathTitle.text = "الألبومات"
-            }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 
     private fun loadDataForCurrentMode() {
-        when (currentMode) {
-            ViewMode.FILES -> loadDirectory(currentDirectory)
-            ViewMode.TRASH -> loadTrashDirectory()
-            ViewMode.GALLERY -> checkImagePermissionAndLoad()
-            ViewMode.SCREENSHOTS -> checkImagePermissionAndLoad()
-            ViewMode.ALBUMS -> loadAlbums()
+        try {
+            when (currentMode) {
+                ViewMode.FILES -> loadDirectory(currentDirectory)
+                ViewMode.TRASH -> loadTrashDirectory()
+                ViewMode.GALLERY -> checkImagePermissionAndLoad()
+                ViewMode.SCREENSHOTS -> checkImagePermissionAndLoad()
+                ViewMode.ALBUMS -> loadAlbums()
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "حدث خطأ أثناء تحميل البيانات", Toast.LENGTH_SHORT).show()
+            e.printStackTrace()
         }
     }
 
     private fun checkImagePermissionAndLoad() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (checkSelfPermission(android.Manifest.permission.READ_MEDIA_IMAGES) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                loadImages()
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                if (checkSelfPermission(android.Manifest.permission.READ_MEDIA_IMAGES) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    loadImages()
+                } else {
+                    requestImagePermissionLauncher.launch(android.Manifest.permission.READ_MEDIA_IMAGES)
+                }
             } else {
-                requestImagePermissionLauncher.launch(android.Manifest.permission.READ_MEDIA_IMAGES)
+                loadImages()
             }
-        } else {
-            loadImages()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            setViewMode(ViewMode.FILES) // في حال حدوث خطأ مفاجئ في الصلاحيات، نعود للملفات
         }
     }
 
     private fun loadImages() {
-        if (currentMode == ViewMode.SCREENSHOTS) loadScreenshots() else loadRealGallery()
+        try {
+            if (currentMode == ViewMode.SCREENSHOTS) loadScreenshots() else loadRealGallery()
+        } catch (e: Exception) {
+            Toast.makeText(this, "لا يمكن فتح المعرض", Toast.LENGTH_SHORT).show()
+            setViewMode(ViewMode.FILES)
+        }
     }
 
     private fun handleBackPress() {
         if (isSelectionMode) {
             clearSelection()
         } else {
-            when (currentMode) {
-                ViewMode.FILES -> {
-                    val parent = currentDirectory.parentFile
-                    if (parent != null) loadDirectory(parent) else finish()
+            try {
+                when (currentMode) {
+                    ViewMode.FILES -> {
+                        val parent = currentDirectory.parentFile
+                        if (parent != null) loadDirectory(parent) else finish()
+                    }
+                    ViewMode.TRASH, ViewMode.SCREENSHOTS -> setViewMode(ViewMode.GALLERY)
+                    ViewMode.ALBUMS, ViewMode.GALLERY -> setViewMode(ViewMode.FILES)
                 }
-                ViewMode.TRASH, ViewMode.SCREENSHOTS -> setViewMode(ViewMode.GALLERY)
-                ViewMode.ALBUMS, ViewMode.GALLERY -> setViewMode(ViewMode.FILES)
+            } catch (e: Exception) {
+                finish() // في حال وجود مشكلة في العودة، نغلق الصفحة بأمان
             }
         }
     }
@@ -283,20 +323,29 @@ class FileManagerActivity : AppCompatActivity() {
 
     private fun getTrashDir(): File {
         val trashDir = File(Environment.getExternalStorageDirectory(), ".MonolithTrash")
-        if (!trashDir.exists()) trashDir.mkdirs()
+        if (!trashDir.exists()) {
+            try {
+                trashDir.mkdirs()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
         return trashDir
     }
 
-    // دالة مساعدة لجلب مسار الملف من الـ URI
     private fun getPathFromUri(uri: Uri): String? {
-        val projection = arrayOf(MediaStore.Images.Media.DATA)
-        val cursor = contentResolver.query(uri, projection, null, null, null)
         var path: String? = null
-        cursor?.use {
-            if (it.moveToFirst()) {
-                val columnIndex = it.getColumnIndexOrThrow(MediaStore.Images.Media.DATA)
-                path = it.getString(columnIndex)
+        try {
+            val projection = arrayOf(MediaStore.Images.Media.DATA)
+            val cursor = contentResolver.query(uri, projection, null, null, null)
+            cursor?.use {
+                if (it.moveToFirst()) {
+                    val columnIndex = it.getColumnIndexOrThrow(MediaStore.Images.Media.DATA)
+                    path = it.getString(columnIndex)
+                }
             }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
         return path
     }
@@ -307,38 +356,43 @@ class FileManagerActivity : AppCompatActivity() {
         AlertDialog.Builder(this).setTitle("نقل إلى سلة المهملات").setMessage("نقل $count عنصر إلى السلة؟")
             .setPositiveButton("نعم") { _, _ ->
                 lifecycleScope.launch(Dispatchers.IO) {
-                    val trashDir = getTrashDir()
-                    if (currentMode == ViewMode.GALLERY || currentMode == ViewMode.SCREENSHOTS) {
-                        selectedImages.forEach { uri ->
-                            try {
-                                val path = getPathFromUri(uri)
-                                if (path != null) {
-                                    val originalFile = File(path)
-                                    if (originalFile.exists()) {
-                                        val destFile = File(trashDir, "${System.currentTimeMillis()}_${originalFile.name}")
-                                        originalFile.copyTo(destFile, overwrite = true)
-                                        if (originalFile.delete()) {
-                                            // تحديث المعرض بعد الحذف
-                                            MediaScannerConnection.scanFile(this@FileManagerActivity, arrayOf(path), null, null)
+                    try {
+                        val trashDir = getTrashDir()
+                        if (currentMode == ViewMode.GALLERY || currentMode == ViewMode.SCREENSHOTS) {
+                            selectedImages.forEach { uri ->
+                                try {
+                                    val path = getPathFromUri(uri)
+                                    if (path != null) {
+                                        val originalFile = File(path)
+                                        if (originalFile.exists()) {
+                                            val destFile = File(trashDir, "${System.currentTimeMillis()}_${originalFile.name}")
+                                            originalFile.copyTo(destFile, overwrite = true)
+                                            if (originalFile.delete()) {
+                                                MediaScannerConnection.scanFile(this@FileManagerActivity, arrayOf(path), null, null)
+                                            }
                                         }
                                     }
-                                }
-                            } catch (e: Exception) { e.printStackTrace() }
+                                } catch (e: Exception) { e.printStackTrace() }
+                            }
+                        } else {
+                            selectedFiles.forEach { file ->
+                                try {
+                                    val destFile = File(trashDir, "${System.currentTimeMillis()}_${file.name}")
+                                    if (file.renameTo(destFile)) {
+                                        MediaScannerConnection.scanFile(this@FileManagerActivity, arrayOf(file.absolutePath), null, null)
+                                    }
+                                } catch (e: Exception) { e.printStackTrace() }
+                            }
                         }
-                    } else {
-                        selectedFiles.forEach { file ->
-                            try {
-                                val destFile = File(trashDir, "${System.currentTimeMillis()}_${file.name}")
-                                if (file.renameTo(destFile)) {
-                                    MediaScannerConnection.scanFile(this@FileManagerActivity, arrayOf(file.absolutePath), null, null)
-                                }
-                            } catch (e: Exception) { e.printStackTrace() }
+                        withContext(Dispatchers.Main) {
+                            clearSelection()
+                            loadDataForCurrentMode()
+                            Toast.makeText(this@FileManagerActivity, "تم النقل إلى سلة المهملات", Toast.LENGTH_SHORT).show()
                         }
-                    }
-                    withContext(Dispatchers.Main) {
-                        clearSelection()
-                        loadDataForCurrentMode()
-                        Toast.makeText(this@FileManagerActivity, "تم النقل إلى سلة المهملات", Toast.LENGTH_SHORT).show()
+                    } catch (e: Exception) {
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(this@FileManagerActivity, "فشل نقل بعض العناصر", Toast.LENGTH_SHORT).show()
+                        }
                     }
                 }
             }.setNegativeButton("إلغاء", null).show()
@@ -347,9 +401,16 @@ class FileManagerActivity : AppCompatActivity() {
     private fun loadTrashDirectory() {
         lifecycleScope.launch {
             try {
-                val files = withContext(Dispatchers.IO) { getTrashDir().listFiles()?.toMutableList() ?: mutableListOf() }
+                val files = withContext(Dispatchers.IO) { 
+                    try {
+                        getTrashDir().listFiles()?.toMutableList() ?: mutableListOf() 
+                    } catch (e: Exception) { mutableListOf<File>() }
+                }
                 withContext(Dispatchers.Main) { allFiles = files; applyFilterAndSort() }
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) {
+                Toast.makeText(this@FileManagerActivity, "المهملات فارغة أو غير متاحة", Toast.LENGTH_SHORT).show()
+                withContext(Dispatchers.Main) { setViewMode(ViewMode.FILES) }
+            }
         }
     }
 
@@ -380,27 +441,34 @@ class FileManagerActivity : AppCompatActivity() {
             if (currentMode == ViewMode.TRASH) {
                 AlertDialog.Builder(this).setTitle(file.name).setItems(arrayOf("استعادة", "حذف نهائي")) { _, which ->
                     if (which == 0) {
-                        val originalName = file.name.substringAfter("_")
-                        val isImage = originalName.endsWith(".jpg", true) || originalName.endsWith(".png", true) || originalName.endsWith(".jpeg", true) || originalName.endsWith(".webp", true)
-                        // إصلاح: استعادة الصور إلى مجلد الصور لكي تظهر في المعرض
-                        val restoreDir = if (isImage) {
-                            val picturesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
-                            val restoredDir = File(picturesDir, "MonolithRestored")
-                            if (!restoredDir.exists()) restoredDir.mkdirs()
-                            restoredDir
-                        } else {
-                            currentDirectory
-                        }
-                        val restoredFile = File(restoreDir, originalName)
-                        if (file.renameTo(restoredFile)) {
-                            MediaScannerConnection.scanFile(this@FileManagerActivity, arrayOf(restoredFile.absolutePath), null, null)
-                            Toast.makeText(this, "تمت الاستعادة إلى ${restoreDir.name}", Toast.LENGTH_SHORT).show()
-                            loadTrashDirectory() 
+                        try {
+                            val originalName = file.name.substringAfter("_")
+                            val isImage = originalName.endsWith(".jpg", true) || originalName.endsWith(".png", true) || originalName.endsWith(".jpeg", true) || originalName.endsWith(".webp", true)
+                            val restoreDir = if (isImage) {
+                                val picturesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+                                val restoredDir = File(picturesDir, "MonolithRestored")
+                                if (!restoredDir.exists()) restoredDir.mkdirs()
+                                restoredDir
+                            } else {
+                                currentDirectory
+                            }
+                            val restoredFile = File(restoreDir, originalName)
+                            if (file.renameTo(restoredFile)) {
+                                MediaScannerConnection.scanFile(this@FileManagerActivity, arrayOf(restoredFile.absolutePath), null, null)
+                                Toast.makeText(this, "تمت الاستعادة إلى ${restoreDir.name}", Toast.LENGTH_SHORT).show()
+                                loadTrashDirectory() 
+                            }
+                        } catch (e: Exception) {
+                            Toast.makeText(this, "فشلت الاستعادة", Toast.LENGTH_SHORT).show()
                         }
                     } else { 
-                        file.delete()
-                        loadTrashDirectory()
-                        Toast.makeText(this, "تم الحذف نهائياً", Toast.LENGTH_SHORT).show() 
+                        try {
+                            file.delete()
+                            loadTrashDirectory()
+                            Toast.makeText(this, "تم الحذف نهائياً", Toast.LENGTH_SHORT).show() 
+                        } catch (e: Exception) {
+                            Toast.makeText(this, "فشل الحذف", Toast.LENGTH_SHORT).show()
+                        }
                     }
                 }.show()
                 return
@@ -425,7 +493,11 @@ class FileManagerActivity : AppCompatActivity() {
     private fun handleImageClick(uri: Uri) {
         if (isSelectionMode) toggleImageSelection(uri)
         else {
-            startActivity(Intent(this, ImageViewerActivity::class.java).putExtra("image_uri", uri.toString()))
+            try {
+                startActivity(Intent(this, ImageViewerActivity::class.java).putExtra("image_uri", uri.toString()))
+            } catch (e: Exception) {
+                Toast.makeText(this, "لا يمكن فتح الصورة", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
@@ -448,13 +520,17 @@ class FileManagerActivity : AppCompatActivity() {
     }
 
     private fun shareSelectedFiles() {
-        val urisToShare = mutableListOf<Uri>()
-        if (currentMode == ViewMode.GALLERY || currentMode == ViewMode.SCREENSHOTS) { urisToShare.addAll(selectedImages) }
-        else { selectedFiles.forEach { try { urisToShare.add(FileProvider.getUriForFile(this, "${packageName}.fileprovider", it)) } catch (e: Exception) {} } }
-        if (urisToShare.isEmpty()) return
-        startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND_MULTIPLE).apply {
-            type = "*/*"; putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(urisToShare)); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }, "مشاركة عبر"))
+        try {
+            val urisToShare = mutableListOf<Uri>()
+            if (currentMode == ViewMode.GALLERY || currentMode == ViewMode.SCREENSHOTS) { urisToShare.addAll(selectedImages) }
+            else { selectedFiles.forEach { try { urisToShare.add(FileProvider.getUriForFile(this, "${packageName}.fileprovider", it)) } catch (e: Exception) {} } }
+            if (urisToShare.isEmpty()) return
+            startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+                type = "*/*"; putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(urisToShare)); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }, "مشاركة عبر"))
+        } catch (e: Exception) {
+            Toast.makeText(this, "فشلت المشاركة", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun showSortDialog() {
@@ -470,7 +546,12 @@ class FileManagerActivity : AppCompatActivity() {
             val query = etSearchFiles.text.toString()
             if (currentMode == ViewMode.GALLERY || currentMode == ViewMode.SCREENSHOTS) {
                 val filteredUris = if (query.isEmpty()) galleryUris.toList() else galleryUris.filter { (it.lastPathSegment ?: "").contains(query, ignoreCase = true) }
-                imageAdapter.submitList(filteredUris)
+                try {
+                    imageAdapter.submitList(filteredUris)
+                } catch (e: Exception) {
+                    Log.e("GalleryError", "Error submitting list to ImageAdapter", e)
+                    Toast.makeText(this, "خطأ في عرض الصور (تأكد من كود ImageAdapter)", Toast.LENGTH_SHORT).show()
+                }
             } else {
                 var filtered = if (query.isEmpty()) allFiles.toList() else allFiles.filter { it.name.contains(query, ignoreCase = true) }
                 if (!showHiddenFiles) filtered = filtered.filter { !it.name.startsWith(".") }
@@ -479,7 +560,10 @@ class FileManagerActivity : AppCompatActivity() {
                 sortedList = sortedList.sortedBy { !it.isDirectory }
                 fileAdapter.submitList(sortedList.map { FileItem(file = it) }, false)
             }
-        } catch (e: Exception) { e.printStackTrace() }
+        } catch (e: Exception) { 
+            e.printStackTrace() 
+            Toast.makeText(this, "خطأ في التصفية والترتيب", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun installApk(apkFile: File) {
@@ -490,11 +574,13 @@ class FileManagerActivity : AppCompatActivity() {
     }
 
     private fun showCreateFolderDialog() {
-        val input = EditText(this).apply { hint = "اسم المجلد" }
-        AlertDialog.Builder(this).setTitle("إنشاء مجلد").setView(input).setPositiveButton("إنشاء") { _, _ -> 
-            val name = input.text.toString().trim()
-            if (name.isNotEmpty()) { val newFolder = File(currentDirectory, name); if (newFolder.mkdirs()) { loadDirectory(currentDirectory) } }
-        }.setNegativeButton("إلغاء", null).show()
+        try {
+            val input = EditText(this).apply { hint = "اسم المجلد" }
+            AlertDialog.Builder(this).setTitle("إنشاء مجلد").setView(input).setPositiveButton("إنشاء") { _, _ -> 
+                val name = input.text.toString().trim()
+                if (name.isNotEmpty()) { val newFolder = File(currentDirectory, name); if (newFolder.mkdirs()) { loadDirectory(currentDirectory) } }
+            }.setNegativeButton("إلغاء", null).show()
+        } catch (e: Exception) { e.printStackTrace() }
     }
 
     private fun loadScreenshots() {
@@ -502,7 +588,6 @@ class FileManagerActivity : AppCompatActivity() {
             try {
                 val uris = withContext(Dispatchers.IO) {
                     val list = mutableListOf<Uri>()
-                    // إصلاح: تقليل عدد قيم selectionArgs لتطابق علامات الاستفهام
                     val selection = "${MediaStore.Images.Media.RELATIVE_PATH} LIKE ? OR ${MediaStore.Images.Media.BUCKET_DISPLAY_NAME} LIKE ?"
                     val selectionArgs = arrayOf("%Screenshot%", "%Screenshot%")
                     val cursor = contentResolver.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, arrayOf(MediaStore.Images.Media._ID), selection, selectionArgs, "${MediaStore.Images.Media.DATE_ADDED} DESC")
@@ -513,7 +598,10 @@ class FileManagerActivity : AppCompatActivity() {
                     if (uris.isEmpty()) Toast.makeText(this@FileManagerActivity, "لا توجد لقطات شاشة", Toast.LENGTH_SHORT).show()
                     else { galleryUris = uris; applyFilterAndSort() }
                 }
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) { 
+                e.printStackTrace() 
+                withContext(Dispatchers.Main) { setViewMode(ViewMode.FILES); Toast.makeText(this@FileManagerActivity, "حدث خطأ في تحميل لقطات الشاشة", Toast.LENGTH_SHORT).show() }
+            }
         }
     }
 
@@ -527,7 +615,10 @@ class FileManagerActivity : AppCompatActivity() {
                     list
                 }
                 withContext(Dispatchers.Main) { galleryUris = uris; applyFilterAndSort() }
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) { 
+                e.printStackTrace() 
+                withContext(Dispatchers.Main) { setViewMode(ViewMode.FILES); Toast.makeText(this@FileManagerActivity, "حدث خطأ في تحميل المعرض، تأكد من الصلاحيات", Toast.LENGTH_LONG).show() }
+            }
         }
     }
 
@@ -562,7 +653,10 @@ class FileManagerActivity : AppCompatActivity() {
                     albumsList.add(AlbumItem(vAlbum.id, vAlbum.name, cover, mediaUris.size, vAlbum.isVault))
                 }
                 withContext(Dispatchers.Main) { albumAdapter.submitList(albumsList) }
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) { 
+                e.printStackTrace() 
+                withContext(Dispatchers.Main) { setViewMode(ViewMode.FILES); Toast.makeText(this@FileManagerActivity, "حدث خطأ في تحميل الألبومات", Toast.LENGTH_SHORT).show() }
+            }
         }
     }
 
@@ -580,16 +674,21 @@ class FileManagerActivity : AppCompatActivity() {
                     list
                 }
                 withContext(Dispatchers.Main) { imageAdapter.submitList(uris) }
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) { 
+                e.printStackTrace() 
+                withContext(Dispatchers.Main) { setViewMode(ViewMode.ALBUMS); Toast.makeText(this@FileManagerActivity, "حدث خطأ في فتح الألبوم", Toast.LENGTH_SHORT).show() }
+            }
         }
     }
 
     private fun showCreateVirtualAlbumDialog() {
-        val input = EditText(this).apply { hint = "اسم الألبوم" }
-        AlertDialog.Builder(this).setTitle("إنشاء ألبوم").setView(input).setPositiveButton("إنشاء") { _, _ ->
-            val name = input.text.toString().trim()
-            if (name.isNotEmpty()) { lifecycleScope.launch { virtualAlbumDao.insertAlbum(VirtualAlbumEntity(name = name)); loadAlbums() } }
-        }.setNegativeButton("إلغاء", null).show()
+        try {
+            val input = EditText(this).apply { hint = "اسم الألبوم" }
+            AlertDialog.Builder(this).setTitle("إنشاء ألبوم").setView(input).setPositiveButton("إنشاء") { _, _ ->
+                val name = input.text.toString().trim()
+                if (name.isNotEmpty()) { lifecycleScope.launch { virtualAlbumDao.insertAlbum(VirtualAlbumEntity(name = name)); loadAlbums() } }
+            }.setNegativeButton("إلغاء", null).show()
+        } catch (e: Exception) { e.printStackTrace() }
     }
 
     private fun handleZipFile(zipFile: File) {
@@ -598,67 +697,75 @@ class FileManagerActivity : AppCompatActivity() {
     }
 
     private fun showExtractPasswordDialog(zipFile: File) {
-        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_extract_zip, null)
-        val dialog = AlertDialog.Builder(this).setView(dialogView).setCancelable(false).create()
-        val tilPassword = dialogView.findViewById<TextInputLayout>(R.id.tilExtractPassword)
-        val etPassword = dialogView.findViewById<TextInputEditText>(R.id.etExtractPassword)
-        val tvError = dialogView.findViewById<TextView>(R.id.tvErrorText)
-        val btnExtract = dialogView.findViewById<MaterialButton>(R.id.btnExtractZip)
-        dialogView.findViewById<MaterialButton>(R.id.btnCancelExtract).setOnClickListener { dialog.dismiss() }
-        btnExtract.setOnClickListener {
-            val password = etPassword.text.toString()
-            if (password.isEmpty()) { tvError.text = "أدخل كلمة المرور"; tvError.visibility = View.VISIBLE; return@setOnClickListener }
-            tvError.visibility = View.GONE; btnExtract.isEnabled = false; btnExtract.text = "جاري الفك..."
-            lifecycleScope.launch {
-                val success = withContext(Dispatchers.IO) {
-                    try {
-                        val dest = File(zipFile.parentFile, zipFile.nameWithoutExtension)
-                        if (!dest.exists()) dest.mkdirs()
-                        val zip = ZipFile(zipFile); if (password.isNotEmpty()) zip.setPassword(password.toCharArray())
-                        zip.extractAll(dest.absolutePath)
-                        true
-                    } catch (e: Exception) { false }
+        try {
+            val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_extract_zip, null)
+            val dialog = AlertDialog.Builder(this).setView(dialogView).setCancelable(false).create()
+            val tilPassword = dialogView.findViewById<TextInputLayout>(R.id.tilExtractPassword)
+            val etPassword = dialogView.findViewById<TextInputEditText>(R.id.etExtractPassword)
+            val tvError = dialogView.findViewById<TextView>(R.id.tvErrorText)
+            val btnExtract = dialogView.findViewById<MaterialButton>(R.id.btnExtractZip)
+            dialogView.findViewById<MaterialButton>(R.id.btnCancelExtract).setOnClickListener { dialog.dismiss() }
+            btnExtract.setOnClickListener {
+                val password = etPassword.text.toString()
+                if (password.isEmpty()) { tvError.text = "أدخل كلمة المرور"; tvError.visibility = View.VISIBLE; return@setOnClickListener }
+                tvError.visibility = View.GONE; btnExtract.isEnabled = false; btnExtract.text = "جاري الفك..."
+                lifecycleScope.launch {
+                    val success = withContext(Dispatchers.IO) {
+                        try {
+                            val dest = File(zipFile.parentFile, zipFile.nameWithoutExtension)
+                            if (!dest.exists()) dest.mkdirs()
+                            val zip = ZipFile(zipFile); if (password.isNotEmpty()) zip.setPassword(password.toCharArray())
+                            zip.extractAll(dest.absolutePath)
+                            true
+                        } catch (e: Exception) { false }
+                    }
+                    if (success) { dialog.dismiss(); Toast.makeText(this@FileManagerActivity, "تم الفك!", Toast.LENGTH_SHORT).show(); loadDataForCurrentMode() }
+                    else { tvError.text = "كلمة مرور خاطئة"; tvError.visibility = View.VISIBLE; tilPassword.boxStrokeColor = android.graphics.Color.RED; shakeView(tilPassword); btnExtract.isEnabled = true; btnExtract.text = "فك الضغط" }
                 }
-                if (success) { dialog.dismiss(); Toast.makeText(this@FileManagerActivity, "تم الفك!", Toast.LENGTH_SHORT).show(); loadDataForCurrentMode() }
-                else { tvError.text = "كلمة مرور خاطئة"; tvError.visibility = View.VISIBLE; tilPassword.boxStrokeColor = android.graphics.Color.RED; shakeView(tilPassword); btnExtract.isEnabled = true; btnExtract.text = "فك الضغط" }
             }
-        }
-        dialog.show()
+            dialog.show()
+        } catch (e: Exception) { e.printStackTrace() }
     }
 
     private fun executeExtraction(zipFile: File) {
         lifecycleScope.launch {
-            val success = withContext(Dispatchers.IO) {
-                try {
-                    val dest = File(zipFile.parentFile, zipFile.nameWithoutExtension)
-                    if (!dest.exists()) dest.mkdirs()
-                    ZipFile(zipFile).extractAll(dest.absolutePath)
-                    true
-                } catch (e: Exception) { false }
-            }
-            if (success) { Toast.makeText(this@FileManagerActivity, "تم الفك!", Toast.LENGTH_SHORT).show(); loadDataForCurrentMode() }
-            else { Toast.makeText(this@FileManagerActivity, "فشل الفك", Toast.LENGTH_SHORT).show() }
+            try {
+                val success = withContext(Dispatchers.IO) {
+                    try {
+                        val dest = File(zipFile.parentFile, zipFile.nameWithoutExtension)
+                        if (!dest.exists()) dest.mkdirs()
+                        ZipFile(zipFile).extractAll(dest.absolutePath)
+                        true
+                    } catch (e: Exception) { false }
+                }
+                if (success) { Toast.makeText(this@FileManagerActivity, "تم الفك!", Toast.LENGTH_SHORT).show(); loadDataForCurrentMode() }
+                else { Toast.makeText(this@FileManagerActivity, "فشل الفك", Toast.LENGTH_SHORT).show() }
+            } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
     private fun shakeView(view: View) {
-        val shake = TranslateAnimation(0f, 10f, 0f, 0f)
-        shake.duration = 150; shake.interpolator = CycleInterpolator(7f); view.startAnimation(shake)
+        try {
+            val shake = TranslateAnimation(0f, 10f, 0f, 0f)
+            shake.duration = 150; shake.interpolator = CycleInterpolator(7f); view.startAnimation(shake)
+        } catch (e: Exception) { e.printStackTrace() }
     }
 
     private fun showCreateZipDialog(filesToZip: List<File>) {
-        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_create_zip, null)
-        val dialog = AlertDialog.Builder(this).setView(dialogView).create()
-        val etZipName = dialogView.findViewById<EditText>(R.id.etZipName)
-        val etZipPassword = dialogView.findViewById<TextInputEditText>(R.id.etZipPassword)
-        etZipName.setText(if (filesToZip.size == 1) filesToZip[0].nameWithoutExtension else "Archive_${System.currentTimeMillis()}")
-        dialogView.findViewById<MaterialButton>(R.id.btnCancelZip).setOnClickListener { dialog.dismiss() }
-        dialogView.findViewById<MaterialButton>(R.id.btnCreateZip).setOnClickListener {
-            val name = etZipName.text.toString().trim()
-            if (name.isEmpty()) return@setOnClickListener
-            dialog.dismiss(); executeZipCreation(filesToZip, name, etZipPassword.text.toString())
-        }
-        dialog.show()
+        try {
+            val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_create_zip, null)
+            val dialog = AlertDialog.Builder(this).setView(dialogView).create()
+            val etZipName = dialogView.findViewById<EditText>(R.id.etZipName)
+            val etZipPassword = dialogView.findViewById<TextInputEditText>(R.id.etZipPassword)
+            etZipName.setText(if (filesToZip.size == 1) filesToZip[0].nameWithoutExtension else "Archive_${System.currentTimeMillis()}")
+            dialogView.findViewById<MaterialButton>(R.id.btnCancelZip).setOnClickListener { dialog.dismiss() }
+            dialogView.findViewById<MaterialButton>(R.id.btnCreateZip).setOnClickListener {
+                val name = etZipName.text.toString().trim()
+                if (name.isEmpty()) return@setOnClickListener
+                dialog.dismiss(); executeZipCreation(filesToZip, name, etZipPassword.text.toString())
+            }
+            dialog.show()
+        } catch (e: Exception) { e.printStackTrace() }
     }
 
     private fun executeZipCreation(files: List<File>, zipName: String, password: String) {
@@ -672,27 +779,39 @@ class FileManagerActivity : AppCompatActivity() {
                     files.forEach { if (it.isDirectory) zip.addFolder(it, params) else zip.addFile(it, params) }
                 }
                 withContext(Dispatchers.Main) { Toast.makeText(this@FileManagerActivity, "تم الضغط!", Toast.LENGTH_SHORT).show(); loadDataForCurrentMode() }
-            } catch (e: Exception) { withContext(Dispatchers.Main) { Toast.makeText(this@FileManagerActivity, "فشل: ${e.message}", Toast.LENGTH_LONG).show() } }
+            } catch (e: Exception) { 
+                withContext(Dispatchers.Main) { Toast.makeText(this@FileManagerActivity, "فشل: ${e.message}", Toast.LENGTH_LONG).show() } 
+            }
         }
     }
 
     private fun checkAndRequestInitialPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            if (Environment.isExternalStorageManager()) loadDataForCurrentMode()
-            else { requestPermissionLauncher.launch(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply { addCategory("android.intent.category.DEFAULT"); data = Uri.parse("package:$packageName") }) }
-        } else loadDataForCurrentMode()
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                if (Environment.isExternalStorageManager()) loadDataForCurrentMode()
+                else { requestPermissionLauncher.launch(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply { addCategory("android.intent.category.DEFAULT"); data = Uri.parse("package:$packageName") }) }
+            } else loadDataForCurrentMode()
+        } catch (e: Exception) {
+            Toast.makeText(this, "حدث خطأ في الصلاحيات", Toast.LENGTH_SHORT).show()
+            loadDataForCurrentMode() // نحاول المتابعة على أي حال
+        }
     }
 
     private fun loadDirectory(dir: File) {
         currentDirectory = dir
         lifecycleScope.launch {
-            val files = withContext(Dispatchers.IO) { dir.listFiles()?.toMutableList() ?: mutableListOf() }
-            withContext(Dispatchers.Main) { allFiles = files; applyFilterAndSort() }
+            try {
+                val files = withContext(Dispatchers.IO) { dir.listFiles()?.toMutableList() ?: mutableListOf() }
+                withContext(Dispatchers.Main) { allFiles = files; applyFilterAndSort() }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                Toast.makeText(this@FileManagerActivity, "لا يمكن الوصول للمجلد", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 }
 
-// --- كلاس FileItem و FileAdapter ---
+// --- كلاس FileItem و FileAdapter كما هو ---
 data class FileItem(
     val file: File,
     val name: String = file.name,
