@@ -1,7 +1,6 @@
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
-    // تحسين الخبراء: استبدال kapt البطيء بـ ksp السريع
     id 'com.google.devtools.ksp' version '1.9.0-1.0.13' 
 }
 
@@ -17,14 +16,11 @@ android {
         versionName "1.0"
         
         buildConfigField "String", "API_BASE_URL", "\"https://api.groq.com/openai/\""
-        
-        // تحسين الخبراء: دعم الأيقونات المتجهة (أخف وأجمل)
         vectorDrawables.useSupportLibrary = true
     }
 
     buildTypes {
         release {
-            // تحسين الخبراء: تفعيل الحماية وتقليص الحجم في النسخة النهائية
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
@@ -78,7 +74,7 @@ dependencies {
     implementation 'androidx.biometric:biometric:1.1.0'
     implementation 'com.airbnb.android:lottie:6.4.0'
     
-    // قاعدة البيانات (Room) باستخدام KSP السريع
+    // قاعدة البيانات (Room)
     implementation 'androidx.room:room-runtime:2.6.1'
     implementation 'androidx.room:room-ktx:2.6.1'
     ksp 'androidx.room:room-compiler:2.6.1'
@@ -91,6 +87,11 @@ dependencies {
     implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.7.0'
     implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0'
 
-    // *** محرك الضغط والتشفير العسكري (Zip4j) ***
+    // محرك الضغط والتشفير
     implementation 'net.lingala.zip4j:zip4j:2.11.5'
+
+    // *** تحسينات الأمان الخبيرة ***
+    implementation 'net.zetetic:android-database-sqlcipher:4.5.4' // تشفير قاعدة البيانات
+    implementation 'androidx.sqlite:sqlite-ktx:2.4.0' // دعم SQLCipher
+    implementation 'com.scottyab:rootbeer-lib:0.1.0' // كشف الروت والاختراق
 }
