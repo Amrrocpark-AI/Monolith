@@ -39,6 +39,7 @@ import net.lingala.zip4j.model.ZipParameters
 import net.lingala.zip4j.model.enums.AesKeyStrength
 import net.lingala.zip4j.model.enums.EncryptionMethod
 import java.io.File
+import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -71,7 +72,9 @@ class FileManagerActivity : AppCompatActivity() {
     
     private var isGalleryMode = false
     private var isAlbumMode = false
-    private var isFilterMode = false // لتفعيل وضع التصفية (لقطات الشاشة، المفضلة)
+    private var isTrashMode = false
+    private var isScreenshotMode = false
+    
     private var currentAlbumId: String? = null
     private var isSortAscending = true
     private var sortType = "NAME"
@@ -91,7 +94,6 @@ class FileManagerActivity : AppCompatActivity() {
         }
     }
     
-    // طلب إذن الصور لأندرويد 13+
     private val requestImagePermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
         if (isGranted) {
             loadRealGallery()
@@ -145,8 +147,9 @@ class FileManagerActivity : AppCompatActivity() {
             override fun onTabSelected(tab: TabLayout.Tab?) {
                 try {
                     clearSelection()
+                    isTrashMode = false
+                    isScreenshotMode = false
                     currentAlbumId = null
-                    isFilterMode = false
                     when (tab?.position) {
                         0 -> { 
                             isGalleryMode = false; isAlbumMode = false
@@ -171,7 +174,6 @@ class FileManagerActivity : AppCompatActivity() {
                         }
                     }
                 } catch (e: Exception) { 
-                    Toast.makeText(this@FileManagerActivity, "حدث خطأ", Toast.LENGTH_SHORT).show()
                     e.printStackTrace() 
                 }
             }
@@ -193,34 +195,29 @@ class FileManagerActivity : AppCompatActivity() {
             if (selectedFiles.isNotEmpty()) showCreateZipDialog(selectedFiles.toList()) 
         }
 
-        actionDelete.setOnClickListener { deleteSelectedFiles() }
+        actionDelete.setOnClickListener { moveSelectedToTrash() }
         actionShare.setOnClickListener { shareSelectedFiles() }
         actionMove.setOnClickListener { Toast.makeText(this, "قيد التطوير", Toast.LENGTH_SHORT).show() }
         actionCopy.setOnClickListener { Toast.makeText(this, "قيد التطوير", Toast.LENGTH_SHORT).show() }
         actionAddAlbum.setOnClickListener { Toast.makeText(this, "قيد التطوير", Toast.LENGTH_SHORT).show() }
 
-        // *** أزرار "ملفاتي" الجديدة (تعمل فعلياً الآن) ***
+        // *** أزرار "ملفاتي" ***
         findViewById<LinearLayout>(R.id.btnPinnedNew)?.setOnClickListener { showCreateVirtualAlbumDialog() }
         
         findViewById<LinearLayout>(R.id.btnPinnedFavorites)?.setOnClickListener { 
             Toast.makeText(this, "لا توجد صور مفضلة حالياً", Toast.LENGTH_SHORT).show()
-            // لاحقاً: سنقوم بجلب الصور المفضلة من قاعدة البيانات
         }
         
         findViewById<LinearLayout>(R.id.btnPinnedScreenshots)?.setOnClickListener { 
-            // فتح صور لقطات الشاشة
-            isGalleryMode = true
-            isAlbumMode = false
-            isFilterMode = true
-            tvPathTitle.text = "لقطات الشاشة"
-            rvFiles.layoutManager = GridLayoutManager(this, 3)
-            rvFiles.adapter = imageAdapter
-            fabCreateFolder.visibility = View.GONE
+            isScreenshotMode = true
+            tabLayoutFiles.getTabAt(1)?.select() // الانتقال لتبويب المعرض
             loadScreenshots()
         }
         
         findViewById<LinearLayout>(R.id.btnPinnedTrash)?.setOnClickListener { 
-            Toast.makeText(this, "سلة المهملات فارغة", Toast.LENGTH_SHORT).show()
+            isTrashMode = true
+            tabLayoutFiles.getTabAt(0)?.select() // الانتقال لتبويب الملفات
+            loadTrashDirectory()
         }
 
         btnSelectAll.setOnClickListener {
@@ -236,32 +233,121 @@ class FileManagerActivity : AppCompatActivity() {
         checkAndRequestPermission()
     }
 
-    // ... (باقي الدوال كما هي في الكود السابق)
     private fun handleBackPress() {
         if (isSelectionMode) { clearSelection() }
         else if (currentAlbumId != null) { currentAlbumId = null; loadAlbums() }
         else if (isAlbumMode) { tabLayoutFiles.getTabAt(0)?.select() }
-        else if (isFilterMode) { tabLayoutFiles.getTabAt(1)?.select() }
+        else if (isTrashMode) { tabLayoutFiles.getTabAt(0)?.select() }
         else { val parent = currentDirectory.parentFile; if (parent != null) loadDirectory(parent) else finish() }
     }
 
     override fun onBackPressed() { handleBackPress() }
 
+    // ==========================================
+    // سلة المهملات (The Real Trash)
+    // ==========================================
+    private fun getTrashDir(): File {
+        val trashDir = File(Environment.getExternalStorageDirectory(), ".MonolithTrash")
+        if (!trashDir.exists()) trashDir.mkdirs()
+        return trashDir
+    }
+
+    private fun moveSelectedToTrash() {
+        val count = if (isGalleryMode) selectedImages.size else selectedFiles.size
+        if (count == 0) return
+        
+        AlertDialog.Builder(this).setTitle("نقل إلى سلة المهملات").setMessage("نقل $count عنصر إلى السلة؟")
+            .setPositiveButton("نعم") { _, _ ->
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val trashDir = getTrashDir()
+                    
+                    if (isGalleryMode) {
+                        selectedImages.forEach { uri ->
+                            try {
+                                val fileName = System.currentTimeMillis().toString() + "_img"
+                                val destFile = File(trashDir, fileName)
+                                contentResolver.openInputStream(uri)?.use { input ->
+                                    FileOutputStream(destFile).use { output ->
+                                        input.copyTo(output)
+                                    }
+                                }
+                                contentResolver.delete(uri, null, null)
+                            } catch (e: Exception) { e.printStackTrace() }
+                        }
+                    } else {
+                        selectedFiles.forEach { file ->
+                            try {
+                                val destFile = File(trashDir, "${System.currentTimeMillis()}_${file.name}")
+                                file.renameTo(destFile)
+                            } catch (e: Exception) { e.printStackTrace() }
+                        }
+                    }
+                    withContext(Dispatchers.Main) {
+                        clearSelection()
+                        if (isGalleryMode) checkImagePermissionAndLoad() else loadDirectory(currentDirectory)
+                        Toast.makeText(this@FileManagerActivity, "تم النقل إلى سلة المهملات", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }.setNegativeButton("إلغاء", null).show()
+    }
+
+    private fun loadTrashDirectory() {
+        tvPathTitle.text = "سلة المهملات"
+        lifecycleScope.launch {
+            val files = withContext(Dispatchers.IO) { getTrashDir().listFiles()?.toMutableList() ?: mutableListOf() }
+            withContext(Dispatchers.Main) {
+                allFiles = files
+                applyFilterAndSort()
+            }
+        }
+    }
+
+    // ==========================================
+    // إدارة التحديد المتعدد
+    // ==========================================
     private fun enterSelectionMode() {
-        isSelectionMode = true; topBarFileManager.visibility = View.GONE; topBarSelection.visibility = View.VISIBLE
-        bottomSelectionBar.visibility = View.VISIBLE; fileAdapter.setSelectionMode(true); imageAdapter.setSelectionMode(true)
+        isSelectionMode = true
+        topBarFileManager.visibility = View.GONE
+        topBarSelection.visibility = View.VISIBLE
+        bottomSelectionBar.visibility = View.VISIBLE
+        fileAdapter.setSelectionMode(true)
+        imageAdapter.setSelectionMode(true)
     }
 
     fun clearSelection() {
-        isSelectionMode = false; selectedFiles.clear(); selectedImages.clear()
-        topBarFileManager.visibility = View.VISIBLE; topBarSelection.visibility = View.GONE
-        bottomSelectionBar.visibility = View.GONE; fileAdapter.setSelectionMode(false)
-        imageAdapter.setSelectionMode(false); updateSelectionCount()
+        isSelectionMode = false
+        selectedFiles.clear()
+        selectedImages.clear()
+        topBarFileManager.visibility = View.VISIBLE
+        topBarSelection.visibility = View.GONE
+        bottomSelectionBar.visibility = View.GONE
+        fileAdapter.setSelectionMode(false)
+        imageAdapter.setSelectionMode(false)
+        updateSelectionCount()
     }
 
     private fun handleFileClick(file: File) {
-        if (isSelectionMode) toggleFileSelection(file)
-        else {
+        if (isSelectionMode) {
+            toggleFileSelection(file)
+        } else {
+            if (isTrashMode) {
+                // إذا كان في سلة المهملات، لا يمكن فتحه، بل نعرض خيارات
+                AlertDialog.Builder(this).setTitle(file.name).setItems(arrayOf("استعادة", "حذف نهائي")) { _, which ->
+                    if (which == 0) {
+                        val restoredFile = File(currentDirectory, file.name.substringAfter("_"))
+                        if (file.renameTo(restoredFile)) {
+                            Toast.makeText(this, "تمت الاستعادة", Toast.LENGTH_SHORT).show()
+                            loadTrashDirectory()
+                        }
+                    } else {
+                        file.delete()
+                        loadTrashDirectory()
+                        Toast.makeText(this, "تم الحذف نهائياً", Toast.LENGTH_SHORT).show()
+                    }
+                }.show()
+                return
+            }
+
             when {
                 file.isDirectory -> loadDirectory(file)
                 file.name.endsWith(".apk", true) -> installApk(file)
@@ -304,21 +390,6 @@ class FileManagerActivity : AppCompatActivity() {
         if (count == 0) clearSelection() else tvSelectionCount.text = "تم تحديد $count عنصر"
     }
 
-    private fun deleteSelectedFiles() {
-        val count = if (isGalleryMode) selectedImages.size else selectedFiles.size
-        if (count == 0) return
-        AlertDialog.Builder(this).setTitle("حذف").setMessage("حذف $count عنصر؟").setPositiveButton("حذف") { _, _ ->
-            lifecycleScope.launch(Dispatchers.IO) {
-                if (isGalleryMode) { selectedImages.forEach { try { contentResolver.delete(it, null, null) } catch (e: Exception) {} } }
-                else { selectedFiles.forEach { if (it.isDirectory) it.deleteRecursively() else it.delete() } }
-                withContext(Dispatchers.Main) {
-                    clearSelection()
-                    if (isGalleryMode) checkImagePermissionAndLoad() else loadDirectory(currentDirectory)
-                }
-            }
-        }.setNegativeButton("إلغاء", null).show()
-    }
-
     private fun shareSelectedFiles() {
         val urisToShare = mutableListOf<Uri>()
         if (isGalleryMode) { urisToShare.addAll(selectedImages) }
@@ -345,7 +416,7 @@ class FileManagerActivity : AppCompatActivity() {
             if (isGalleryMode) {
                 var filteredUris = if (query.isEmpty()) galleryUris.toList() else galleryUris.filter { (it.lastPathSegment ?: "").contains(query, ignoreCase = true) }
                 imageAdapter.submitList(filteredUris)
-                if (!isFilterMode) tvPathTitle.text = "معرض الصور"
+                if (!isScreenshotMode) tvPathTitle.text = "معرض الصور"
             } else {
                 var filtered = if (query.isEmpty()) allFiles.toList() else allFiles.filter { it.name.contains(query, ignoreCase = true) }
                 if (!showHiddenFiles) filtered = filtered.filter { !it.name.startsWith(".") }
@@ -353,7 +424,7 @@ class FileManagerActivity : AppCompatActivity() {
                 var sortedList = if (isSortAscending) filtered.sortedWith(comparator) else filtered.sortedWith(comparator).reversed()
                 sortedList = sortedList.sortedBy { !it.isDirectory }
                 fileAdapter.submitList(sortedList.map { FileItem(file = it) }, false)
-                tvPathTitle.text = currentDirectory.name
+                if (!isTrashMode) tvPathTitle.text = currentDirectory.name
             }
         } catch (e: Exception) { e.printStackTrace() }
     }
@@ -381,16 +452,18 @@ class FileManagerActivity : AppCompatActivity() {
     private fun checkImagePermissionAndLoad() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (checkSelfPermission(android.Manifest.permission.READ_MEDIA_IMAGES) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                loadRealGallery()
+                if (isScreenshotMode) loadScreenshots() else loadRealGallery()
             } else {
                 requestImagePermissionLauncher.launch(android.Manifest.permission.READ_MEDIA_IMAGES)
             }
         } else {
-            loadRealGallery()
+            if (isScreenshotMode) loadScreenshots() else loadRealGallery()
         }
     }
 
     private fun loadRealGallery() {
+        isScreenshotMode = false
+        tvPathTitle.text = "معرض الصور"
         lifecycleScope.launch {
             try {
                 val uris = withContext(Dispatchers.IO) {
@@ -405,6 +478,7 @@ class FileManagerActivity : AppCompatActivity() {
     }
 
     private fun loadScreenshots() {
+        tvPathTitle.text = "لقطات الشاشة"
         lifecycleScope.launch {
             try {
                 val uris = withContext(Dispatchers.IO) {
@@ -427,8 +501,6 @@ class FileManagerActivity : AppCompatActivity() {
         }
     }
 
-    // ... (باقي دوال loadAlbums و handleAlbumClick و showCreateVirtualAlbumDialog و ZIP كما هي)
-    
     private fun loadAlbums() {
         tvPathTitle.text = "الألبومات"
         lifecycleScope.launch {
@@ -464,8 +536,7 @@ class FileManagerActivity : AppCompatActivity() {
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
-    
-    // ... (باقي الدوال)
+
     private fun handleAlbumClick(album: AlbumItem) {
         if (!album.bucketId.contains("-")) loadImagesForSystemAlbum(album) else loadImagesForVirtualAlbum(album)
     }
@@ -600,7 +671,7 @@ class FileManagerActivity : AppCompatActivity() {
 
     private fun loadDirectory(dir: File) {
         currentDirectory = dir
-        isFilterMode = false
+        isTrashMode = false
         lifecycleScope.launch {
             val files = withContext(Dispatchers.IO) { dir.listFiles()?.toMutableList() ?: mutableListOf() }
             withContext(Dispatchers.Main) { allFiles = files; applyFilterAndSort() }
