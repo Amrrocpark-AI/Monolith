@@ -12,8 +12,7 @@ import androidx.room.migration.Migration
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import androidx.sqlite.db.SupportSQLiteDatabase
-import net.sqlcipher.database.SQLiteDatabase
-import net.sqlcipher.database.SupportFactory
+import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 import java.security.SecureRandom
 
 @Dao
@@ -66,7 +65,6 @@ interface VirtualAlbumDao {
     suspend fun deleteAlbum(albumId: String)
 }
 
-// الترحيلات الآمنة
 val MIGRATION_1_2 = object : Migration(1, 2) {
     override fun migrate(database: SupportSQLiteDatabase) {
         database.execSQL("CREATE TABLE IF NOT EXISTS `encrypted_files` (`id` TEXT NOT NULL, `originalName` TEXT NOT NULL, `encryptedPath` TEXT NOT NULL, `uniquePasswordEncrypted` TEXT NOT NULL, `isSteganography` INTEGER NOT NULL, `carrierImagePath` TEXT, `fileSize` INTEGER NOT NULL, `dateEncrypted` INTEGER NOT NULL, PRIMARY KEY(`id`))")
@@ -82,7 +80,6 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
     }
 }
 
-// ترحيل آمن: يضيف الجداول إذا كانت مفقودة، دون حذف أي بيانات
 val MIGRATION_3_4 = object : Migration(3, 4) {
     override fun migrate(database: SupportSQLiteDatabase) {
         database.execSQL("CREATE TABLE IF NOT EXISTS `virtual_albums` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `coverUri` TEXT, `createdAt` INTEGER NOT NULL, `isVault` INTEGER NOT NULL, `sortOrder` INTEGER NOT NULL, PRIMARY KEY(`id`))")
@@ -100,7 +97,7 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
         VirtualAlbumEntity::class,
         AlbumMediaCrossRef::class
     ], 
-    version = 4, // ترقية إلى 4
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -116,7 +113,9 @@ abstract class AppDatabase : RoomDatabase() {
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val dbPassphrase = getOrCreateDbPassphrase(context)
-                val factory = SupportFactory(SQLiteDatabase.getBytes(dbPassphrase.toCharArray()))
+                
+                // استخدام المكتبة الجديدة
+                val factory = SupportOpenHelperFactory(dbPassphrase.toByteArray())
 
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
@@ -124,7 +123,7 @@ abstract class AppDatabase : RoomDatabase() {
                     "monolith_database"
                 )
                 .openHelperFactory(factory)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4) // إضافة الترحيل الآمن
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build()
                 INSTANCE = instance
                 instance
@@ -132,25 +131,31 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         private fun getOrCreateDbPassphrase(context: Context): String {
-            val masterKey = MasterKey.Builder(context)
-                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-                .build()
-            val securePrefs = EncryptedSharedPreferences.create(
-                context, "DatabaseSecret", masterKey,
-                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-            )
-            
-            val existingPassphrase: String? = securePrefs.getString("db_passphrase", null)
-            return if (existingPassphrase != null) {
-                existingPassphrase
-            } else {
-                val random = SecureRandom()
-                val bytes = ByteArray(32)
-                random.nextBytes(bytes)
-                val newPassphrase = android.util.Base64.encodeToString(bytes, android.util.Base64.DEFAULT)
-                securePrefs.edit().putString("db_passphrase", newPassphrase).apply()
-                newPassphrase
+            return try {
+                val masterKey = MasterKey.Builder(context)
+                    .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                    .build()
+                val securePrefs = EncryptedSharedPreferences.create(
+                    context, "DatabaseSecret", masterKey,
+                    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+                )
+                
+                val existingPassphrase: String? = securePrefs.getString("db_passphrase", null)
+                if (existingPassphrase != null) {
+                    existingPassphrase
+                } else {
+                    val random = SecureRandom()
+                    val bytes = ByteArray(32)
+                    random.nextBytes(bytes)
+                    val newPassphrase = android.util.Base64.encodeToString(bytes, android.util.Base64.DEFAULT)
+                    securePrefs.edit().putString("db_passphrase", newPassphrase).apply()
+                    newPassphrase
+                }
+            } catch (e: Exception) {
+                // خطة الطوارئ لمنع الانهيار على أجهزة شاومي
+                e.printStackTrace()
+                "Monolith_Fallback_Secure_Key_2024"
             }
         }
     }
