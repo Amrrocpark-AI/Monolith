@@ -12,7 +12,70 @@
         android:orientation="vertical">
 
         <!-- ========================================== -->
-        <!-- قسم تخصيص شريط التحديد (الجديد) -->
+        <!-- 1. قسم المحرك الذكي (AI Engine) -->
+        <!-- ========================================== -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="إعدادات المحرك الذكي"
+            android:textColor="#00D4FF"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="16dp"/>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="مزود الخدمة"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp"
+            android:layout_marginBottom="8dp"/>
+
+        <Spinner
+            android:id="@+id/providerSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="50dp"
+            android:layout_marginBottom="16dp"
+            android:backgroundTint="#00D4FF" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="مفتاح API"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp"
+            android:layout_marginBottom="8dp"/>
+
+        <EditText
+            android:id="@+id/etApiKey"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="gsk_..."
+            android:textColor="#FFFFFF"
+            android:textColorHint="#666666"
+            android:inputType="textPassword"
+            android:background="#1E1E1E"
+            android:padding="16dp"
+            android:layout_marginBottom="16dp"/>
+
+        <Button
+            android:id="@+id/btnTestAndSave"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="اختبار وحفظ المفتاح"
+            android:backgroundTint="#00D4FF"
+            android:textColor="#000000"
+            android:textStyle="bold"
+            android:layout_marginBottom="32dp"/>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#333333"
+            android:layout_marginBottom="32dp" />
+
+        <!-- ========================================== -->
+        <!-- 2. قسم تخصيص شريط التحديد -->
         <!-- ========================================== -->
         <TextView
             android:layout_width="wrap_content"
@@ -26,12 +89,11 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="التحكم في ألوان وأشكال أزرار الحذف والنقل"
+            android:text="التحكم في ألوان أزرار الحذف والنقل"
             android:textColor="#AAAAAA"
             android:textSize="14sp"
             android:layout_marginBottom="16dp"/>
 
-        <!-- اختيار لون النيون -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -75,7 +137,6 @@
                 android:buttonTint="#00FF00" />
         </RadioGroup>
 
-        <!-- اختيار شكل الحواف -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -110,7 +171,6 @@
                 android:buttonTint="#00D4FF" />
         </RadioGroup>
 
-        <!-- زر حفظ التخصيص -->
         <Button
             android:id="@+id/btnSaveSelectionStyle"
             android:layout_width="match_parent"
@@ -121,7 +181,6 @@
             android:textStyle="bold"
             android:layout_marginBottom="32dp"/>
 
-        <!-- خط فاصل -->
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
@@ -129,18 +188,17 @@
             android:layout_marginBottom="32dp" />
 
         <!-- ========================================== -->
-        <!-- إعدادات التطبيق السابقة (اللغة، الخلفية، الألوان) -->
+        <!-- 3. إعدادات المظهر (اللغة، الخلفية، الألوان) -->
         <!-- ========================================== -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="إعدادات مونوليث"
+            android:text="إعدادات المظهر"
             android:textColor="#00D4FF"
             android:textSize="24sp"
             android:textStyle="bold"
             android:layout_marginBottom="16dp" />
 
-        <!-- قسم اللغة -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -172,7 +230,6 @@
             android:layout_marginTop="32dp"
             android:layout_marginBottom="32dp" />
 
-        <!-- قسم الخلفية -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -226,7 +283,6 @@
             android:layout_marginTop="32dp"
             android:layout_marginBottom="32dp" />
 
-        <!-- قسم لون التطبيق الرئيسي -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
