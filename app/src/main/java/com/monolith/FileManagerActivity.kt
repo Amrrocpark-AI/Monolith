@@ -96,7 +96,7 @@ class FileManagerActivity : AppCompatActivity() {
     
     private val requestImagePermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
         if (isGranted) {
-            loadRealGallery()
+            if (isScreenshotMode) loadScreenshots() else loadRealGallery()
         } else {
             Toast.makeText(this, "نحتاج إذن الصور لعرض المعرض", Toast.LENGTH_SHORT).show()
         }
@@ -201,7 +201,6 @@ class FileManagerActivity : AppCompatActivity() {
         actionCopy.setOnClickListener { Toast.makeText(this, "قيد التطوير", Toast.LENGTH_SHORT).show() }
         actionAddAlbum.setOnClickListener { Toast.makeText(this, "قيد التطوير", Toast.LENGTH_SHORT).show() }
 
-        // *** أزرار "ملفاتي" ***
         findViewById<LinearLayout>(R.id.btnPinnedNew)?.setOnClickListener { showCreateVirtualAlbumDialog() }
         
         findViewById<LinearLayout>(R.id.btnPinnedFavorites)?.setOnClickListener { 
@@ -210,13 +209,13 @@ class FileManagerActivity : AppCompatActivity() {
         
         findViewById<LinearLayout>(R.id.btnPinnedScreenshots)?.setOnClickListener { 
             isScreenshotMode = true
-            tabLayoutFiles.getTabAt(1)?.select() // الانتقال لتبويب المعرض
-            loadScreenshots()
+            tabLayoutFiles.getTabAt(1)?.select()
+            checkImagePermissionAndLoad()
         }
         
         findViewById<LinearLayout>(R.id.btnPinnedTrash)?.setOnClickListener { 
             isTrashMode = true
-            tabLayoutFiles.getTabAt(0)?.select() // الانتقال لتبويب الملفات
+            tabLayoutFiles.getTabAt(0)?.select()
             loadTrashDirectory()
         }
 
@@ -244,7 +243,7 @@ class FileManagerActivity : AppCompatActivity() {
     override fun onBackPressed() { handleBackPress() }
 
     // ==========================================
-    // سلة المهملات (The Real Trash)
+    // سلة المهملات
     // ==========================================
     private fun getTrashDir(): File {
         val trashDir = File(Environment.getExternalStorageDirectory(), ".MonolithTrash")
@@ -264,7 +263,7 @@ class FileManagerActivity : AppCompatActivity() {
                     if (isGalleryMode) {
                         selectedImages.forEach { uri ->
                             try {
-                                val fileName = System.currentTimeMillis().toString() + "_img"
+                                val fileName = System.currentTimeMillis().toString() + "_img.jpg"
                                 val destFile = File(trashDir, fileName)
                                 contentResolver.openInputStream(uri)?.use { input ->
                                     FileOutputStream(destFile).use { output ->
@@ -294,16 +293,18 @@ class FileManagerActivity : AppCompatActivity() {
     private fun loadTrashDirectory() {
         tvPathTitle.text = "سلة المهملات"
         lifecycleScope.launch {
-            val files = withContext(Dispatchers.IO) { getTrashDir().listFiles()?.toMutableList() ?: mutableListOf() }
-            withContext(Dispatchers.Main) {
-                allFiles = files
-                applyFilterAndSort()
-            }
+            try {
+                val files = withContext(Dispatchers.IO) { getTrashDir().listFiles()?.toMutableList() ?: mutableListOf() }
+                withContext(Dispatchers.Main) {
+                    allFiles = files
+                    applyFilterAndSort()
+                }
+            } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
     // ==========================================
-    // إدارة التحديد المتعدد
+    // إدارة التحديد
     // ==========================================
     private fun enterSelectionMode() {
         isSelectionMode = true
@@ -331,7 +332,6 @@ class FileManagerActivity : AppCompatActivity() {
             toggleFileSelection(file)
         } else {
             if (isTrashMode) {
-                // إذا كان في سلة المهملات، لا يمكن فتحه، بل نعرض خيارات
                 AlertDialog.Builder(this).setTitle(file.name).setItems(arrayOf("استعادة", "حذف نهائي")) { _, which ->
                     if (which == 0) {
                         val restoredFile = File(currentDirectory, file.name.substringAfter("_"))
@@ -483,7 +483,8 @@ class FileManagerActivity : AppCompatActivity() {
             try {
                 val uris = withContext(Dispatchers.IO) {
                     val list = mutableListOf<Uri>()
-                    val selection = "${MediaStore.Images.Media.DATA} LIKE ?"
+                    // استخدام BUCKET_DISPLAY_NAME بدلاً من DATA (لأندرويد 13+)
+                    val selection = "${MediaStore.Images.Media.BUCKET_DISPLAY_NAME} LIKE ?"
                     val selectionArgs = arrayOf("%Screenshot%")
                     val cursor = contentResolver.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, arrayOf(MediaStore.Images.Media._ID), selection, selectionArgs, "${MediaStore.Images.Media.DATE_ADDED} DESC")
                     cursor?.use { val idCol = it.getColumnIndexOrThrow(MediaStore.Images.Media._ID); while (it.moveToNext()) { list.add(ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, it.getLong(idCol))) } }
@@ -732,11 +733,17 @@ class FileAdapter(
                 val sizeInKb = file.length() / 1024
                 val sizeString = if (sizeInKb > 1024) "${sizeInKb / 1024} MB" else "$sizeInKb KB"
                 tvFileDetails.visibility = View.VISIBLE
-                ivFileIcon.setColorFilter(android.graphics.Color.parseColor("#AAAAAA"))
-                if (file.name.endsWith(".zip", true)) { ivFileIcon.setImageResource(android.R.drawable.ic_menu_save); ivFileIcon.setColorFilter(android.graphics.Color.parseColor("#FFAA00")) }
-                else if (file.name.endsWith(".apk", true)) { ivFileIcon.setImageResource(android.R.drawable.ic_menu_manage); ivFileIcon.setColorFilter(android.graphics.Color.parseColor("#00D4FF")) }
-                else if (file.name.endsWith(".jpg", true) || file.name.endsWith(".png", true)) { ivFileIcon.setImageResource(android.R.drawable.ic_menu_gallery) }
-                else ivFileIcon.setImageResource(android.R.drawable.ic_menu_agenda)
+                
+                // عرض الصور في السلة باستخدام Glide
+                if (file.name.endsWith(".jpg", true) || file.name.endsWith(".jpeg", true) || file.name.endsWith(".png", true) || file.name.endsWith(".webp", true)) {
+                    Glide.with(itemView.context).load(file).centerCrop().into(ivFileIcon)
+                } else if (file.name.endsWith(".zip", true)) { 
+                    ivFileIcon.setImageResource(android.R.drawable.ic_menu_save); ivFileIcon.setColorFilter(android.graphics.Color.parseColor("#FFAA00")) 
+                } else if (file.name.endsWith(".apk", true)) { 
+                    ivFileIcon.setImageResource(android.R.drawable.ic_menu_manage); ivFileIcon.setColorFilter(android.graphics.Color.parseColor("#00D4FF")) 
+                } else {
+                    ivFileIcon.setImageResource(android.R.drawable.ic_menu_agenda)
+                }
                 tvFileDetails.text = "$sizeString • $dateString"
             }
             itemView.setOnClickListener { onClick(file) }
