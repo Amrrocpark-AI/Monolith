@@ -95,7 +95,15 @@ class FileManagerActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_file_manager)
         
-        virtualAlbumDao = AppDatabase.getDatabase(applicationContext).virtualAlbumDao()
+        // حماية قاعدة البيانات من الانهيار
+        try {
+            virtualAlbumDao = AppDatabase.getDatabase(applicationContext).virtualAlbumDao()
+        } catch (e: Exception) {
+            Toast.makeText(this, "خطأ في قاعدة البيانات: ${e.message}", Toast.LENGTH_LONG).show()
+            finish() // إغلاق الشاشة بأمان إذا فشلت قاعدة البيانات
+            return
+        }
+        
         sharedPreferences = getSharedPreferences("Settings", MODE_PRIVATE)
 
         rvFiles = findViewById(R.id.rvFiles)
@@ -118,6 +126,7 @@ class FileManagerActivity : AppCompatActivity() {
         val btnBack = findViewById<ImageButton>(R.id.btnBackFileManager)
         val btnSort = findViewById<ImageButton>(R.id.btnSort)
         val btnCancelSelection = findViewById<ImageButton>(R.id.btnCancelSelection)
+        val btnZipSelected = findViewById<ImageButton>(R.id.btnZipSelected)
 
         fileAdapter = FileAdapter({ file -> handleFileClick(file) }, { file -> handleFileLongClick(file) })
         imageAdapter = ImageAdapter({ uri -> handleImageClick(uri) }, { uri -> handleImageLongClick(uri) })
@@ -126,7 +135,7 @@ class FileManagerActivity : AppCompatActivity() {
         rvFiles.layoutManager = LinearLayoutManager(this)
         rvFiles.adapter = fileAdapter
 
-        applyCustomColors()
+        applyCustomColors() // الآن آمنة 100%
 
         tabLayoutFiles.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
             override fun onTabSelected(tab: TabLayout.Tab?) {
@@ -152,6 +161,10 @@ class FileManagerActivity : AppCompatActivity() {
         btnCancelSelection.setOnClickListener { clearSelection() }
         btnSort.setOnClickListener { showSortDialog() }
 
+        btnZipSelected?.setOnClickListener { 
+            if (selectedFiles.isNotEmpty()) showCreateZipDialog(selectedFiles.toList()) 
+        }
+
         actionDelete.setOnClickListener { deleteSelectedFiles() }
         actionShare.setOnClickListener { shareSelectedFiles() }
         actionMove.setOnClickListener { Toast.makeText(this, "ميزة النقل قيد التطوير...", Toast.LENGTH_SHORT).show() }
@@ -171,15 +184,20 @@ class FileManagerActivity : AppCompatActivity() {
         checkAndRequestPermission()
     }
 
+    // الحل الاحترافي: استخدام findViewById و Safe Call
     private fun applyCustomColors() {
-        val colorStr = sharedPreferences.getString("selection_bar_color", "BLUE")
-        val colorRes = when (colorStr) {
-            "PINK" -> android.graphics.Color.parseColor("#FF00FF")
-            "GREEN" -> android.graphics.Color.parseColor("#00FF00")
-            else -> android.graphics.Color.parseColor("#00D4FF")
+        try {
+            val colorStr = sharedPreferences.getString("selection_bar_color", "BLUE")
+            val colorRes = when (colorStr) {
+                "PINK" -> android.graphics.Color.parseColor("#FF00FF")
+                "GREEN" -> android.graphics.Color.parseColor("#00FF00")
+                else -> android.graphics.Color.parseColor("#00D4FF")
+            }
+            findViewById<ImageView>(R.id.ivActionShare)?.setColorFilter(colorRes)
+            findViewById<ImageView>(R.id.ivActionAlbum)?.setColorFilter(colorRes)
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
-        (actionShare.getChildAt(0) as ImageView).setColorFilter(colorRes)
-        (actionAddAlbum.getChildAt(0) as ImageView).setColorFilter(colorRes)
     }
 
     private fun handleBackPress() {
