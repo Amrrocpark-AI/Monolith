@@ -1,23 +1,26 @@
 package com.monolith
 
-import android.content.Intent
+import android.annotation.SuppressLint
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
-import android.os.CountDownTimer
 import android.view.MotionEvent
 import android.view.View
-import android.widget.Button
-import android.widget.ImageButton
-import android.widget.ImageView
-import android.widget.SeekBar
-import android.widget.TextView
-import android.widget.Toast
+import android.view.ViewConfiguration
+import android.view.ViewGroup
+import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.core.view.marginBottom
+import androidx.core.view.marginEnd
+import androidx.core.view.marginStart
+import androidx.core.view.marginTop
+import com.google.android.material.card.MaterialCardView
 import java.io.InputStream
 
 class ImageEditorActivity : AppCompatActivity() {
@@ -30,19 +33,16 @@ class ImageEditorActivity : AppCompatActivity() {
     private lateinit var btnPickImageForEdit: Button
     private lateinit var tvEditorTimer: TextView
 
-    private lateinit var sbBrightness: SeekBar
-    private lateinit var sbContrast: SeekBar
-    private lateinit var sbSaturation: SeekBar
+    // الصندوق العائم
+    private lateinit var floatingToolbox: MaterialCardView
+    private lateinit var toolColors: LinearLayout
+    private lateinit var toolDispersion: LinearLayout
+    private lateinit var toolCrop: LinearLayout
+    private lateinit var toolText: LinearLayout
+    private lateinit var toolLayers: LinearLayout
 
     private var originalBitmap: Bitmap? = null
     private var currentBitmap: Bitmap? = null
-
-    // خوارزميات حفظ الحالات (Undo/Redo)
-    private val undoStack = ArrayDeque<ColorMatrix>()
-    private val redoStack = ArrayDeque<ColorMatrix>()
-
-    // العداد الزمني
-    private var autoSaveTimer: CountDownTimer? = null
 
     private val pickImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         if (uri != null) {
@@ -53,18 +53,17 @@ class ImageEditorActivity : AppCompatActivity() {
                 currentBitmap = bitmap
                 ivEditorImage.setImageBitmap(bitmap)
                 btnPickImageForEdit.visibility = View.GONE
-                resetSliders()
             } catch (e: Exception) {
                 Toast.makeText(this, "فشل تحميل الصورة", Toast.LENGTH_SHORT).show()
             }
         }
     }
 
+    @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_image_editor)
 
-        // ربط العناصر
         ivEditorImage = findViewById(R.id.ivEditorImage)
         btnSaveImage = findViewById(R.id.btnSaveImage)
         btnUndo = findViewById(R.id.btnUndo)
@@ -73,55 +72,70 @@ class ImageEditorActivity : AppCompatActivity() {
         btnPickImageForEdit = findViewById(R.id.btnPickImageForEdit)
         tvEditorTimer = findViewById(R.id.tvEditorTimer)
 
-        sbBrightness = findViewById(R.id.sbBrightness)
-        sbContrast = findViewById(R.id.sbContrast)
-        sbSaturation = findViewById(R.id.sbSaturation)
+        // ربط عناصر الصندوق العائم
+        floatingToolbox = findViewById(R.id.floatingToolboxCard)
+        toolColors = findViewById(R.id.toolColors)
+        toolDispersion = findViewById(R.id.toolDispersion)
+        toolCrop = findViewById(R.id.toolCrop)
+        toolText = findViewById(R.id.toolText)
+        toolLayers = findViewById(R.id.toolLayers)
 
-        // 1. اختيار الصورة
-        btnPickImageForEdit.setOnClickListener {
-            pickImageLauncher.launch("image/*")
-        }
+        // إعداد مستمعي النقر للأدوات
+        toolColors.setOnClickListener { showToolMessage("أداة الألوان") }
+        toolDispersion.setOnClickListener { showToolMessage("أداة التشتت") }
+        toolCrop.setOnClickListener { showToolMessage("أداة القص") }
+        toolText.setOnClickListener { showToolMessage("أداة النصوص") }
+        toolLayers.setOnClickListener { showToolMessage("أداة الطبقات") }
 
-        // 2. زر الإغلاق
+        btnPickImageForEdit.setOnClickListener { pickImageLauncher.launch("image/*") }
         btnCloseEditor.setOnClickListener { finish() }
+        btnSaveImage.setOnClickListener { Toast.makeText(this, "حفظ قيد التطوير", Toast.LENGTH_SHORT).show() }
 
-        // 3. زر الحفظ (سيتم تطويره لاحقاً لحفظ الصورة في المعرض)
-        btnSaveImage.setOnClickListener {
-            Toast.makeText(this, "تم تطبيق التعديلات (ميزة الحفظ للمعرض قريباً)", Toast.LENGTH_SHORT).show()
-        }
+        // تفعيل السحب للصندوق العائم
+        setupFloatingToolboxDrag()
+    }
 
-        // 4. أزرار التراجع والإعادة
-        btnUndo.setOnClickListener { performUndo() }
-        btnRedo.setOnClickListener { performRedo() }
+    private fun showToolMessage(toolName: String) {
+        Toast.makeText(this, "تم اختيار: $toolName", Toast.LENGTH_SHORT).show()
+        // هنا سنقوم لاحقاً بفتح اللوحة السفلية (Bottom Panel) الخاصة بكل أداة
+    }
 
-        // 5. مستشعرات التغيير (SeekBars)
-        val changeListener = object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                if (fromUser) applyColorFilters()
-            }
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {
-                // حفظ الحالة عند رفع الإصبع
-                saveCurrentStateToUndo()
-                startAutoSaveTimer()
-            }
-        }
+    // ==========================================
+    // محرك السحب الذكي (Smart Drag Engine)
+    // ==========================================
+    @SuppressLint("ClickableViewAccessibility")
+    private fun setupFloatingToolboxDrag() {
+        var initialX = 0
+        var initialY = 0
+        var initialTouchX = 0f
+        var initialTouchY = 0f
 
-        sbBrightness.setOnSeekBarChangeListener(changeListener)
-        sbContrast.setOnSeekBarChangeListener(changeListener)
-        sbSaturation.setOnSeekBarChangeListener(changeListener)
+        val params = floatingToolbox.layoutParams as ViewGroup.MarginLayoutParams
 
-        // 6. ميزة الضغط المطول للمقارنة (قبل / بعد)
-        ivEditorImage.setOnTouchListener { v, event ->
+        floatingToolbox.setOnTouchListener { view, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
-                    // عرض الصورة الأصلية
-                    originalBitmap?.let { ivEditorImage.setImageBitmap(it) }
+                    // حفظ الإحداثيات الأولية
+                    initialX = params.leftMargin
+                    initialY = params.topMargin
+                    initialTouchX = event.rawX
+                    initialTouchY = event.rawY
                     true
                 }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    // العودة للصورة المعدلة
-                    applyColorFilters()
+                MotionEvent.ACTION_MOVE -> {
+                    // حساب المسافة المقطوعة
+                    val dx = (event.rawX - initialTouchX).toInt()
+                    val dy = (event.rawY - initialTouchY).toInt()
+
+                    // تحديث الهوامش
+                    params.leftMargin = initialX + dx
+                    params.topMargin = initialY + dy
+                    floatingToolbox.layoutParams = params
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
+                    // عند رفع الإصبع، نقوم بالالتصاق بأقرب حافة (يمين أو يسار)
+                    snapToEdge()
                     true
                 }
                 else -> false
@@ -129,102 +143,32 @@ class ImageEditorActivity : AppCompatActivity() {
         }
     }
 
-    // ==========================================
-    // محرك الألوان (ColorMatrix Engine)
-    // ==========================================
-    private fun applyColorFilters() {
-        if (originalBitmap == null) return
+    // دالة الالتصاق بالحواف
+    private fun snapToEdge() {
+        val screenWidth = resources.displayMetrics.widthPixels
+        val viewWidth = floatingToolbox.width
+        val params = floatingToolbox.layoutParams as ViewGroup.MarginLayoutParams
 
-        val brightness = sbBrightness.progress - 50 // -50 to 50
-        val contrast = sbContrast.progress - 50     // -50 to 50
-        val saturation = sbSaturation.progress       // 0 to 100
+        // حساب المسافة للحد الأيسر والأيمن
+        val distanceToLeft = params.leftMargin
+        val distanceToRight = screenWidth - (params.leftMargin + viewWidth)
 
-        val colorMatrix = ColorMatrix()
-
-        // 1. السطوع (Brightness)
-        val brightnessMatrix = ColorMatrix()
-        val scale = 1f + (brightness / 50f)
-        brightnessMatrix.setScale(scale, scale, scale, 1f)
-        colorMatrix.postConcat(brightnessMatrix)
-
-        // 2. التباين (Contrast)
-        val contrastMatrix = ColorMatrix()
-        val contrastScale = (contrast + 50f) / 50f
-        val translate = (-0.5f * contrastScale + 0.5f) * 255f
-        contrastMatrix.set(
-            floatArrayOf(
-                contrastScale, 0f, 0f, 0f, translate,
-                0f, contrastScale, 0f, 0f, translate,
-                0f, 0f, contrastScale, 0f, translate,
-                0f, 0f, 0f, 1f, 0f
-            )
-        )
-        colorMatrix.postConcat(contrastMatrix)
-
-        // 3. التشبع (Saturation)
-        val saturationMatrix = ColorMatrix()
-        saturationMatrix.setSaturation(saturation / 50f)
-        colorMatrix.postConcat(saturationMatrix)
-
-        // تطبيق المصفوفة على الصورة
-        ivEditorImage.colorFilter = ColorMatrixColorFilter(colorMatrix)
-    }
-
-    // ==========================================
-    // نظام التراجع والإعادة (Undo/Redo)
-    // ==========================================
-    private fun saveCurrentStateToUndo() {
-        val currentMatrix = ColorMatrix()
-        // نأخذ نسخة من الحالة الحالية (تبسيطاً، سنحفظ القيم الحالية)
-        val tempMatrix = ColorMatrix()
-        tempMatrix.setSaturation(sbSaturation.progress / 50f)
-        undoStack.addLast(tempMatrix)
-        
-        if (undoStack.size > 10) undoStack.removeFirst() // الاحتفاظ بآخر 10 خطوات فقط
-        redoStack.clear() // أي تعديل جديد يمسح الـ Redo
-    }
-
-    private fun performUndo() {
-        if (undoStack.isNotEmpty()) {
-            val lastState = undoStack.removeLast()
-            redoStack.addLast(lastState)
-            // تطبيق الحالة السابقة (تبسيط: إعادة تعيين الشرائط)
-            resetSliders()
-            Toast.makeText(this, "تم التراجع", Toast.LENGTH_SHORT).show()
+        // تحديد الحافة الأقرب
+        val targetX = if (distanceToLeft < distanceToRight) {
+            // الالتصاق باليسار
+            16 // هامش صغير
+        } else {
+            // الالتصاق باليمين
+            screenWidth - viewWidth - 16
         }
-    }
 
-    private fun performRedo() {
-        if (redoStack.isNotEmpty()) {
-            val nextState = redoStack.removeLast()
-            undoStack.addLast(nextState)
-            Toast.makeText(this, "تم الإعادة", Toast.LENGTH_SHORT).show()
+        // تحريك الصندوق بسلاسة
+        val animator = android.animation.ValueAnimator.ofInt(params.leftMargin, targetX)
+        animator.addUpdateListener { animation ->
+            params.leftMargin = animation.animatedValue as Int
+            floatingToolbox.layoutParams = params
         }
-    }
-
-    // ==========================================
-    // العداد الزمني (Smart Timer)
-    // ==========================================
-    private fun startAutoSaveTimer() {
-        autoSaveTimer?.cancel()
-        tvEditorTimer.text = "جاري المعالجة..."
-        
-        autoSaveTimer = object : CountDownTimer(3000, 1000) {
-            override fun onTick(millisUntilFinished: Long) {
-                tvEditorTimer.text = "تثبيت في: ${millisUntilFinished / 1000} ث"
-            }
-
-            override fun onFinish() {
-                tvEditorTimer.text = "جاهز"
-                // هنا يمكن حفظ التعديل في الذاكرة المحلية (Auto Save)
-            }
-        }.start()
-    }
-
-    private fun resetSliders() {
-        sbBrightness.progress = 50
-        sbContrast.progress = 50
-        sbSaturation.progress = 50
-        ivEditorImage.colorFilter = null
+        animator.duration = 300
+        animator.start()
     }
 }
