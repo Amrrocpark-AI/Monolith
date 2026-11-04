@@ -89,6 +89,14 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
     }
 }
 
+// الترحيل الجديد لإضافة حقول التفاعل
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        database.execSQL("ALTER TABLE messages ADD COLUMN reactionType TEXT DEFAULT NULL")
+        database.execSQL("ALTER TABLE messages ADD COLUMN reactionColor TEXT DEFAULT NULL")
+    }
+}
+
 @Database(
     entities = [
         UserEntity::class, 
@@ -97,7 +105,7 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
         VirtualAlbumEntity::class,
         AlbumMediaCrossRef::class
     ], 
-    version = 4,
+    version = 5, // تم رفع الإصدار إلى 5
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -110,7 +118,6 @@ abstract class AppDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
-        // *** هذا هو السطر السحري الذي يمنع انهيار الدردشة ***
         init {
             System.loadLibrary("sqlcipher")
         }
@@ -118,7 +125,6 @@ abstract class AppDatabase : RoomDatabase() {
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val dbPassphrase = getOrCreateDbPassphrase(context)
-                
                 val factory = SupportOpenHelperFactory(dbPassphrase.toByteArray())
 
                 val instance = Room.databaseBuilder(
@@ -127,7 +133,7 @@ abstract class AppDatabase : RoomDatabase() {
                     "monolith_database"
                 )
                 .openHelperFactory(factory)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5) // إضافة الترحيل الجديد
                 .build()
                 INSTANCE = instance
                 instance
