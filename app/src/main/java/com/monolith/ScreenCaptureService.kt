@@ -29,7 +29,6 @@ import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import java.io.OutputStream
 
 class ScreenCaptureService : Service() {
 
@@ -89,12 +88,11 @@ class ScreenCaptureService : Service() {
     }
 
     private fun setupMediaProjection(resultCode: Int, dataIntent: Intent) {
-        if (mediaProjection != null) return // تم التهيئة مسبقاً
+        if (mediaProjection != null) return
 
         val projectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         mediaProjection = projectionManager.getMediaProjection(resultCode, dataIntent)
 
-        // ** إصلاح Android 14: تسجيل Callback قبل إنشاء VirtualDisplay **
         mediaProjection?.registerCallback(object : MediaProjection.Callback() {
             override fun onStop() {
                 super.onStop()
@@ -120,7 +118,7 @@ class ScreenCaptureService : Service() {
             metrics.widthPixels,
             metrics.heightPixels,
             PixelFormat.RGBA_8888,
-            2 // عدد الإطارات (صورتين)
+            2
         )
 
         virtualDisplay = mediaProjection?.createVirtualDisplay(
@@ -144,7 +142,6 @@ class ScreenCaptureService : Service() {
             return
         }
 
-        // حفظ الصورة في الخلفية
         serviceScope.launch {
             try {
                 val bitmap = imageToBitmap(image)
@@ -157,37 +154,36 @@ class ScreenCaptureService : Service() {
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {
-                image.close() // ** مهم جداً: إغلاق الصورة لتجنب توقف الكاميرا **
+                image.close()
             }
         }
     }
 
     private fun imageToBitmap(image: Image): Bitmap? {
-        val planes = image.planes
-        val buffer = planes[0].buffer
-        // حساب الـ rowStride لتفادي الصورة المشوهة
-        val pixelStride = planes[0].pixelStride
-        val rowStride = planes[0].rowStride
-        val rowPadding = rowStride - pixelStride * image.width
+        return try {
+            val planes = image.planes
+            val buffer = planes[0].buffer
+            val pixelStride = planes[0].pixelStride
+            val rowStride = planes[0].rowStride
+            val rowPadding = rowStride - pixelStride * image.width
 
-        // إنشاء Bitmap أكبر شوية لاستيعاب الحشو
-        val bitmap = Bitmap.createBitmap(
-            image.width + rowPadding / pixelStride,
-            image.height,
-            Bitmap.Config.ARGB_8888
-        )
-        bitmap.copyPixelsFromBuffer(buffer)
+            val bitmap = Bitmap.createBitmap(
+                image.width + rowPadding / pixelStride,
+                image.height,
+                Bitmap.Config.ARGB_8888
+            )
+            bitmap.copyPixelsFromBuffer(buffer)
 
-        // قص الصورة عشان نشيل الحشو ونرجع للعرض الحقيقي
-        return Bitmap.createBitmap(bitmap, 0, 0, image.width, image.height)
+            Bitmap.createBitmap(bitmap, 0, 0, image.width, image.height)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
     }
 
     private fun saveBitmapToGallery(bitmap: Bitmap) {
-        val filename = "Monolith_Screenshot_${System.currentTimeMillis()}.jpg"
-        var outputStream: OutputStream? = null
-        var uri: Uri? = null
-
         try {
+            val filename = "Monolith_Screenshot_${System.currentTimeMillis()}.jpg"
             val contentValues = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
                 put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
@@ -196,15 +192,15 @@ class ScreenCaptureService : Service() {
                 }
             }
 
-            uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+            val uri: Uri? = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
             if (uri != null) {
-                outputStream = contentResolver.openOutputStream(uri)
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 95, outputStream)
+                // *** الحل هنا: استخدام ?.use لتفادي خطأ النوع ***
+                contentResolver.openOutputStream(uri)?.use { outputStream ->
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, 95, outputStream)
+                }
             }
         } catch (e: Exception) {
             e.printStackTrace()
-        } finally {
-            outputStream?.close()
         }
     }
 
