@@ -7,6 +7,7 @@ import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.provider.Settings
@@ -37,6 +38,7 @@ class SettingsActivity : AppCompatActivity() {
             if (Settings.canDrawOverlays(this)) {
                 switchFloatingBubble.isChecked = true
                 startFloatingService()
+                requestBatteryOptimizationExemption()
                 Toast.makeText(this, "تم تفعيل الفقاعة العائمة بنجاح", Toast.LENGTH_SHORT).show()
             } else {
                 switchFloatingBubble.isChecked = false
@@ -51,18 +53,13 @@ class SettingsActivity : AppCompatActivity() {
 
         sharedPreferences = getSharedPreferences("Settings", MODE_PRIVATE)
 
-        // 1. إعداد التخزين المشفر
-        val masterKey = MasterKey.Builder(this)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
-
+        val masterKey = MasterKey.Builder(this).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build()
         securePrefs = EncryptedSharedPreferences.create(
             this, "SecureSettings", masterKey,
             EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
         )
 
-        // 2. المحرك الذكي
         val providerSpinner = findViewById<Spinner>(R.id.providerSpinner)
         val etApiKey = findViewById<EditText>(R.id.etApiKey)
         val btnTestAndSave = findViewById<Button>(R.id.btnTestAndSave)
@@ -124,7 +121,6 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
-        // 3. تخصيص شريط التحديد
         val rgNeonColor = findViewById<RadioGroup>(R.id.rgNeonColor)
         val rgFrameStyle = findViewById<RadioGroup>(R.id.rgFrameStyle)
         val btnSaveSelectionStyle = findViewById<Button>(R.id.btnSaveSelectionStyle)
@@ -166,7 +162,6 @@ class SettingsActivity : AppCompatActivity() {
             Toast.makeText(this, "تم حفظ تخصيص شريط التحديد", Toast.LENGTH_SHORT).show()
         }
 
-        // 4. إعدادات المظهر
         val spinner = findViewById<Spinner>(R.id.languageSpinner)
         val btnApplyLanguage = findViewById<Button>(R.id.btnApplyLanguage)
         val backgroundGroup = findViewById<RadioGroup>(R.id.backgroundGroup)
@@ -267,11 +262,11 @@ class SettingsActivity : AppCompatActivity() {
             } catch (e: Exception) {}
         }
 
-        // 5. إعدادات الفقاعة العائمة (بدون طلب صلاحية تصوير الشاشة)
         switchFloatingBubble = findViewById(R.id.switchFloatingBubble)
         
+        val bubbleWasEnabled = sharedPreferences.getBoolean("bubble_enabled", false)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            switchFloatingBubble.isChecked = Settings.canDrawOverlays(this)
+            switchFloatingBubble.isChecked = bubbleWasEnabled && Settings.canDrawOverlays(this)
         }
 
         switchFloatingBubble.setOnCheckedChangeListener { _, isChecked ->
@@ -284,6 +279,7 @@ class SettingsActivity : AppCompatActivity() {
                     overlayPermissionLauncher.launch(intent)
                 } else {
                     startFloatingService()
+                    requestBatteryOptimizationExemption()
                 }
             } else {
                 stopFloatingService()
@@ -291,8 +287,23 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
+    private fun requestBatteryOptimizationExemption() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val powerManager = getSystemService(POWER_SERVICE) as PowerManager
+            if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
+                try {
+                    val intent = Intent()
+                    intent.action = Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+                    intent.data = Uri.parse("package:$packageName")
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
+    }
+
     private fun startFloatingService() {
-        // تشغيل خدمة الفقاعة العائمة فقط
         val serviceIntent = Intent(this, FloatingService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(serviceIntent)
@@ -303,8 +314,8 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun stopFloatingService() {
-        val serviceIntent = Intent(this, FloatingService::class.java)
-        stopService(serviceIntent)
+        getSharedPreferences("Settings", MODE_PRIVATE).edit().putBoolean("bubble_enabled", false).apply()
+        stopService(Intent(this, FloatingService::class.java))
         stopService(Intent(this, ScreenCaptureService::class.java))
         Toast.makeText(this, "تم إيقاف الفقاعة العائمة", Toast.LENGTH_SHORT).show()
     }
