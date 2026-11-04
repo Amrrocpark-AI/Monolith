@@ -6,6 +6,7 @@ import android.content.Intent
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.PorterDuff
+import android.graphics.drawable.AnimatedVectorDrawable
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
@@ -56,6 +57,7 @@ class ChatActivity : AppCompatActivity() {
     private val currentConversationId = "main_chat" 
     
     private lateinit var ttsManager: TtsManager
+    private var currentPlayingIcon: ImageView? = null
 
     private val pickImagesLauncher = registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris: List<Uri> ->
         if (uris.isNotEmpty()) {
@@ -88,7 +90,13 @@ class ChatActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_chat)
 
-        ttsManager = TtsManager(this)
+        ttsManager = TtsManager(this) {
+            runOnUiThread {
+                currentPlayingIcon?.setImageResource(R.drawable.ic_volume_up)
+                currentPlayingIcon?.setColorFilter(Color.parseColor("#88FFFFFF"))
+                currentPlayingIcon = null
+            }
+        }
 
         ApiClient.init(applicationContext)
         
@@ -400,74 +408,49 @@ class ChatActivity : AppCompatActivity() {
 
         if (msg.content.isNotEmpty()) {
             val textBubble = LinearLayout(this).apply {
-                setPadding(dpToPx(16), dpToPx(12), dpToPx(16), dpToPx(12))
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dpToPx(16), dpToPx(12), dpToPx(8), dpToPx(12))
                 background = GradientDrawable().apply { 
                     setColor(Color.parseColor(msg.colorHex))
                     cornerRadius = dpToPx(20).toFloat() 
                 }
             }
             
-            // تعريف الـ TextView هنا بشكل منفصل لتجنب مشاكل النطاق في القائمة العائمة
-            val textView = TextView(this)
-            
-            textView.apply {
+            val textView = TextView(this).apply {
                 text = msg.content
                 textSize = 15f
                 setTextColor(if (msg.role == MessageRole.USER) Color.BLACK else Color.WHITE)
                 textDirection = if (msg.role == MessageRole.USER) TextView.TEXT_DIRECTION_RTL else TextView.TEXT_DIRECTION_LOCALE
                 textAlignment = TextView.TEXT_ALIGNMENT_VIEW_START
-                
                 setLineSpacing(dpToPx(4).toFloat(), 1.1f)
-                
-                setTextIsSelectable(true)
-                
-                customSelectionActionModeCallback = object : ActionMode.Callback {
-                    override fun onCreateActionMode(mode: ActionMode?, menu: Menu?): Boolean {
-                        menu?.clear()
-                        menu?.add(0, 1, 0, "🔊 قراءة")?.setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
-                        menu?.add(0, 2, 1, "📋 نسخ")?.setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
-                        menu?.add(0, 3, 2, "🎨 تنسيق")?.setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
-                        return true
-                    }
-
-                    override fun onPrepareActionMode(mode: ActionMode?, menu: Menu?): Boolean = false
-
-                    override fun onActionItemClicked(mode: ActionMode?, item: MenuItem?): Boolean {
-                        // الآن textView معروف هنا
-                        val start = textView.selectionStart 
-                        val end = textView.selectionEnd
-                        if (start < 0 || end < 0) return false
-                        
-                        val selectedText = textView.text.substring(start, end)
-                        
-                        when (item?.itemId) {
-                            1 -> {
-                                ttsManager.speak(selectedText)
-                                mode?.finish()
-                                return true
-                            }
-                            2 -> {
-                                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                val clip = android.content.ClipData.newPlainText("Monolith Text", selectedText)
-                                clipboard.setPrimaryClip(clip)
-                                Toast.makeText(this@ChatActivity, "تم النسخ", Toast.LENGTH_SHORT).show()
-                                mode?.finish()
-                                return true
-                            }
-                            3 -> {
-                                Toast.makeText(this@ChatActivity, "قائمة التنسيق قريباً", Toast.LENGTH_SHORT).show()
-                                mode?.finish()
-                                return true
-                            }
-                        }
-                        return false
-                    }
-
-                    override fun onDestroyActionMode(mode: ActionMode?) {}
-                }
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
             }
             
             textBubble.addView(textView)
+            
+            if (msg.content != "جاري التفكير...") {
+                val btnSpeak = ImageView(this).apply {
+                    setImageResource(R.drawable.ic_volume_up) 
+                    setColorFilter(if (msg.role == MessageRole.USER) Color.parseColor("#55000000") else Color.parseColor("#88FFFFFF"))
+                    val params = LinearLayout.LayoutParams(dpToPx(20), dpToPx(20))
+                    params.marginStart = dpToPx(12)
+                    layoutParams = params
+                    
+                    setOnClickListener {
+                        currentPlayingIcon?.setImageResource(R.drawable.ic_volume_up)
+                        currentPlayingIcon?.setColorFilter(if (msg.role == MessageRole.USER) Color.parseColor("#55000000") else Color.parseColor("#88FFFFFF"))
+                        currentPlayingIcon = this
+
+                        setImageResource(R.drawable.avd_audio_anim)
+                        (drawable as? AnimatedVectorDrawable)?.start()
+                        
+                        ttsManager.speak(msg.content)
+                    }
+                }
+                textBubble.addView(btnSpeak)
+            }
+
             messageLayout.addView(textBubble)
         }
 
