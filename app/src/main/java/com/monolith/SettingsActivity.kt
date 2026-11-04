@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.VibrationEffect
 import android.os.Vibrator
+import android.provider.Settings
 import android.view.View
 import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
@@ -18,6 +19,7 @@ import androidx.core.os.LocaleListCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import com.google.android.material.switchmaterial.SwitchMaterial
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -28,6 +30,21 @@ class SettingsActivity : AppCompatActivity() {
 
     private lateinit var sharedPreferences: android.content.SharedPreferences
     private lateinit var securePrefs: android.content.SharedPreferences
+    private lateinit var switchFloatingBubble: SwitchMaterial
+
+    // مستمع لنتيجة طلب صلاحية الفقاعة
+    private val overlayPermissionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { _ ->
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (Settings.canDrawOverlays(this)) {
+                switchFloatingBubble.isChecked = true
+                startFloatingService()
+                Toast.makeText(this, "تم تفعيل الفقاعة العائمة بنجاح", Toast.LENGTH_SHORT).show()
+            } else {
+                switchFloatingBubble.isChecked = false
+                Toast.makeText(this, "لم يتم منح صلاحية الرسم فوق التطبيقات", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -119,7 +136,6 @@ class SettingsActivity : AppCompatActivity() {
         val rgFrameStyle = findViewById<RadioGroup>(R.id.rgFrameStyle)
         val btnSaveSelectionStyle = findViewById<Button>(R.id.btnSaveSelectionStyle)
 
-        // استعادة الحالة المحفوظة
         val savedNeonColor = sharedPreferences.getString("selection_bar_color", "BLUE")
         when (savedNeonColor) {
             "BLUE" -> rgNeonColor.check(R.id.rbNeonBlue)
@@ -259,6 +275,50 @@ class SettingsActivity : AppCompatActivity() {
                 viewColorPreview.setBackgroundColor(savedColor)
             } catch (e: Exception) {}
         }
+
+        // ==========================================
+        // 5. إعدادات الفقاعة العائمة (الوحدة الأولى)
+        // ==========================================
+        switchFloatingBubble = findViewById(R.id.switchFloatingBubble)
+        
+        // التحقق من حالة الصلاحية عند فتح الشاشة
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            switchFloatingBubble.isChecked = Settings.canDrawOverlays(this)
+        }
+
+        switchFloatingBubble.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+                    // طلب الصلاحية
+                    val intent = Intent(
+                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:$packageName")
+                    )
+                    overlayPermissionLauncher.launch(intent)
+                } else {
+                    // الصلاحية موجودة، تشغيل الخدمة
+                    startFloatingService()
+                }
+            } else {
+                // إيقاف الخدمة
+                stopFloatingService()
+            }
+        }
+    }
+
+    private fun startFloatingService() {
+        val serviceIntent = Intent(this, FloatingService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent)
+        } else {
+            startService(serviceIntent)
+        }
+    }
+
+    private fun stopFloatingService() {
+        val serviceIntent = Intent(this, FloatingService::class.java)
+        stopService(serviceIntent)
+        Toast.makeText(this, "تم إيقاف الفقاعة العائمة", Toast.LENGTH_SHORT).show()
     }
 
     private suspend fun testApiKey(apiKey: String): Boolean {
