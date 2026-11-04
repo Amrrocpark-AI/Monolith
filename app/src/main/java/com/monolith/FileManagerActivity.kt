@@ -80,7 +80,6 @@ class FileManagerActivity : AppCompatActivity() {
     private val selectedFiles = mutableSetOf<File>()
     private val selectedImages = mutableSetOf<Uri>()
 
-    // تم تغييرها إلى nullable عشان نفتحها في الخلفية
     private var virtualAlbumDao: VirtualAlbumDao? = null
 
     private val requestPermissionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
@@ -105,33 +104,14 @@ class FileManagerActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // تحميل مكتبة التشفير الجديدة
-        System.loadLibrary("sqlcipher")
-
-        // شبكة الأمان
-        Thread.setDefaultUncaughtExceptionHandler { _, e ->
-            e.printStackTrace()
-            runOnUiThread {
-                AlertDialog.Builder(this)
-                    .setTitle("عطل برمجي (الرجاء تصوير هذه الرسالة)")
-                    .setMessage("الخطأ: ${e.message}\n\nالمكان: ${e.stackTrace.firstOrNull()}")
-                    .setPositiveButton("حسناً", null)
-                    .show()
-            }
-        }
-
         setContentView(R.layout.activity_file_manager)
         
-        // *** الحل السحري: فتح قاعدة البيانات في الخلفية ***
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val db = AppDatabase.getDatabase(applicationContext)
                 virtualAlbumDao = db.virtualAlbumDao()
             } catch (e: Exception) {
                 e.printStackTrace()
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(this@FileManagerActivity, "تأخر تحميل قاعدة البيانات", Toast.LENGTH_SHORT).show()
-                }
             }
         }
 
@@ -159,8 +139,7 @@ class FileManagerActivity : AppCompatActivity() {
             imageAdapter = ImageAdapter({ uri -> handleImageClick(uri) }, { uri -> handleImageLongClick(uri) })
             albumAdapter = AlbumAdapter { album -> handleAlbumClick(album) }
         } catch (e: Exception) {
-            Toast.makeText(this, "خطأ في تهيئة الواجهة", Toast.LENGTH_SHORT).show()
-            finish()
+            e.printStackTrace()
         }
     }
 
@@ -201,10 +180,10 @@ class FileManagerActivity : AppCompatActivity() {
         findViewById<LinearLayout>(R.id.btnPinnedFavorites)?.setOnClickListener { Toast.makeText(this, "قريباً", Toast.LENGTH_SHORT).show() }
         
         findViewById<LinearLayout>(R.id.btnPinnedScreenshots)?.setOnClickListener { 
-            try { setViewMode(ViewMode.SCREENSHOTS) } catch (e: Exception) { Toast.makeText(this, "لا يمكن فتح لقطات الشاشة", Toast.LENGTH_SHORT).show() }
+            setViewMode(ViewMode.SCREENSHOTS) 
         }
         findViewById<LinearLayout>(R.id.btnPinnedTrash)?.setOnClickListener { 
-            try { setViewMode(ViewMode.TRASH) } catch (e: Exception) { Toast.makeText(this, "لا يمكن فتح المهملات", Toast.LENGTH_SHORT).show() }
+            setViewMode(ViewMode.TRASH) 
         }
 
         btnSelectAll.setOnClickListener {
@@ -287,7 +266,6 @@ class FileManagerActivity : AppCompatActivity() {
                 ViewMode.ALBUMS -> loadAlbums()
             }
         } catch (e: Exception) {
-            Toast.makeText(this, "حدث خطأ أثناء تحميل البيانات", Toast.LENGTH_SHORT).show()
             e.printStackTrace()
         }
     }
@@ -313,8 +291,7 @@ class FileManagerActivity : AppCompatActivity() {
         try {
             if (currentMode == ViewMode.SCREENSHOTS) loadScreenshots() else loadRealGallery()
         } catch (e: Exception) {
-            Toast.makeText(this, "لا يمكن فتح المعرض", Toast.LENGTH_SHORT).show()
-            setViewMode(ViewMode.FILES)
+            e.printStackTrace()
         }
     }
 
@@ -577,7 +554,6 @@ class FileManagerActivity : AppCompatActivity() {
             }
         } catch (e: Exception) { 
             e.printStackTrace() 
-            Toast.makeText(this, "خطأ في التصفية والترتيب", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -668,7 +644,6 @@ class FileManagerActivity : AppCompatActivity() {
                     bucketMap.forEach { (id, pair) -> albumsList.add(AlbumItem(id, pair.first, pair.second, countMap[id] ?: 0)) }
                 }
                 
-                // استخدام الـ dao هنا
                 val virtualAlbums = dao.getAllAlbums()
                 for (vAlbum in virtualAlbums) {
                     val mediaUris = dao.getMediaForAlbum(vAlbum.id)
@@ -821,7 +796,6 @@ class FileManagerActivity : AppCompatActivity() {
                 else { requestPermissionLauncher.launch(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply { addCategory("android.intent.category.DEFAULT"); data = Uri.parse("package:$packageName") }) }
             } else loadDataForCurrentMode()
         } catch (e: Exception) {
-            Toast.makeText(this, "حدث خطأ في الصلاحيات", Toast.LENGTH_SHORT).show()
             loadDataForCurrentMode() 
         }
     }
@@ -834,7 +808,6 @@ class FileManagerActivity : AppCompatActivity() {
                 withContext(Dispatchers.Main) { allFiles = files; applyFilterAndSort() }
             } catch (e: Exception) {
                 e.printStackTrace()
-                Toast.makeText(this@FileManagerActivity, "لا يمكن الوصول للمجلد", Toast.LENGTH_SHORT).show()
             }
         }
     }
