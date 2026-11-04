@@ -8,7 +8,9 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.PixelFormat
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
@@ -42,10 +44,9 @@ class FloatingService : Service() {
         val notification: Notification = NotificationCompat.Builder(this, channelId)
             .setContentTitle("Monolith يعمل في الخلفية")
             .setContentText("الفقاعة العائمة نشطة")
-            .setSmallIcon(R.drawable.ic_bubble_monolith) // تأكد أن هذا الملف موجود في drawable
+            .setSmallIcon(R.drawable.ic_bubble_monolith)
             .build()
 
-        // تمرير نوع الخدمة الخاص بأندرويد 14
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(1, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
         } else {
@@ -77,7 +78,6 @@ class FloatingService : Service() {
 
         val imgBubble = floatingView.findViewById<ImageView>(R.id.imgBubble)
         
-        // جعل الفقاعة قابلة للسحب
         imgBubble.setOnTouchListener(object : View.OnTouchListener {
             private var initialX = 0
             private var initialY = 0
@@ -100,7 +100,6 @@ class FloatingService : Service() {
                         return true
                     }
                     MotionEvent.ACTION_UP -> {
-                        // لو الحركة كانت بسيطة جداً، يبقى ده "ضغطة" مش "سحب"
                         if (Math.abs(event.rawX - initialTouchX) < 10 && Math.abs(event.rawY - initialTouchY) < 10) {
                             showBubbleMenu(imgBubble)
                         }
@@ -115,14 +114,17 @@ class FloatingService : Service() {
     }
 
     private fun showBubbleMenu(anchorView: View) {
-        // القائمة اللي هتظهر لما ندوس على الفقاعة
         val popupMenu = PopupMenu(this, anchorView)
-        popupMenu.menu.add("📸 سكرين شوت (قريباً)")
+        popupMenu.menu.add("📸 سكرين شوت")
         popupMenu.menu.add("🎥 تسجيل شاشة (قريباً)")
         popupMenu.menu.add("❌ إغلاق الفقاعة")
         
         popupMenu.setOnMenuItemClickListener { item ->
             when (item.title) {
+                "📸 سكرين شوت" -> {
+                    takeScreenshot()
+                    true
+                }
                 "❌ إغلاق الفقاعة" -> {
                     stopSelf()
                     Toast.makeText(this, "تم إغلاق الفقاعة", Toast.LENGTH_SHORT).show()
@@ -137,9 +139,26 @@ class FloatingService : Service() {
         popupMenu.show()
     }
 
-    override fun onBind(intent: Intent?): IBinder? {
-        return null
+    private fun takeScreenshot() {
+        // 1. إخفاء الفقاعة
+        floatingView.visibility = View.GONE
+
+        // 2. الانتظار 200 مللي ثانية (عشان الصورة تتحدث بدون الفقاعة)
+        Handler(Looper.getMainLooper()).postDelayed({
+            // 3. إرسال أمر للخدمة تلتقط
+            val intent = Intent(this, ScreenCaptureService::class.java).apply {
+                action = ScreenCaptureService.ACTION_TAKE_SCREENSHOT
+            }
+            startService(intent)
+
+            // 4. إعادة إظهار الفقاعة بعد التصوير
+            Handler(Looper.getMainLooper()).postDelayed({
+                floatingView.visibility = View.VISIBLE
+            }, 300)
+        }, 200)
     }
+
+    override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
         super.onDestroy()
