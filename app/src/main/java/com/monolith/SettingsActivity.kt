@@ -60,6 +60,9 @@ class SettingsActivity : AppCompatActivity() {
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
         )
 
+        // ==========================================
+        // 1. المحرك الذكي
+        // ==========================================
         val providerSpinner = findViewById<Spinner>(R.id.providerSpinner)
         val etApiKey = findViewById<EditText>(R.id.etApiKey)
         val btnTestAndSave = findViewById<Button>(R.id.btnTestAndSave)
@@ -121,6 +124,9 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
+        // ==========================================
+        // 2. تخصيص شريط التحديد
+        // ==========================================
         val rgNeonColor = findViewById<RadioGroup>(R.id.rgNeonColor)
         val rgFrameStyle = findViewById<RadioGroup>(R.id.rgFrameStyle)
         val btnSaveSelectionStyle = findViewById<Button>(R.id.btnSaveSelectionStyle)
@@ -162,6 +168,9 @@ class SettingsActivity : AppCompatActivity() {
             Toast.makeText(this, "تم حفظ تخصيص شريط التحديد", Toast.LENGTH_SHORT).show()
         }
 
+        // ==========================================
+        // 3. إعدادات المظهر
+        // ==========================================
         val spinner = findViewById<Spinner>(R.id.languageSpinner)
         val btnApplyLanguage = findViewById<Button>(R.id.btnApplyLanguage)
         val backgroundGroup = findViewById<RadioGroup>(R.id.backgroundGroup)
@@ -262,7 +271,11 @@ class SettingsActivity : AppCompatActivity() {
             } catch (e: Exception) {}
         }
 
+        // ==========================================
+        // 4. الأدوات السيادية
+        // ==========================================
         switchFloatingBubble = findViewById(R.id.switchFloatingBubble)
+        val btnAllowAutoStart = findViewById<Button>(R.id.btnAllowAutoStart)
         
         val bubbleWasEnabled = sharedPreferences.getBoolean("bubble_enabled", false)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -284,6 +297,11 @@ class SettingsActivity : AppCompatActivity() {
             } else {
                 stopFloatingService()
             }
+        }
+
+        // *** ربط زرار السماح الآن بفتح إعدادات التشغيل التلقائي ***
+        btnAllowAutoStart.setOnClickListener {
+            OemUtils.openAutoStartSettings(this)
         }
     }
 
