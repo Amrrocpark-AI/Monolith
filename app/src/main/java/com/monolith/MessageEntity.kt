@@ -1,4 +1,3 @@
-
 package com.monolith
 
 import androidx.room.Entity
@@ -14,5 +13,9 @@ data class MessageEntity(
     val content: String,
     val timestamp: Long,
     val attachmentUris: String? = null, // سنحفظ الروابط كنص مفصول بفواصل
-    val isEncrypted: Boolean = false // ميزة مستقبلية
+    val isEncrypted: Boolean = false, // ميزة مستقبلية
+    
+    // الحقول الجديدة للتفاعلات (اللايك والقلب)
+    val reactionType: String? = null, // LIKE, DISLIKE, HEART
+    val reactionColor: String? = null // كود اللون (HEX) للقلب
 )
