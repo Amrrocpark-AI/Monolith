@@ -85,8 +85,18 @@ class ChatActivity : AppCompatActivity() {
 
         ApiClient.init(applicationContext)
         
-        val db = AppDatabase.getDatabase(applicationContext)
-        messageDao = db.messageDao()
+        // فتح قاعدة البيانات في الخلفية لكي لا ينهار التطبيق
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val db = AppDatabase.getDatabase(applicationContext)
+                messageDao = db.messageDao()
+                withContext(Dispatchers.Main) {
+                    loadMessagesFromDb()
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
 
         val masterKey = MasterKey.Builder(this).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build()
         securePrefs = EncryptedSharedPreferences.create(
@@ -106,8 +116,6 @@ class ChatActivity : AppCompatActivity() {
         chatScrollView = findViewById(R.id.chatScrollView)
         imagePreviewContainer = findViewById(R.id.imagePreviewContainer)
         previewListContainer = findViewById(R.id.previewListContainer)
-
-        loadMessagesFromDb()
 
         btnSend.isEnabled = false
         btnSend.alpha = 0.5f
@@ -138,15 +146,11 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun sendMessage() {
-        val apiKey = securePrefs.getString("api_key", null)
-        if (apiKey.isNullOrEmpty()) {
-            showSetupDialog()
-            return
-        }
-
         try {
             val message = etMessage.text.toString().trim()
             if (message.isNotEmpty() || selectedImageUris.isNotEmpty()) {
+                
+                // 1. إظهار رسالة المستخدم وحفظها فوراً (لدعم الدردشة البشرية أو التجربة)
                 val userMsg = ChatMessage(role = MessageRole.USER, content = message, attachmentUris = selectedImageUris.map { it.toString() }, colorHex = themeColorHex)
                 messageList.add(userMsg)
                 saveMessageToDb(userMsg)
@@ -156,7 +160,18 @@ class ChatActivity : AppCompatActivity() {
                 updatePreviewUi()
                 etMessage.text.clear()
                 hideKeyboard()
+                
+                chatScrollView.post { chatScrollView.fullScroll(android.widget.ScrollView.FOCUS_DOWN) }
 
+                // 2. التحقق من وجود مفتاح الذكاء الاصطناعي
+                val apiKey = securePrefs.getString("api_key", null)
+                if (apiKey.isNullOrEmpty()) {
+                    // إذا لم يوجد مفتاح، نعرض التنبيه ولكن نترك رسالة المستخدم في الشاشة!
+                    showSetupDialog()
+                    return
+                }
+
+                // 3. إذا وجد المفتاح، نكمل عملية الذكاء الاصطناعي
                 val aiMsg = ChatMessage(role = MessageRole.AI, content = "جاري التفكير...", colorHex = "#2A2A2A")
                 messageList.add(aiMsg)
                 val aiMsgIndex = messageList.size - 1 
@@ -230,7 +245,7 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun showSetupDialog() {
-        AlertDialog.Builder(this).setTitle("المحرك غير متصل").setMessage("مرحباً بك في Monolith. يرجى تهيئة المحرك الذكي للبدء.")
+        AlertDialog.Builder(this).setTitle("المحرك غير متصل").setMessage("مرحباً بك في Monolith. تم حفظ رسالتك محلياً، ولكن للرد عليك بالذكاء الاصطناعي يرجى تهيئة المحرك.")
             .setPositiveButton("الذهاب للإعدادات") { _, _ -> startActivity(Intent(this, SettingsActivity::class.java)) }.setNegativeButton("إلغاء", null).show()
     }
 
