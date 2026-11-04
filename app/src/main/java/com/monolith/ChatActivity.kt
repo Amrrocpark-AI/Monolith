@@ -18,7 +18,6 @@ import android.view.ActionMode
 import android.view.Gravity
 import android.view.Menu
 import android.view.MenuItem
-import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
@@ -429,45 +428,44 @@ class ChatActivity : AppCompatActivity() {
             messageLayout.addView(scrollView)
         }
 
-        // تعريف TextView هنا ليكون متاحاً للـ Callback
-        val textView = TextView(this).apply {
-            text = msg.content
-            textSize = 15f
-            setTextColor(if (msg.role == MessageRole.USER) Color.BLACK else Color.WHITE)
-            textDirection = if (msg.role == MessageRole.USER) TextView.TEXT_DIRECTION_RTL else TextView.TEXT_DIRECTION_LOCALE
-            textAlignment = TextView.TEXT_ALIGNMENT_VIEW_START
-            setLineSpacing(dpToPx(4).toFloat(), 1.1f)
-            setTextIsSelectable(true)
+        // 1. تعريف TextView هنا (بدون apply) لضمان الوصول له في الـ Callback
+        val textView = TextView(this)
+        textView.text = msg.content
+        textView.textSize = 15f
+        textView.setTextColor(if (msg.role == MessageRole.USER) Color.BLACK else Color.WHITE)
+        textView.textDirection = if (msg.role == MessageRole.USER) TextView.TEXT_DIRECTION_RTL else TextView.TEXT_DIRECTION_LOCALE
+        textView.textAlignment = TextView.TEXT_ALIGNMENT_VIEW_START
+        textView.setLineSpacing(dpToPx(4).toFloat(), 1.1f)
+        textView.setTextIsSelectable(true)
 
-            customSelectionActionModeCallback = object : ActionMode.Callback {
-                override fun onCreateActionMode(mode: ActionMode?, menu: Menu?): Boolean {
-                    menu?.clear()
-                    menu?.add(0, 1, 0, "🔊 قراءة")?.setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
-                    menu?.add(0, 2, 1, "📋 نسخ")?.setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
-                    menu?.add(0, 3, 2, "تحديد الكل")?.setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
-                    return true
-                }
-                override fun onPrepareActionMode(mode: ActionMode?, menu: Menu?): Boolean = false
-                override fun onActionItemClicked(mode: ActionMode?, item: MenuItem?): Boolean {
-                    val start = textView.selectionStart
-                    val end = textView.selectionEnd
-                    if (start < 0 || end < 0) return false
-                    val selectedText = textView.text.substring(start, end)
-                    
-                    when (item?.itemId) {
-                        1 -> { initTtsIfNeeded(); ttsManager?.speak(selectedText); mode?.finish(); return true }
-                        2 -> { 
-                            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Monolith", selectedText))
-                            Toast.makeText(this@ChatActivity, "تم النسخ", Toast.LENGTH_SHORT).show()
-                            mode?.finish(); return true 
-                        }
-                        3 -> { textView.selectAll(); return true }
-                    }
-                    return false
-                }
-                override fun onDestroyActionMode(mode: ActionMode?) {}
+        textView.customSelectionActionModeCallback = object : ActionMode.Callback {
+            override fun onCreateActionMode(mode: ActionMode?, menu: Menu?): Boolean {
+                menu?.clear()
+                menu?.add(0, 1, 0, "🔊 قراءة")?.setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+                menu?.add(0, 2, 1, "📋 نسخ")?.setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
+                menu?.add(0, 3, 2, "تحديد الكل")?.setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
+                return true
             }
+            override fun onPrepareActionMode(mode: ActionMode?, menu: Menu?): Boolean = false
+            override fun onActionItemClicked(mode: ActionMode?, item: MenuItem?): Boolean {
+                val start = textView.selectionStart // الآن يعمل بدون مشاكل
+                val end = textView.selectionEnd
+                if (start < 0 || end < 0) return false
+                val selectedText = textView.text.substring(start, end)
+                
+                when (item?.itemId) {
+                    1 -> { initTtsIfNeeded(); ttsManager?.speak(selectedText); mode?.finish(); return true }
+                    2 -> { 
+                        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Monolith", selectedText))
+                        Toast.makeText(this@ChatActivity, "تم النسخ", Toast.LENGTH_SHORT).show()
+                        mode?.finish(); return true 
+                    }
+                    3 -> { textView.selectAll(); return true }
+                }
+                return false
+            }
+            override fun onDestroyActionMode(mode: ActionMode?) {}
         }
 
         if (msg.content.isNotEmpty()) {
@@ -483,7 +481,7 @@ class ChatActivity : AppCompatActivity() {
             messageLayout.addView(textBubble)
         }
 
-        // شريط الأدوات السفلي (الجديد)
+        // شريط الأدوات السفلي
         if (msg.content.isNotEmpty() && msg.content != "جاري التفكير...") {
             val actionBar = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -553,7 +551,7 @@ class ChatActivity : AppCompatActivity() {
             }
             actionBar.addView(thumbIcon)
 
-            // زر القلب (بديل عجلة الألوان)
+            // زر القلب (بديل عجلة الألوان حالياً)
             val heartIcon = createActionIcon(R.drawable.ic_heart, if (msg.reactionColor != null) Color.parseColor(msg.reactionColor) else Color.parseColor("#88FFFFFF")) {
                 val colors = arrayOf("أحمر", "أزرق", "أخضر", "أصفر", "بنفسجي")
                 val colorValues = arrayOf("#FF0000", "#0000FF", "#00FF00", "#FFFF00", "#800080")
