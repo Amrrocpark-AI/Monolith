@@ -13,6 +13,8 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.text.Editable
+import android.text.Selection
+import android.text.Spannable
 import android.text.TextWatcher
 import android.view.ActionMode
 import android.view.Gravity
@@ -428,7 +430,6 @@ class ChatActivity : AppCompatActivity() {
             messageLayout.addView(scrollView)
         }
 
-        // 1. تعريف TextView هنا (بدون apply) لضمان الوصول له في الـ Callback
         val textView = TextView(this)
         textView.text = msg.content
         textView.textSize = 15f
@@ -448,7 +449,7 @@ class ChatActivity : AppCompatActivity() {
             }
             override fun onPrepareActionMode(mode: ActionMode?, menu: Menu?): Boolean = false
             override fun onActionItemClicked(mode: ActionMode?, item: MenuItem?): Boolean {
-                val start = textView.selectionStart // الآن يعمل بدون مشاكل
+                val start = textView.selectionStart
                 val end = textView.selectionEnd
                 if (start < 0 || end < 0) return false
                 val selectedText = textView.text.substring(start, end)
@@ -461,7 +462,14 @@ class ChatActivity : AppCompatActivity() {
                         Toast.makeText(this@ChatActivity, "تم النسخ", Toast.LENGTH_SHORT).show()
                         mode?.finish(); return true 
                     }
-                    3 -> { textView.selectAll(); return true }
+                    3 -> { 
+                        // الحل: استخدام Selection.selectAll بدلاً من selectAll()
+                        val text = textView.text
+                        if (text is Spannable) {
+                            Selection.selectAll(text)
+                        }
+                        return true 
+                    }
                 }
                 return false
             }
@@ -481,7 +489,6 @@ class ChatActivity : AppCompatActivity() {
             messageLayout.addView(textBubble)
         }
 
-        // شريط الأدوات السفلي
         if (msg.content.isNotEmpty() && msg.content != "جاري التفكير...") {
             val actionBar = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -500,14 +507,12 @@ class ChatActivity : AppCompatActivity() {
                 }
             }
 
-            // زر النسخ
             actionBar.addView(createActionIcon(R.drawable.ic_copy, Color.parseColor("#88FFFFFF")) {
                 val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                 clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Monolith", msg.content))
                 Toast.makeText(this, "تم نسخ الرسالة", Toast.LENGTH_SHORT).show()
             })
 
-            // زر القراءة الصوتية
             actionBar.addView(createActionIcon(R.drawable.ic_volume_up, Color.parseColor("#88FFFFFF")) {
                 initTtsIfNeeded()
                 currentPlayingIcon?.setImageResource(R.drawable.ic_volume_up)
@@ -519,7 +524,6 @@ class ChatActivity : AppCompatActivity() {
                 ttsManager?.speak(msg.content)
             })
 
-            // زر اللايك/ديسلايك الهجين
             val thumbIcon = createActionIcon(R.drawable.ic_thumb_hybrid, Color.parseColor("#88FFFFFF")) {
                 var currentReaction = msg.reactionType
                 val newReaction = when (currentReaction) {
@@ -530,18 +534,9 @@ class ChatActivity : AppCompatActivity() {
                 msg.reactionType = newReaction
                 val iconView = actionBar.getChildAt(2) as ImageView
                 when (newReaction) {
-                    "LIKE" -> {
-                        iconView.setColorFilter(Color.BLUE)
-                        iconView.rotation = 0f
-                    }
-                    "DISLIKE" -> {
-                        iconView.setColorFilter(Color.RED)
-                        iconView.rotation = 180f
-                    }
-                    else -> {
-                        iconView.setColorFilter(Color.parseColor("#88FFFFFF"))
-                        iconView.rotation = 0f
-                    }
+                    "LIKE" -> { iconView.setColorFilter(Color.BLUE); iconView.rotation = 0f }
+                    "DISLIKE" -> { iconView.setColorFilter(Color.RED); iconView.rotation = 180f }
+                    else -> { iconView.setColorFilter(Color.parseColor("#88FFFFFF")); iconView.rotation = 0f }
                 }
                 saveMessageToDb(msg)
             }
@@ -551,7 +546,6 @@ class ChatActivity : AppCompatActivity() {
             }
             actionBar.addView(thumbIcon)
 
-            // زر القلب (بديل عجلة الألوان حالياً)
             val heartIcon = createActionIcon(R.drawable.ic_heart, if (msg.reactionColor != null) Color.parseColor(msg.reactionColor) else Color.parseColor("#88FFFFFF")) {
                 val colors = arrayOf("أحمر", "أزرق", "أخضر", "أصفر", "بنفسجي")
                 val colorValues = arrayOf("#FF0000", "#0000FF", "#00FF00", "#FFFF00", "#800080")
@@ -569,7 +563,6 @@ class ChatActivity : AppCompatActivity() {
             }
             actionBar.addView(heartIcon)
 
-            // زر المزيد
             actionBar.addView(createActionIcon(R.drawable.ic_more_vert, Color.parseColor("#88FFFFFF")) {
                 val popup = PopupMenu(this, actionBar.getChildAt(4))
                 popup.menu.add("🔄 إعادة توليد")
