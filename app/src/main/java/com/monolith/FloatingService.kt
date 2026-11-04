@@ -8,7 +8,9 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.PixelFormat
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
@@ -27,8 +29,16 @@ class FloatingService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        startForegroundService()
-        setupFloatingBubble()
+        try {
+            startForegroundService()
+            setupFloatingBubble()
+            
+            // حفظ التفضيل: المستخدم يريد الفقاعة مفتوحة
+            getSharedPreferences("Settings", MODE_PRIVATE)
+                .edit().putBoolean("bubble_enabled", true).apply()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     private fun startForegroundService() {
@@ -43,6 +53,7 @@ class FloatingService : Service() {
             .setContentTitle("Monolith يعمل في الخلفية")
             .setContentText("الفقاعة العائمة نشطة")
             .setSmallIcon(R.drawable.ic_bubble_monolith)
+            .setOngoing(true)
             .build()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
@@ -62,12 +73,11 @@ class FloatingService : Service() {
             WindowManager.LayoutParams.TYPE_PHONE
         }
 
-        // *** التعديل هنا: إضافة FLAG_SECURE لمنع تصوير الفقاعة فقط ***
         layoutParams = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             layoutFlag,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_SECURE,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT
         )
 
@@ -114,17 +124,15 @@ class FloatingService : Service() {
 
     private fun showBubbleMenu(anchorView: View) {
         val popupMenu = PopupMenu(this, anchorView)
-        popupMenu.menu.add("📸 سكرين شوت")
+        popupMenu.menu.add("📸 سكرين شوت (قريباً)")
         popupMenu.menu.add("🎥 تسجيل شاشة (قريباً)")
         popupMenu.menu.add("❌ إغلاق الفقاعة")
         
         popupMenu.setOnMenuItemClickListener { item ->
             when (item.title) {
-                "📸 سكرين شوت" -> {
-                    takeScreenshot()
-                    true
-                }
                 "❌ إغلاق الفقاعة" -> {
+                    getSharedPreferences("Settings", MODE_PRIVATE)
+                        .edit().putBoolean("bubble_enabled", false).apply()
                     stopSelf()
                     Toast.makeText(this, "تم إغلاق الفقاعة", Toast.LENGTH_SHORT).show()
                     true
@@ -138,20 +146,26 @@ class FloatingService : Service() {
         popupMenu.show()
     }
 
-    private fun takeScreenshot() {
-        // *** التعديل هنا: إرسال الأمر مباشرة بدون إخفاء أو انتظار ***
-        val intent = Intent(this, ScreenCaptureService::class.java).apply {
-            action = ScreenCaptureService.ACTION_TAKE_SCREENSHOT
-        }
-        startService(intent)
+    // *** START_STICKY: لو النظام قتل الخدمة، النظام يحاول يشغلها تاني أوتوماتيك ***
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        return START_STICKY
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        // المستخدم سحب التطبيق من الـ Recent Apps، لكن الخدمة تفضل شغالة
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
         super.onDestroy()
-        if (::floatingView.isInitialized) {
-            windowManager.removeView(floatingView)
+        try {
+            if (::floatingView.isInitialized) {
+                windowManager.removeView(floatingView)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 }
