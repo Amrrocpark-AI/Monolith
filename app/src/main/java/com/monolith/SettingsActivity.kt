@@ -32,7 +32,6 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var securePrefs: android.content.SharedPreferences
     private lateinit var switchFloatingBubble: SwitchMaterial
 
-    // مستمع لنتيجة طلب صلاحية الفقاعة (الرسم فوق التطبيقات)
     private val overlayPermissionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { _ ->
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if (Settings.canDrawOverlays(this)) {
@@ -52,9 +51,7 @@ class SettingsActivity : AppCompatActivity() {
 
         sharedPreferences = getSharedPreferences("Settings", MODE_PRIVATE)
 
-        // ==========================================
-        // 1. إعداد التخزين المشفر (لحماية المفتاح)
-        // ==========================================
+        // 1. إعداد التخزين المشفر
         val masterKey = MasterKey.Builder(this)
             .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
             .build()
@@ -65,9 +62,7 @@ class SettingsActivity : AppCompatActivity() {
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
         )
 
-        // ==========================================
-        // 2. المحرك الذكي (المفتاح والاختبار)
-        // ==========================================
+        // 2. المحرك الذكي
         val providerSpinner = findViewById<Spinner>(R.id.providerSpinner)
         val etApiKey = findViewById<EditText>(R.id.etApiKey)
         val btnTestAndSave = findViewById<Button>(R.id.btnTestAndSave)
@@ -129,9 +124,7 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
-        // ==========================================
         // 3. تخصيص شريط التحديد
-        // ==========================================
         val rgNeonColor = findViewById<RadioGroup>(R.id.rgNeonColor)
         val rgFrameStyle = findViewById<RadioGroup>(R.id.rgFrameStyle)
         val btnSaveSelectionStyle = findViewById<Button>(R.id.btnSaveSelectionStyle)
@@ -173,9 +166,7 @@ class SettingsActivity : AppCompatActivity() {
             Toast.makeText(this, "تم حفظ تخصيص شريط التحديد", Toast.LENGTH_SHORT).show()
         }
 
-        // ==========================================
         // 4. إعدادات المظهر
-        // ==========================================
         val spinner = findViewById<Spinner>(R.id.languageSpinner)
         val btnApplyLanguage = findViewById<Button>(R.id.btnApplyLanguage)
         val backgroundGroup = findViewById<RadioGroup>(R.id.backgroundGroup)
@@ -276,9 +267,7 @@ class SettingsActivity : AppCompatActivity() {
             } catch (e: Exception) {}
         }
 
-        // ==========================================
-        // 5. إعدادات الفقاعة العائمة (الوحدة الأولى والثانية)
-        // ==========================================
+        // 5. إعدادات الفقاعة العائمة (بدون طلب صلاحية تصوير الشاشة)
         switchFloatingBubble = findViewById(R.id.switchFloatingBubble)
         
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -303,22 +292,19 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun startFloatingService() {
-        // 1. تشغيل خدمة الفقاعة العائمة
+        // تشغيل خدمة الفقاعة العائمة فقط
         val serviceIntent = Intent(this, FloatingService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(serviceIntent)
         } else {
             startService(serviceIntent)
         }
-
-        // 2. *** فتح شاشة طلب إذن تصوير الشاشة ***
-        startActivity(Intent(this, CapturePermissionActivity::class.java))
+        Toast.makeText(this, "تم تشغيل الفقاعة العائمة", Toast.LENGTH_SHORT).show()
     }
 
     private fun stopFloatingService() {
         val serviceIntent = Intent(this, FloatingService::class.java)
         stopService(serviceIntent)
-        // إيقاف خدمة تصوير الشاشة أيضاً
         stopService(Intent(this, ScreenCaptureService::class.java))
         Toast.makeText(this, "تم إيقاف الفقاعة العائمة", Toast.LENGTH_SHORT).show()
     }
