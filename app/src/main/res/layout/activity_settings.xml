@@ -353,7 +353,38 @@
             android:text="حفظ اللون وتطبيقه"
             android:backgroundTint="#00FF00"
             android:textColor="#000000"
-            android:textStyle="bold" />
+            android:textStyle="bold"
+            android:layout_marginBottom="32dp" />
+
+        <!-- ========================================== -->
+        <!-- 4. قسم الأدوات السيادية (الفقاعة العائمة) -->
+        <!-- ========================================== -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#333333"
+            android:layout_marginBottom="32dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="الأدوات السيادية"
+            android:textColor="#00D4FF"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="16dp" />
+
+        <com.google.android.material.switchmaterial.SwitchMaterial
+            android:id="@+id/switchFloatingBubble"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="تشغيل الفقاعة العائمة (فوق التطبيقات الأخرى)"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp"
+            android:padding="16dp"
+            android:background="#1E1E1E"
+            app:thumbTint="#FFFFFF"
+            app:trackTint="#00D4FF" />
 
     </LinearLayout>
 </ScrollView>
