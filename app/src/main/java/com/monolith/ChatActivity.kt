@@ -13,7 +13,10 @@ import android.os.Build
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
+import android.view.ActionMode
 import android.view.Gravity
+import android.view.Menu
+import android.view.MenuItem
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
@@ -51,6 +54,9 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var messageDao: MessageDao
     private var messageList: MutableList<ChatMessage> = mutableListOf()
     private val currentConversationId = "main_chat" 
+    
+    // إضافة محرك الصوت
+    private lateinit var ttsManager: TtsManager
 
     private val pickImagesLauncher = registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris: List<Uri> ->
         if (uris.isNotEmpty()) {
@@ -83,9 +89,11 @@ class ChatActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_chat)
 
+        // تهيئة محرك الصوت
+        ttsManager = TtsManager(this)
+
         ApiClient.init(applicationContext)
         
-        // فتح قاعدة البيانات في الخلفية لكي لا ينهار التطبيق
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val db = AppDatabase.getDatabase(applicationContext)
@@ -144,13 +152,20 @@ class ChatActivity : AppCompatActivity() {
             if (actionId == EditorInfo.IME_ACTION_SEND) { sendMessage(); true } else { false }
         }
     }
+    
+    override fun onDestroy() {
+        // إغلاق محرك الصوت عند الخروج من الشاشة
+        if (::ttsManager.isInitialized) {
+            ttsManager.shutdown()
+        }
+        super.onDestroy()
+    }
 
     private fun sendMessage() {
         try {
             val message = etMessage.text.toString().trim()
             if (message.isNotEmpty() || selectedImageUris.isNotEmpty()) {
                 
-                // 1. إظهار رسالة المستخدم وحفظها فوراً (لدعم الدردشة البشرية أو التجربة)
                 val userMsg = ChatMessage(role = MessageRole.USER, content = message, attachmentUris = selectedImageUris.map { it.toString() }, colorHex = themeColorHex)
                 messageList.add(userMsg)
                 saveMessageToDb(userMsg)
@@ -163,15 +178,12 @@ class ChatActivity : AppCompatActivity() {
                 
                 chatScrollView.post { chatScrollView.fullScroll(android.widget.ScrollView.FOCUS_DOWN) }
 
-                // 2. التحقق من وجود مفتاح الذكاء الاصطناعي
                 val apiKey = securePrefs.getString("api_key", null)
                 if (apiKey.isNullOrEmpty()) {
-                    // إذا لم يوجد مفتاح، نعرض التنبيه ولكن نترك رسالة المستخدم في الشاشة!
                     showSetupDialog()
                     return
                 }
 
-                // 3. إذا وجد المفتاح، نكمل عملية الذكاء الاصطناعي
                 val aiMsg = ChatMessage(role = MessageRole.AI, content = "جاري التفكير...", colorHex = "#2A2A2A")
                 messageList.add(aiMsg)
                 val aiMsgIndex = messageList.size - 1 
@@ -391,15 +403,73 @@ class ChatActivity : AppCompatActivity() {
 
         if (msg.content.isNotEmpty()) {
             val textBubble = LinearLayout(this).apply {
-                setPadding(32, 24, 32, 24)
-                background = GradientDrawable().apply { setColor(Color.parseColor(msg.colorHex)); cornerRadius = 40f }
+                // تحسين المسافات الداخلية (Padding) لتبدو احترافية
+                setPadding(dpToPx(16), dpToPx(12), dpToPx(16), dpToPx(12))
+                background = GradientDrawable().apply { 
+                    setColor(Color.parseColor(msg.colorHex))
+                    // تكبير الزوايا لتبدو أكثر نعومة
+                    cornerRadius = dpToPx(20).toFloat() 
+                }
             }
             val textView = TextView(this).apply {
                 text = msg.content
-                textSize = 16f
+                textSize = 15f // حجم خط مريح للعين
                 setTextColor(if (msg.role == MessageRole.USER) Color.BLACK else Color.WHITE)
                 textDirection = if (msg.role == MessageRole.USER) TextView.TEXT_DIRECTION_RTL else TextView.TEXT_DIRECTION_LOCALE
                 textAlignment = TextView.TEXT_ALIGNMENT_VIEW_START
+                
+                // تحسين المسافة بين السطور (Line Spacing)
+                setLineSpacing(dpToPx(4).toFloat(), 1.1f)
+                
+                // تفعيل تحديد النص
+                setTextIsSelectable(true)
+                
+                // هنا نضيف القائمة العائمة المخصصة
+                customSelectionActionModeCallback = object : ActionMode.Callback {
+                    override fun onCreateActionMode(mode: ActionMode?, menu: Menu?): Boolean {
+                        // مسح القائمة الافتراضية وإضافة أزرارنا السيادية
+                        menu?.clear()
+                        menu?.add(0, 1, 0, "🔊 قراءة")?.setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+                        menu?.add(0, 2, 1, "📋 نسخ")?.setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
+                        menu?.add(0, 3, 2, "🎨 تنسيق")?.setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
+                        return true
+                    }
+
+                    override fun onPrepareActionMode(mode: ActionMode?, menu: Menu?): Boolean = false
+
+                    override fun onActionItemClicked(mode: ActionMode?, item: MenuItem?): Boolean {
+                        val start = textView.selectionStart
+                        val end = textView.selectionEnd
+                        if (start < 0 || end < 0) return false
+                        
+                        // جلب النص المحدد فقط
+                        val selectedText = textView.text.substring(start, end)
+                        
+                        when (item?.itemId) {
+                            1 -> { // قراءة صوتية
+                                ttsManager.speak(selectedText)
+                                mode?.finish()
+                                return true
+                            }
+                            2 -> { // نسخ
+                                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                val clip = android.content.ClipData.newPlainText("Monolith Text", selectedText)
+                                clipboard.setPrimaryClip(clip)
+                                Toast.makeText(this@ChatActivity, "تم النسخ", Toast.LENGTH_SHORT).show()
+                                mode?.finish()
+                                return true
+                            }
+                            3 -> { // تنسيق (مستقبلي)
+                                Toast.makeText(this@ChatActivity, "قائمة التنسيق قريباً", Toast.LENGTH_SHORT).show()
+                                mode?.finish()
+                                return true
+                            }
+                        }
+                        return false
+                    }
+
+                    override fun onDestroyActionMode(mode: ActionMode?) {}
+                }
             }
             textBubble.addView(textView)
             messageLayout.addView(textBubble)
