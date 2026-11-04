@@ -30,7 +30,6 @@ import androidx.lifecycle.lifecycleScope
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.bumptech.glide.Glide
-import com.duanhong169.colorpicker.ColorPickerDialog
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.card.MaterialCardView
 import kotlinx.coroutines.Dispatchers
@@ -40,7 +39,6 @@ import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
 import java.io.InputStream
-import java.util.UUID
 
 class ChatActivity : AppCompatActivity() {
 
@@ -59,7 +57,6 @@ class ChatActivity : AppCompatActivity() {
     private var messageList: MutableList<ChatMessage> = mutableListOf()
     private val currentConversationId = "main_chat" 
     
-    // محرك الصوت (يتم تهيئته فقط عند الحاجة)
     private var ttsManager: TtsManager? = null
     private var currentPlayingIcon: ImageView? = null
 
@@ -407,13 +404,11 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun addChatBubble(container: LinearLayout, msg: ChatMessage) {
-        // Layout الأساسي (عمودي) للرسالة وشريط الأدوات
         val messageLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         }
 
-        // 1. الصور المرفقة
         if (!msg.attachmentUris.isNullOrEmpty()) {
             val scrollView = android.widget.HorizontalScrollView(this)
             val imageContainer = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
@@ -434,7 +429,47 @@ class ChatActivity : AppCompatActivity() {
             messageLayout.addView(scrollView)
         }
 
-        // 2. الفقاعة (النص فقط)
+        // تعريف TextView هنا ليكون متاحاً للـ Callback
+        val textView = TextView(this).apply {
+            text = msg.content
+            textSize = 15f
+            setTextColor(if (msg.role == MessageRole.USER) Color.BLACK else Color.WHITE)
+            textDirection = if (msg.role == MessageRole.USER) TextView.TEXT_DIRECTION_RTL else TextView.TEXT_DIRECTION_LOCALE
+            textAlignment = TextView.TEXT_ALIGNMENT_VIEW_START
+            setLineSpacing(dpToPx(4).toFloat(), 1.1f)
+            setTextIsSelectable(true)
+
+            customSelectionActionModeCallback = object : ActionMode.Callback {
+                override fun onCreateActionMode(mode: ActionMode?, menu: Menu?): Boolean {
+                    menu?.clear()
+                    menu?.add(0, 1, 0, "🔊 قراءة")?.setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+                    menu?.add(0, 2, 1, "📋 نسخ")?.setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
+                    menu?.add(0, 3, 2, "تحديد الكل")?.setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
+                    return true
+                }
+                override fun onPrepareActionMode(mode: ActionMode?, menu: Menu?): Boolean = false
+                override fun onActionItemClicked(mode: ActionMode?, item: MenuItem?): Boolean {
+                    val start = textView.selectionStart
+                    val end = textView.selectionEnd
+                    if (start < 0 || end < 0) return false
+                    val selectedText = textView.text.substring(start, end)
+                    
+                    when (item?.itemId) {
+                        1 -> { initTtsIfNeeded(); ttsManager?.speak(selectedText); mode?.finish(); return true }
+                        2 -> { 
+                            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Monolith", selectedText))
+                            Toast.makeText(this@ChatActivity, "تم النسخ", Toast.LENGTH_SHORT).show()
+                            mode?.finish(); return true 
+                        }
+                        3 -> { textView.selectAll(); return true }
+                    }
+                    return false
+                }
+                override fun onDestroyActionMode(mode: ActionMode?) {}
+            }
+        }
+
         if (msg.content.isNotEmpty()) {
             val textBubble = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
@@ -444,53 +479,11 @@ class ChatActivity : AppCompatActivity() {
                     cornerRadius = dpToPx(20).toFloat() 
                 }
             }
-            
-            val textView = TextView(this).apply {
-                text = msg.content
-                textSize = 15f
-                setTextColor(if (msg.role == MessageRole.USER) Color.BLACK else Color.WHITE)
-                textDirection = if (msg.role == MessageRole.USER) TextView.TEXT_DIRECTION_RTL else TextView.TEXT_DIRECTION_LOCALE
-                textAlignment = TextView.TEXT_ALIGNMENT_VIEW_START
-                setLineSpacing(dpToPx(4).toFloat(), 1.1f)
-                setTextIsSelectable(true)
-
-                // شريط التحديد العائم (القديم)
-                customSelectionActionModeCallback = object : ActionMode.Callback {
-                    override fun onCreateActionMode(mode: ActionMode?, menu: Menu?): Boolean {
-                        menu?.clear()
-                        menu?.add(0, 1, 0, "🔊 قراءة")?.setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
-                        menu?.add(0, 2, 1, "📋 نسخ")?.setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
-                        menu?.add(0, 3, 2, "تحديد الكل")?.setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
-                        return true
-                    }
-                    override fun onPrepareActionMode(mode: ActionMode?, menu: Menu?): Boolean = false
-                    override fun onActionItemClicked(mode: ActionMode?, item: MenuItem?): Boolean {
-                        val start = textView.selectionStart
-                        val end = textView.selectionEnd
-                        if (start < 0 || end < 0) return false
-                        val selectedText = textView.text.substring(start, end)
-                        
-                        when (item?.itemId) {
-                            1 -> { initTtsIfNeeded(); ttsManager?.speak(selectedText); mode?.finish(); return true }
-                            2 -> { 
-                                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Monolith", selectedText))
-                                Toast.makeText(this@ChatActivity, "تم النسخ", Toast.LENGTH_SHORT).show()
-                                mode?.finish(); return true 
-                            }
-                            3 -> { textView.selectAll(); return true }
-                        }
-                        return false
-                    }
-                    override fun onDestroyActionMode(mode: ActionMode?) {}
-                }
-            }
-            
             textBubble.addView(textView)
             messageLayout.addView(textBubble)
         }
 
-        // 3. شريط الأدوات السفلي (الجديد)
+        // شريط الأدوات السفلي (الجديد)
         if (msg.content.isNotEmpty() && msg.content != "جاري التفكير...") {
             val actionBar = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -498,7 +491,6 @@ class ChatActivity : AppCompatActivity() {
                 setPadding(dpToPx(8), dpToPx(8), dpToPx(8), 0)
             }
 
-            // دالة مساعدة صغيرة لإنشاء الأيقونات
             fun createActionIcon(resId: Int, tintColor: Int, onClick: () -> Unit): ImageView {
                 return ImageView(this).apply {
                     setImageResource(resId)
@@ -522,8 +514,6 @@ class ChatActivity : AppCompatActivity() {
                 initTtsIfNeeded()
                 currentPlayingIcon?.setImageResource(R.drawable.ic_volume_up)
                 currentPlayingIcon?.setColorFilter(Color.parseColor("#88FFFFFF"))
-                val thisIcon = ImageView(this)
-                // نحتاج نمرر الأيقونة الصح، هنا سنستخدم v كـ View
                 val v = actionBar.getChildAt(1) as ImageView
                 v.setImageResource(R.drawable.avd_audio_anim)
                 (v.drawable as? AnimatedVectorDrawable)?.start()
@@ -555,27 +545,28 @@ class ChatActivity : AppCompatActivity() {
                         iconView.rotation = 0f
                     }
                 }
-                saveMessageToDb(msg) // حفظ الحالة
+                saveMessageToDb(msg)
             }
-            // تعيين الحالة الأولية للهجين
             when (msg.reactionType) {
                 "LIKE" -> { thumbIcon.setColorFilter(Color.BLUE); thumbIcon.rotation = 0f }
                 "DISLIKE" -> { thumbIcon.setColorFilter(Color.RED); thumbIcon.rotation = 180f }
             }
             actionBar.addView(thumbIcon)
 
-            // زر القلب (عجلة الألوان)
+            // زر القلب (بديل عجلة الألوان)
             val heartIcon = createActionIcon(R.drawable.ic_heart, if (msg.reactionColor != null) Color.parseColor(msg.reactionColor) else Color.parseColor("#88FFFFFF")) {
-                ColorPickerDialog.Builder(this)
+                val colors = arrayOf("أحمر", "أزرق", "أخضر", "أصفر", "بنفسجي")
+                val colorValues = arrayOf("#FF0000", "#0000FF", "#00FF00", "#FFFF00", "#800080")
+                AlertDialog.Builder(this)
                     .setTitle("اختر لون القلب")
-                    .setPositiveButton("تأكيد") { _, color ->
+                    .setItems(colors) { _, which ->
+                        val selectedColor = Color.parseColor(colorValues[which])
                         msg.reactionType = "HEART"
-                        msg.reactionColor = String.format("#%06X", 0xFFFFFF and color)
+                        msg.reactionColor = colorValues[which]
                         val iconView = actionBar.getChildAt(3) as ImageView
-                        iconView.setColorFilter(color)
-                        saveMessageToDb(msg) // حفظ اللون
+                        iconView.setColorFilter(selectedColor)
+                        saveMessageToDb(msg)
                     }
-                    .setNegativeButton("إلغاء", null)
                     .show()
             }
             actionBar.addView(heartIcon)
@@ -598,7 +589,6 @@ class ChatActivity : AppCompatActivity() {
                 popup.show()
             })
 
-            // ضبط اتجاه شريط الأدوات حسب اتجاه الرسالة
             if (msg.role == MessageRole.USER) {
                 actionBar.gravity = Gravity.END
             } else {
@@ -608,7 +598,6 @@ class ChatActivity : AppCompatActivity() {
             messageLayout.addView(actionBar)
         }
 
-        // ضبط اتجاه الرسالة
         if (msg.role == MessageRole.USER) { 
             messageLayout.gravity = Gravity.END
             messageLayout.setPadding(0, dpToPx(8), 0, dpToPx(8)) 
@@ -620,19 +609,3 @@ class ChatActivity : AppCompatActivity() {
         container.addView(messageLayout)
     }
 }
-
-// --- الكلاسات المساعدة (ChatMessage و MessageEntity) ---
-// (هذه الكلاسات موجودة عندك في ملفات أخرى، لكني أضمنها هنا عشان الكود يبني من أول مرة)
-
-enum class MessageRole { USER, AI }
-
-data class ChatMessage(
-    val id: String = UUID.randomUUID().toString(),
-    val role: MessageRole,
-    val content: String,
-    val attachmentUris: List<String>? = null,
-    val colorHex: String = "#2A2A2A",
-    val timestamp: Long = System.currentTimeMillis(),
-    var reactionType: String? = null,
-    var reactionColor: String? = null
-)
