@@ -32,7 +32,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var securePrefs: android.content.SharedPreferences
     private lateinit var switchFloatingBubble: SwitchMaterial
 
-    // مستمع لنتيجة طلب صلاحية الفقاعة
+    // مستمع لنتيجة طلب صلاحية الفقاعة (الرسم فوق التطبيقات)
     private val overlayPermissionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { _ ->
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if (Settings.canDrawOverlays(this)) {
@@ -130,7 +130,7 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         // ==========================================
-        // 3. تخصيص شريط التحديد (الجديد)
+        // 3. تخصيص شريط التحديد
         // ==========================================
         val rgNeonColor = findViewById<RadioGroup>(R.id.rgNeonColor)
         val rgFrameStyle = findViewById<RadioGroup>(R.id.rgFrameStyle)
@@ -174,7 +174,7 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         // ==========================================
-        // 4. إعدادات المظهر (اللغة، الخلفية، الألوان)
+        // 4. إعدادات المظهر
         // ==========================================
         val spinner = findViewById<Spinner>(R.id.languageSpinner)
         val btnApplyLanguage = findViewById<Button>(R.id.btnApplyLanguage)
@@ -277,11 +277,10 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         // ==========================================
-        // 5. إعدادات الفقاعة العائمة (الوحدة الأولى)
+        // 5. إعدادات الفقاعة العائمة (الوحدة الأولى والثانية)
         // ==========================================
         switchFloatingBubble = findViewById(R.id.switchFloatingBubble)
         
-        // التحقق من حالة الصلاحية عند فتح الشاشة
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             switchFloatingBubble.isChecked = Settings.canDrawOverlays(this)
         }
@@ -289,35 +288,38 @@ class SettingsActivity : AppCompatActivity() {
         switchFloatingBubble.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
-                    // طلب الصلاحية
                     val intent = Intent(
                         Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                         Uri.parse("package:$packageName")
                     )
                     overlayPermissionLauncher.launch(intent)
                 } else {
-                    // الصلاحية موجودة، تشغيل الخدمة
                     startFloatingService()
                 }
             } else {
-                // إيقاف الخدمة
                 stopFloatingService()
             }
         }
     }
 
     private fun startFloatingService() {
+        // 1. تشغيل خدمة الفقاعة العائمة
         val serviceIntent = Intent(this, FloatingService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(serviceIntent)
         } else {
             startService(serviceIntent)
         }
+
+        // 2. *** فتح شاشة طلب إذن تصوير الشاشة ***
+        startActivity(Intent(this, CapturePermissionActivity::class.java))
     }
 
     private fun stopFloatingService() {
         val serviceIntent = Intent(this, FloatingService::class.java)
         stopService(serviceIntent)
+        // إيقاف خدمة تصوير الشاشة أيضاً
+        stopService(Intent(this, ScreenCaptureService::class.java))
         Toast.makeText(this, "تم إيقاف الفقاعة العائمة", Toast.LENGTH_SHORT).show()
     }
 
