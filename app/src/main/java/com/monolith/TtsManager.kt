@@ -16,10 +16,11 @@ class TtsManager(context: Context, private val onDone: () -> Unit) : TextToSpeec
         tts = TextToSpeech(appContext, this)
         tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(utteranceId: String?) {}
+            
             override fun onDone(utteranceId: String?) {
                 onDone() // العودة لشكل الأيقونة الطبيعي لما الصوت يخلص
             }
-            @Deprecated("Deprecated in Java")
+
             override fun onError(utteranceId: String?) {
                 onDone()
             }
