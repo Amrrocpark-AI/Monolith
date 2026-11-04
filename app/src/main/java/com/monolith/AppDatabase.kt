@@ -110,11 +110,15 @@ abstract class AppDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
+        // *** هذا هو السطر السحري الذي يمنع انهيار الدردشة ***
+        init {
+            System.loadLibrary("sqlcipher")
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val dbPassphrase = getOrCreateDbPassphrase(context)
                 
-                // استخدام المكتبة الجديدة
                 val factory = SupportOpenHelperFactory(dbPassphrase.toByteArray())
 
                 val instance = Room.databaseBuilder(
@@ -153,7 +157,6 @@ abstract class AppDatabase : RoomDatabase() {
                     newPassphrase
                 }
             } catch (e: Exception) {
-                // خطة الطوارئ لمنع الانهيار على أجهزة شاومي
                 e.printStackTrace()
                 "Monolith_Fallback_Secure_Key_2024"
             }
