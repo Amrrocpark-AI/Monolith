@@ -90,6 +90,7 @@ class ChatActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_chat)
 
+        // *** هنا التعديل اللي كان ناقص (استقبال الإشارة) ***
         ttsManager = TtsManager(this) {
             runOnUiThread {
                 currentPlayingIcon?.setImageResource(R.drawable.ic_volume_up)
