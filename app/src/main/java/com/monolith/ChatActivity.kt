@@ -55,7 +55,6 @@ class ChatActivity : AppCompatActivity() {
     private var messageList: MutableList<ChatMessage> = mutableListOf()
     private val currentConversationId = "main_chat" 
     
-    // إضافة محرك الصوت
     private lateinit var ttsManager: TtsManager
 
     private val pickImagesLauncher = registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris: List<Uri> ->
@@ -89,7 +88,6 @@ class ChatActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_chat)
 
-        // تهيئة محرك الصوت
         ttsManager = TtsManager(this)
 
         ApiClient.init(applicationContext)
@@ -154,7 +152,6 @@ class ChatActivity : AppCompatActivity() {
     }
     
     override fun onDestroy() {
-        // إغلاق محرك الصوت عند الخروج من الشاشة
         if (::ttsManager.isInitialized) {
             ttsManager.shutdown()
         }
@@ -403,31 +400,29 @@ class ChatActivity : AppCompatActivity() {
 
         if (msg.content.isNotEmpty()) {
             val textBubble = LinearLayout(this).apply {
-                // تحسين المسافات الداخلية (Padding) لتبدو احترافية
                 setPadding(dpToPx(16), dpToPx(12), dpToPx(16), dpToPx(12))
                 background = GradientDrawable().apply { 
                     setColor(Color.parseColor(msg.colorHex))
-                    // تكبير الزوايا لتبدو أكثر نعومة
                     cornerRadius = dpToPx(20).toFloat() 
                 }
             }
-            val textView = TextView(this).apply {
+            
+            // تعريف الـ TextView هنا بشكل منفصل لتجنب مشاكل النطاق في القائمة العائمة
+            val textView = TextView(this)
+            
+            textView.apply {
                 text = msg.content
-                textSize = 15f // حجم خط مريح للعين
+                textSize = 15f
                 setTextColor(if (msg.role == MessageRole.USER) Color.BLACK else Color.WHITE)
                 textDirection = if (msg.role == MessageRole.USER) TextView.TEXT_DIRECTION_RTL else TextView.TEXT_DIRECTION_LOCALE
                 textAlignment = TextView.TEXT_ALIGNMENT_VIEW_START
                 
-                // تحسين المسافة بين السطور (Line Spacing)
                 setLineSpacing(dpToPx(4).toFloat(), 1.1f)
                 
-                // تفعيل تحديد النص
                 setTextIsSelectable(true)
                 
-                // هنا نضيف القائمة العائمة المخصصة
                 customSelectionActionModeCallback = object : ActionMode.Callback {
                     override fun onCreateActionMode(mode: ActionMode?, menu: Menu?): Boolean {
-                        // مسح القائمة الافتراضية وإضافة أزرارنا السيادية
                         menu?.clear()
                         menu?.add(0, 1, 0, "🔊 قراءة")?.setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
                         menu?.add(0, 2, 1, "📋 نسخ")?.setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
@@ -438,20 +433,20 @@ class ChatActivity : AppCompatActivity() {
                     override fun onPrepareActionMode(mode: ActionMode?, menu: Menu?): Boolean = false
 
                     override fun onActionItemClicked(mode: ActionMode?, item: MenuItem?): Boolean {
-                        val start = textView.selectionStart
+                        // الآن textView معروف هنا
+                        val start = textView.selectionStart 
                         val end = textView.selectionEnd
                         if (start < 0 || end < 0) return false
                         
-                        // جلب النص المحدد فقط
                         val selectedText = textView.text.substring(start, end)
                         
                         when (item?.itemId) {
-                            1 -> { // قراءة صوتية
+                            1 -> {
                                 ttsManager.speak(selectedText)
                                 mode?.finish()
                                 return true
                             }
-                            2 -> { // نسخ
+                            2 -> {
                                 val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                                 val clip = android.content.ClipData.newPlainText("Monolith Text", selectedText)
                                 clipboard.setPrimaryClip(clip)
@@ -459,7 +454,7 @@ class ChatActivity : AppCompatActivity() {
                                 mode?.finish()
                                 return true
                             }
-                            3 -> { // تنسيق (مستقبلي)
+                            3 -> {
                                 Toast.makeText(this@ChatActivity, "قائمة التنسيق قريباً", Toast.LENGTH_SHORT).show()
                                 mode?.finish()
                                 return true
@@ -471,6 +466,7 @@ class ChatActivity : AppCompatActivity() {
                     override fun onDestroyActionMode(mode: ActionMode?) {}
                 }
             }
+            
             textBubble.addView(textView)
             messageLayout.addView(textBubble)
         }
