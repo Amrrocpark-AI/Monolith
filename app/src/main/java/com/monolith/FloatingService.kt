@@ -8,9 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.PixelFormat
 import android.os.Build
-import android.os.Handler
 import android.os.IBinder
-import android.os.Looper
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
@@ -64,11 +62,12 @@ class FloatingService : Service() {
             WindowManager.LayoutParams.TYPE_PHONE
         }
 
+        // *** التعديل هنا: إضافة FLAG_SECURE لمنع تصوير الفقاعة فقط ***
         layoutParams = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             layoutFlag,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_SECURE,
             PixelFormat.TRANSLUCENT
         )
 
@@ -140,22 +139,11 @@ class FloatingService : Service() {
     }
 
     private fun takeScreenshot() {
-        // 1. إخفاء الفقاعة
-        floatingView.visibility = View.GONE
-
-        // 2. الانتظار 200 مللي ثانية (عشان الصورة تتحدث بدون الفقاعة)
-        Handler(Looper.getMainLooper()).postDelayed({
-            // 3. إرسال أمر للخدمة تلتقط
-            val intent = Intent(this, ScreenCaptureService::class.java).apply {
-                action = ScreenCaptureService.ACTION_TAKE_SCREENSHOT
-            }
-            startService(intent)
-
-            // 4. إعادة إظهار الفقاعة بعد التصوير
-            Handler(Looper.getMainLooper()).postDelayed({
-                floatingView.visibility = View.VISIBLE
-            }, 300)
-        }, 200)
+        // *** التعديل هنا: إرسال الأمر مباشرة بدون إخفاء أو انتظار ***
+        val intent = Intent(this, ScreenCaptureService::class.java).apply {
+            action = ScreenCaptureService.ACTION_TAKE_SCREENSHOT
+        }
+        startService(intent)
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
