@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:background="@drawable/bg_volume_panel"
+    android:padding="12dp"
+    android:elevation="12dp">
+
+    <ImageView
+        android:id="@+id/imgVolumeIcon"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:src="@drawable/ic_volume_up"
+        app:tint="#00D4FF" />
+
+    <SeekBar
+        android:id="@+id/seekBarVolume"
+        android:layout_width="150dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="12dp"
+        android:max="100"
+        android:progress="50"
+        android:progressTint="#00D4FF"
+        android:thumbTint="#00D4FF" />
+
+    <TextView
+        android:id="@+id/tvVolumePercentage"
+        android:layout_width="40dp"
+        android:layout_height="wrap_content"
+        android:text="50%"
+        android:textColor="#FFFFFF"
+        android:textStyle="bold"
+        android:textSize="14sp"
+        android:gravity="center" />
+
+    <ImageView
+        android:id="@+id/imgStreamSwitch"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:layout_marginStart="8dp"
+        android:src="@drawable/ic_more_vert"
+        app:tint="#FFFFFF" />
+
+</LinearLayout>
