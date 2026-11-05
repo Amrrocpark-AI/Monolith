@@ -118,13 +118,17 @@ class FloatingService : Service() {
                         layoutParams.x = initialX + (event.rawX - initialTouchX).toInt()
                         layoutParams.y = initialY + (event.rawY - initialTouchY).toInt()
                         windowManager.updateViewLayout(floatingView, layoutParams)
-                        // تحديث مكان لوحة الصوت لو مفتوحة
                         updateVolumePanelPosition()
                         return true
                     }
                     MotionEvent.ACTION_UP -> {
                         if (Math.abs(event.rawX - initialTouchX) < 10 && Math.abs(event.rawY - initialTouchY) < 10) {
-                            showBubbleMenu(imgBubble)
+                            // *** التعديل هنا: لو اللوحة مفتوحة، اقفلها. لو مقفولة، افتح القائمة ***
+                            if (volumePanelView != null) {
+                                toggleVolumePanel()
+                            } else {
+                                showBubbleMenu(imgBubble)
+                            }
                         }
                         return true
                     }
@@ -138,7 +142,7 @@ class FloatingService : Service() {
 
     private fun showBubbleMenu(anchorView: View) {
         val popupMenu = PopupMenu(this, anchorView)
-        popupMenu.menu.add("🎛️ التحكم في الصوت") // الخيار الجديد
+        popupMenu.menu.add("🎛️ التحكم في الصوت")
         popupMenu.menu.add("📸 سكرين شوت (قريباً)")
         popupMenu.menu.add("❌ إغلاق الفقاعة")
         
@@ -164,16 +168,11 @@ class FloatingService : Service() {
         popupMenu.show()
     }
 
-    // ==========================================
-    // كود لوحة الصوت العائمة
-    // ==========================================
     private fun toggleVolumePanel() {
         if (volumePanelView != null) {
-            // اللوحة مفتوحة، اقفلها
             windowManager.removeView(volumePanelView)
             volumePanelView = null
         } else {
-            // اللوحة مقفولة، افتحها
             showVolumePanel()
         }
     }
@@ -192,7 +191,7 @@ class FloatingService : Service() {
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 layoutFlag,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, // عشان ميسرقش الكتابة
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
                 PixelFormat.TRANSLUCENT
             )
 
@@ -202,8 +201,8 @@ class FloatingService : Service() {
             val seekBar = volumePanelView?.findViewById<SeekBar>(R.id.seekBarVolume)
             val tvPercentage = volumePanelView?.findViewById<TextView>(R.id.tvVolumePercentage)
             val imgIcon = volumePanelView?.findViewById<ImageView>(R.id.imgVolumeIcon)
+            val btnClose = volumePanelView?.findViewById<ImageView>(R.id.btnCloseVolumePanel) // زرار الإغلاق
 
-            // إعداد السلايدر بناءً على الصوت الحالي
             val maxVolume = audioManager.getStreamMaxVolume(currentStream)
             val currentVolume = audioManager.getStreamVolume(currentStream)
             
@@ -211,16 +210,18 @@ class FloatingService : Service() {
             seekBar?.progress = (currentVolume * 100) / maxVolume
             tvPercentage?.text = "${seekBar?.progress}%"
 
+            // إغلاق اللوحة من زرار (X)
+            btnClose?.setOnClickListener {
+                toggleVolumePanel()
+            }
+
             seekBar?.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                     if (fromUser) {
                         tvPercentage?.text = "$progress%"
                         val targetVolume = (progress * maxVolume) / 100
-                        
-                        // تغيير الصوت الفعلي
                         audioManager.setStreamVolume(currentStream, targetVolume, 0)
                         
-                        // اهتزاز خفيف (Haptic Feedback)
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                             vibrator.vibrate(android.os.VibrationEffect.createOneShot(20, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
                         } else {
@@ -233,7 +234,6 @@ class FloatingService : Service() {
                 override fun onStopTrackingTouch(seekBar: SeekBar?) {}
             })
 
-            // زر تغيير المسار (Media / Ring / Alarm)
             val imgStreamSwitch = volumePanelView?.findViewById<ImageView>(R.id.imgStreamSwitch)
             imgStreamSwitch?.setOnClickListener {
                 val streamMenu = PopupMenu(this, it)
@@ -265,7 +265,6 @@ class FloatingService : Service() {
         seekBar?.progress = (currentVolume * 100) / maxVolume
         tvPercentage?.text = "${seekBar?.progress}%"
         
-        // تغيير الأيقونة حسب المسار
         when (currentStream) {
             AudioManager.STREAM_RING -> imgIcon?.setImageResource(android.R.drawable.ic_lock_silent_mode_off)
             AudioManager.STREAM_ALARM -> imgIcon?.setImageResource(android.R.drawable.ic_lock_idle_alarm)
@@ -274,7 +273,6 @@ class FloatingService : Service() {
     }
 
     private fun updateVolumePanelCoordinates(params: WindowManager.LayoutParams) {
-        // بنخلي اللوحة تظهر فوق الفقاعة شوية
         params.x = layoutParams.x
         params.y = layoutParams.y - 120 
     }
