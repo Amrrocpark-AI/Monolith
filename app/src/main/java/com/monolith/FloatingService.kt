@@ -19,16 +19,18 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.PopupMenu
 import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
+import kotlin.math.abs
 
 class FloatingService : Service() {
 
     private lateinit var windowManager: WindowManager
-    private lateinit var floatingView: View
+    private lateinit var floatingHubView: View
     private lateinit var layoutParams: WindowManager.LayoutParams
 
     // متغيرات لوحة الصوت
@@ -37,11 +39,17 @@ class FloatingService : Service() {
     private var currentStream = AudioManager.STREAM_MUSIC
     private lateinit var vibrator: Vibrator
 
+    // متغيرات السحب
+    private var initialX = 0
+    private var initialY = 0
+    private var initialTouchX = 0f
+    private var initialTouchY = 0f
+
     override fun onCreate() {
         super.onCreate()
         try {
             startForegroundService()
-            setupFloatingBubble()
+            setupFloatingHub()
             
             audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
             vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
@@ -56,14 +64,14 @@ class FloatingService : Service() {
     private fun startForegroundService() {
         val channelId = "floating_bubble_channel"
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(channelId, "Monolith Floating Bubble", NotificationManager.IMPORTANCE_LOW)
+            val channel = NotificationChannel(channelId, "Monolith Floating Hub", NotificationManager.IMPORTANCE_LOW)
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)
         }
 
         val notification: Notification = NotificationCompat.Builder(this, channelId)
             .setContentTitle("Monolith يعمل في الخلفية")
-            .setContentText("الفقاعة العائمة نشطة")
+            .setContentText("مركز التحكم العائم نشط")
             .setSmallIcon(R.drawable.ic_bubble_monolith)
             .setOngoing(true)
             .build()
@@ -75,9 +83,10 @@ class FloatingService : Service() {
         }
     }
 
-    private fun setupFloatingBubble() {
+    private fun setupFloatingHub() {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-        floatingView = LayoutInflater.from(this).inflate(R.layout.layout_floating_bubble, null)
+        // ربط التصميم الجديد (الشريط العائم)
+        floatingHubView = LayoutInflater.from(this).inflate(R.layout.floating_hub, null)
 
         val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -95,16 +104,10 @@ class FloatingService : Service() {
 
         layoutParams.gravity = Gravity.TOP or Gravity.START
         layoutParams.x = 100
-        layoutParams.y = 200
+        layoutParams.y = 300
 
-        val imgBubble = floatingView.findViewById<ImageView>(R.id.imgBubble)
-        
-        imgBubble.setOnTouchListener(object : View.OnTouchListener {
-            private var initialX = 0
-            private var initialY = 0
-            private var initialTouchX = 0f
-            private var initialTouchY = 0f
-
+        // إضافة مستمع السحب للشريط بالكامل
+        floatingHubView.setOnTouchListener(object : View.OnTouchListener {
             override fun onTouch(v: View?, event: MotionEvent?): Boolean {
                 when (event?.action) {
                     MotionEvent.ACTION_DOWN -> {
@@ -115,21 +118,18 @@ class FloatingService : Service() {
                         return true
                     }
                     MotionEvent.ACTION_MOVE -> {
-                        layoutParams.x = initialX + (event.rawX - initialTouchX).toInt()
-                        layoutParams.y = initialY + (event.rawY - initialTouchY).toInt()
-                        windowManager.updateViewLayout(floatingView, layoutParams)
-                        updateVolumePanelPosition()
-                        return true
+                        // سحب الشريط
+                        val deltaX = event.rawX - initialTouchX
+                        val deltaY = event.rawY - initialTouchY
+                        if (abs(deltaX) > 10 || abs(deltaY) > 10) {
+                            layoutParams.x = initialX + deltaX.toInt()
+                            layoutParams.y = initialY + deltaY.toInt()
+                            windowManager.updateViewLayout(floatingHubView, layoutParams)
+                            updateVolumePanelPosition()
+                            return true
+                        }
                     }
                     MotionEvent.ACTION_UP -> {
-                        if (Math.abs(event.rawX - initialTouchX) < 10 && Math.abs(event.rawY - initialTouchY) < 10) {
-                            // *** التعديل هنا: لو اللوحة مفتوحة، اقفلها. لو مقفولة، افتح القائمة ***
-                            if (volumePanelView != null) {
-                                toggleVolumePanel()
-                            } else {
-                                showBubbleMenu(imgBubble)
-                            }
-                        }
                         return true
                     }
                 }
@@ -137,37 +137,31 @@ class FloatingService : Service() {
             }
         })
 
-        windowManager.addView(floatingView, layoutParams)
-    }
-
-    private fun showBubbleMenu(anchorView: View) {
-        val popupMenu = PopupMenu(this, anchorView)
-        popupMenu.menu.add("🎛️ التحكم في الصوت")
-        popupMenu.menu.add("📸 سكرين شوت (قريباً)")
-        popupMenu.menu.add("❌ إغلاق الفقاعة")
-        
-        popupMenu.setOnMenuItemClickListener { item ->
-            when (item.title) {
-                "🎛️ التحكم في الصوت" -> {
-                    toggleVolumePanel()
-                    true
-                }
-                "❌ إغلاق الفقاعة" -> {
-                    getSharedPreferences("Settings", MODE_PRIVATE)
-                        .edit().putBoolean("bubble_enabled", false).apply()
-                    stopSelf()
-                    Toast.makeText(this, "تم إغلاق الفقاعة", Toast.LENGTH_SHORT).show()
-                    true
-                }
-                else -> {
-                    Toast.makeText(this, "هذه الميزة قيد التطوير", Toast.LENGTH_SHORT).show()
-                    true
-                }
-            }
+        // إعداد أزرار الشريط
+        floatingHubView.findViewById<LinearLayout>(R.id.btnCustomize)?.setOnClickListener {
+            // حالياً: زر التخصيص يفتح لوحة الصوت (ممكن نغيرها بعدين)
+            toggleVolumePanel()
         }
-        popupMenu.show()
+
+        floatingHubView.findViewById<LinearLayout>(R.id.btnHome)?.setOnClickListener {
+            Toast.makeText(this, "الرئيسية", Toast.LENGTH_SHORT).show()
+        }
+        floatingHubView.findViewById<LinearLayout>(R.id.btnCode)?.setOnClickListener {
+            Toast.makeText(this, "الأكواد", Toast.LENGTH_SHORT).show()
+        }
+        floatingHubView.findViewById<LinearLayout>(R.id.btnSchedule)?.setOnClickListener {
+            Toast.makeText(this, "الجدولة", Toast.LENGTH_SHORT).show()
+        }
+        floatingHubView.findViewById<LinearLayout>(R.id.btnMessages)?.setOnClickListener {
+            Toast.makeText(this, "الرسائل", Toast.LENGTH_SHORT).show()
+        }
+
+        windowManager.addView(floatingHubView, layoutParams)
     }
 
+    // ==========================================
+    // كود لوحة الصوت (كما هو بدون تغيير)
+    // ==========================================
     private fun toggleVolumePanel() {
         if (volumePanelView != null) {
             windowManager.removeView(volumePanelView)
@@ -201,7 +195,7 @@ class FloatingService : Service() {
             val seekBar = volumePanelView?.findViewById<SeekBar>(R.id.seekBarVolume)
             val tvPercentage = volumePanelView?.findViewById<TextView>(R.id.tvVolumePercentage)
             val imgIcon = volumePanelView?.findViewById<ImageView>(R.id.imgVolumeIcon)
-            val btnClose = volumePanelView?.findViewById<ImageView>(R.id.btnCloseVolumePanel) // زرار الإغلاق
+            val btnClose = volumePanelView?.findViewById<ImageView>(R.id.btnCloseVolumePanel)
 
             val maxVolume = audioManager.getStreamMaxVolume(currentStream)
             val currentVolume = audioManager.getStreamVolume(currentStream)
@@ -210,10 +204,7 @@ class FloatingService : Service() {
             seekBar?.progress = (currentVolume * 100) / maxVolume
             tvPercentage?.text = "${seekBar?.progress}%"
 
-            // إغلاق اللوحة من زرار (X)
-            btnClose?.setOnClickListener {
-                toggleVolumePanel()
-            }
+            btnClose?.setOnClickListener { toggleVolumePanel() }
 
             seekBar?.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
@@ -298,8 +289,8 @@ class FloatingService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         try {
-            if (::floatingView.isInitialized) {
-                windowManager.removeView(floatingView)
+            if (::floatingHubView.isInitialized) {
+                windowManager.removeView(floatingHubView)
             }
             if (volumePanelView != null) {
                 windowManager.removeView(volumePanelView)
