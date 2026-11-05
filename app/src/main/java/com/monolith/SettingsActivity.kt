@@ -224,6 +224,28 @@ class SettingsActivity : AppCompatActivity() {
         val btnAllowAutoStart = findViewById<Button>(R.id.btnAllowAutoStart)
         val btnEnableVolumeService = findViewById<Button>(R.id.btnEnableVolumeService)
         
+        // *** التحكم في حجم الأيقونة ***
+        val seekBarBubbleSize = findViewById<SeekBar>(R.id.seekBarBubbleSize)
+        val tvBubbleSizeValue = findViewById<TextView>(R.id.tvBubbleSizeValue)
+        
+        val savedBubbleSize = sharedPreferences.getInt("bubble_scale_int", 100)
+        seekBarBubbleSize.progress = savedBubbleSize
+        tvBubbleSizeValue.text = "$savedBubbleSize%"
+
+        seekBarBubbleSize.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                // الحد الأدنى 50%، والأقصى 150%
+                val actualSize = if (progress < 50) 50 else progress
+                tvBubbleSizeValue.text = "$actualSize%"
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                val actualSize = if (seekBar?.progress ?: 100 < 50) 50 else seekBar?.progress ?: 100
+                sharedPreferences.edit().putInt("bubble_scale_int", actualSize).apply()
+                Toast.makeText(this@SettingsActivity, "تم حفظ حجم الأيقونة. أعد تشغيل الفقاعة لتطبيقه.", Toast.LENGTH_LONG).show()
+            }
+        })
+
         val bubbleWasEnabled = sharedPreferences.getBoolean("bubble_enabled", false)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             switchFloatingBubble.isChecked = bubbleWasEnabled && Settings.canDrawOverlays(this)
@@ -244,7 +266,6 @@ class SettingsActivity : AppCompatActivity() {
 
         btnAllowAutoStart.setOnClickListener { OemUtils.openAutoStartSettings(this) }
 
-        // *** ربط زرار خدمة أزرار الصوت ***
         btnEnableVolumeService.setOnClickListener {
             Toast.makeText(this, "ابحث عن 'مونوليث' في القائمة وفعّل الخدمة", Toast.LENGTH_LONG).show()
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
