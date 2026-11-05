@@ -6,6 +6,9 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Color
 import android.graphics.PixelFormat
 import android.media.AudioManager
 import android.os.Build
@@ -23,6 +26,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import kotlin.math.abs
+import kotlin.math.hypot
 
 class FloatingService : Service() {
 
@@ -32,6 +36,10 @@ class FloatingService : Service() {
     
     private lateinit var bubbleLayoutParams: WindowManager.LayoutParams
     private var hubLayoutParams: WindowManager.LayoutParams? = null 
+
+    // متغيرات الثقب الأسود
+    private var dissolveOverlay: ParticleDissolveView? = null
+    private var dissolveLayoutParams: WindowManager.LayoutParams? = null
 
     private var volumePanelView: View? = null
     private var resizePanelView: View? = null
@@ -49,7 +57,6 @@ class FloatingService : Service() {
         try {
             prefs = getSharedPreferences("Settings", MODE_PRIVATE)
             val savedScale = prefs.getInt("bubble_scale_int", 100)
-            // حماية إضافية: التأكد أن القيمة المحفوظة لا تتجاوز الحدود الآمنة
             val safeSavedScale = if (savedScale < 50) 50 else if (savedScale > 150) 150 else savedScale
             bubbleScale = safeSavedScale / 100f
 
@@ -91,7 +98,6 @@ class FloatingService : Service() {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         floatingBubbleView = LayoutInflater.from(this).inflate(R.layout.layout_floating_bubble, null)
 
-        // ضبط التكبير الآمن للأيقونة العائمة فقط
         applySafeScaleToBubble()
 
         val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -141,6 +147,9 @@ class FloatingService : Service() {
                             windowManager.updateViewLayout(floatingBubbleView, bubbleLayoutParams)
                             updatePanelsPosition()
                             hideHub() 
+                            
+                            // إظهار الثقب الأسود عند الاقتراب من الأسفل
+                            checkBlackHoleProximity()
                         }
                         return true
                     }
@@ -150,6 +159,13 @@ class FloatingService : Service() {
                                 hideHub()
                             } else {
                                 showHub()
+                            }
+                        } else {
+                            // إذا تم إفلاتها فوق الثقب الأسود
+                            if (isOverBlackHole()) {
+                                triggerDissolve()
+                            } else {
+                                hideBlackHole()
                             }
                         }
                         return true
@@ -162,24 +178,138 @@ class FloatingService : Service() {
         windowManager.addView(floatingBubbleView, bubbleLayoutParams)
     }
 
-    // دالة مساعدة لتطبيق التكبير بشكل آمن من المنتصف
     private fun applySafeScaleToBubble() {
         floatingBubbleView.scaleX = bubbleScale
         floatingBubbleView.scaleY = bubbleScale
-        // ضبط نقطة الارتكاز لتكون في المنتصف لتجنب قفز الأيقونة
         floatingBubbleView.post {
             floatingBubbleView.pivotX = floatingBubbleView.width / 2f
             floatingBubbleView.pivotY = floatingBubbleView.height / 2f
         }
     }
 
+    // ==========================================
+    // منطق الثقب الأسود والتفتيت
+    // ==========================================
+    
+    private fun checkBlackHoleProximity() {
+        val screenHeight = resources.displayMetrics.heightPixels
+        // إذا اقتربت الفقاعة مسافة 600 بكسل من أسفل الشاشة
+        if (bubbleLayoutParams.y > screenHeight - 600) {
+            showBlackHole()
+        } else {
+            hideBlackHole()
+        }
+    }
+
+    private fun isOverBlackHole(): Boolean {
+        val screenHeight = resources.displayMetrics.heightPixels
+        val screenWidth = resources.displayMetrics.widthPixels
+        
+        val holeX = screenWidth / 2f
+        val holeY = screenHeight * 0.8f
+        
+        val bubbleX = bubbleLayoutParams.x + (floatingBubbleView.width / 2f)
+        val bubbleY = bubbleLayoutParams.y + (floatingBubbleView.height / 2f)
+        
+        val distance = hypot(holeX - bubbleX, holeY - bubbleY)
+        return distance < 250f // نطاق الالتقاط
+    }
+
+    private fun showBlackHole() {
+        if (dissolveOverlay == null) {
+            dissolveOverlay = ParticleDissolveView(this)
+            dissolveOverlay?.setBackgroundColor(Color.TRANSPARENT)
+            
+            val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            } else {
+                WindowManager.LayoutParams.TYPE_PHONE
+            }
+
+            dissolveLayoutParams = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.MATCH_PARENT,
+                layoutFlag,
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                PixelFormat.TRANSLUCENT
+            )
+            
+            windowManager.addView(dissolveOverlay, dissolveLayoutParams)
+            dissolveOverlay?.invalidate()
+        }
+    }
+
+    private fun hideBlackHole() {
+        dissolveOverlay?.let {
+            windowManager.removeView(it)
+            dissolveOverlay = null
+        }
+    }
+
+    private fun triggerDissolve() {
+        try {
+            floatingBubbleView.visibility = View.INVISIBLE
+            hideHub()
+            hideBlackHole()
+
+            // جلب الصورة وتجهيزها
+            val originalBitmap = BitmapFactory.decodeResource(resources, R.drawable.ic_monolith_new)
+            // ضبط حجم الصورة ليتطابق مع حجم الفقاعة على الشاشة
+            val bubbleWidth = floatingBubbleView.width
+            val bubbleHeight = floatingBubbleView.height
+            val scaledBitmap = Bitmap.createScaledBitmap(originalBitmap, bubbleWidth, bubbleHeight, true)
+
+            val screenHeight = resources.displayMetrics.heightPixels
+            val screenWidth = resources.displayMetrics.widthPixels
+            
+            // إحداثيات البداية (مكان الفقاعة على الشاشة)
+            val startX = bubbleLayoutParams.x.toFloat()
+            val startY = bubbleLayoutParams.y.toFloat()
+            
+            // إحداثيات النهاية (مركز الثقب الأسود)
+            val targetX = screenWidth / 2f
+            val targetY = screenHeight * 0.8f
+
+            dissolveOverlay = ParticleDissolveView(this)
+            dissolveLayoutParams = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                PixelFormat.TRANSLUCENT
+            )
+            
+            windowManager.addView(dissolveOverlay, dissolveLayoutParams)
+            
+            dissolveOverlay?.post {
+                dissolveOverlay?.startDissolve(scaledBitmap, startX, startY, targetX, targetY) {
+                    // عند انتهاء الأنيميشن
+                    windowManager.removeView(dissolveOverlay)
+                    dissolveOverlay = null
+                    
+                    Toast.makeText(this, "تم الإخفاء في الثقب الأسود!", Toast.LENGTH_SHORT).show()
+                    
+                    // إعادة إظهار الفقاعة في مكانها الأصلي
+                    floatingBubbleView.visibility = View.VISIBLE
+                    bubbleLayoutParams.x = 100
+                    bubbleLayoutParams.y = 300
+                    windowManager.updateViewLayout(floatingBubbleView, bubbleLayoutParams)
+                }
+            }
+            
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Toast.makeText(this, "حدث خطأ أثناء التفتيت", Toast.LENGTH_SHORT).show()
+            floatingBubbleView.visibility = View.VISIBLE
+        }
+    }
+
+    // ==========================================
+    // القائمة العائمة (Hub)
+    // ==========================================
     private fun showHub() {
         try {
             floatingHubView = LayoutInflater.from(this).inflate(R.layout.floating_hub, null)
-            
-            // تم إزالة التكبير من الهب (Hub) لكي تبقى النصوص والأزرار واضحة وثابتة
-            // floatingHubView?.scaleX = bubbleScale 
-            // floatingHubView?.scaleY = bubbleScale
 
             val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -197,7 +327,7 @@ class FloatingService : Service() {
 
             hubLayoutParams?.gravity = Gravity.TOP or Gravity.START
             hubLayoutParams?.x = bubbleLayoutParams.x
-            hubLayoutParams?.y = bubbleLayoutParams.y - (120).toInt() // مسافة ثابتة بدلاً من المتغيرة
+            hubLayoutParams?.y = bubbleLayoutParams.y - (120).toInt()
 
             floatingHubView?.findViewById<LinearLayout>(R.id.btnVolume)?.setOnClickListener {
                 toggleVolumePanel()
@@ -292,9 +422,7 @@ class FloatingService : Service() {
     private fun showVolumePanel() {
         try {
             volumePanelView = LayoutInflater.from(this).inflate(R.layout.floating_volume_panel, null)
-            
-            // تم إزالة التكبير من اللوحة لكي تبقى ثابتة
-            
+
             val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
             } else {
@@ -386,7 +514,7 @@ class FloatingService : Service() {
     private fun showStreamSelector() {
         try {
             streamSelectorView = LayoutInflater.from(this).inflate(R.layout.stream_selector, null)
-            
+
             val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
             } else {
@@ -403,7 +531,7 @@ class FloatingService : Service() {
 
             params.gravity = Gravity.TOP or Gravity.START
             params.x = bubbleLayoutParams.x
-            params.y = bubbleLayoutParams.y - 240 // مسافة ثابتة
+            params.y = bubbleLayoutParams.y - 240 
 
             val seekBar = volumePanelView?.findViewById<SeekBar>(R.id.seekBarVolume)
             val tvPercentage = volumePanelView?.findViewById<TextView>(R.id.tvVolumePercentage)
@@ -433,7 +561,7 @@ class FloatingService : Service() {
     }
 
     // ==========================================
-    // لوحة الحجم (تم إصلاح المشكلة هنا)
+    // لوحة الحجم
     // ==========================================
     private fun toggleResizePanel() {
         if (resizePanelView != null) {
@@ -447,8 +575,6 @@ class FloatingService : Service() {
     private fun showResizePanel() {
         try {
             resizePanelView = LayoutInflater.from(this).inflate(R.layout.floating_resize_panel, null)
-            
-            // تم إزالة التكبير من لوحة التحكم لكي لا تتكبر أثناء سحب المؤشر
 
             val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -480,15 +606,11 @@ class FloatingService : Service() {
             seekBar?.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                     if (fromUser) {
-                        // تقييد الحجم بين 50% و 150% لحماية واجهة المستخدم
                         val actualSize = if (progress < 50) 50 else if (progress > 150) 150 else progress
                         tvPercentage?.text = "$actualSize%"
                         
                         bubbleScale = actualSize / 100f
-                        
-                        // تطبيق التكبير على الأيقونة العائمة فقط!
                         applySafeScaleToBubble()
-
                         updatePanelsPosition()
                         
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -517,7 +639,6 @@ class FloatingService : Service() {
         val baseY = if (floatingHubView != null && hubLayoutParams != null) hubLayoutParams?.y ?: bubbleLayoutParams.y else bubbleLayoutParams.y
         
         params.x = baseX
-        // مسافة ثابتة (120) لأن اللوحة لم تعد تتكبر
         params.y = baseY - 120 
     }
 
@@ -535,12 +656,12 @@ class FloatingService : Service() {
         streamSelectorView?.let { panel ->
             val params = panel.layoutParams as WindowManager.LayoutParams
             params.x = bubbleLayoutParams.x
-            params.y = bubbleLayoutParams.y - 240 // مسافة ثابتة
+            params.y = bubbleLayoutParams.y - 240 
             windowManager.updateViewLayout(panel, params)
         }
         floatingHubView?.let { view ->
             hubLayoutParams?.let { params ->
-                params.y = bubbleLayoutParams.y - 120 // مسافة ثابتة
+                params.y = bubbleLayoutParams.y - 120 
                 windowManager.updateViewLayout(view, params)
             }
         }
@@ -562,6 +683,7 @@ class FloatingService : Service() {
             volumePanelView?.let { windowManager.removeView(it) }
             resizePanelView?.let { windowManager.removeView(it) }
             streamSelectorView?.let { windowManager.removeView(it) }
+            dissolveOverlay?.let { windowManager.removeView(it) } // تنظيف الثقب الأسود
         } catch (e: Exception) {
             e.printStackTrace()
         }
