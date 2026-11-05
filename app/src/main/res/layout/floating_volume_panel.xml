@@ -18,7 +18,7 @@
 
     <SeekBar
         android:id="@+id/seekBarVolume"
-        android:layout_width="150dp"
+        android:layout_width="130dp"
         android:layout_height="wrap_content"
         android:layout_marginStart="12dp"
         android:layout_marginEnd="12dp"
@@ -41,8 +41,17 @@
         android:id="@+id/imgStreamSwitch"
         android:layout_width="24dp"
         android:layout_height="24dp"
-        android:layout_marginStart="8dp"
+        android:layout_marginStart="4dp"
         android:src="@drawable/ic_more_vert"
         app:tint="#FFFFFF" />
+
+    <!-- *** زرار الإغلاق الجديد *** -->
+    <ImageView
+        android:id="@+id/btnCloseVolumePanel"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:layout_marginStart="12dp"
+        android:src="@android:drawable/ic_menu_close_clear_cancel"
+        app:tint="#FF5555" />
 
 </LinearLayout>
