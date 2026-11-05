@@ -54,6 +54,9 @@ class FloatingService : Service() {
 
     private var bubbleScale = 1.0f
     private lateinit var prefs: android.content.SharedPreferences
+    
+    // حالة الجاذبية
+    private var isVibrating = false
 
     override fun onCreate() {
         super.onCreate()
@@ -138,6 +141,7 @@ class FloatingService : Service() {
                         initialTouchX = event.rawX
                         initialTouchY = event.rawY
                         isDragging = false
+                        isVibrating = false
                         return true
                     }
                     MotionEvent.ACTION_MOVE -> {
@@ -151,7 +155,8 @@ class FloatingService : Service() {
                             updatePanelsPosition()
                             hideHub() 
                             
-                            checkBlackHoleProximity()
+                            // نظام الجاذبية والاقتراب
+                            checkGravityField()
                         }
                         return true
                     }
@@ -163,6 +168,7 @@ class FloatingService : Service() {
                                 showHub()
                             }
                         } else {
+                            // إذا تم إفلاتها قريبة جداً من الثقب، نسحبها قسرياً
                             if (isOverBlackHole()) {
                                 triggerDissolve()
                             } else {
@@ -189,13 +195,28 @@ class FloatingService : Service() {
     }
 
     // ==========================================
-    // منطق الثقب الأسود والتفتيت
+    // نظام الجاذبية والاقتراب
     // ==========================================
     
-    private fun checkBlackHoleProximity() {
+    private fun checkGravityField() {
         val screenHeight = resources.displayMetrics.heightPixels
-        if (bubbleLayoutParams.y > screenHeight - 600) {
+        val screenWidth = resources.displayMetrics.widthPixels
+        
+        val holeX = screenWidth / 2f
+        val holeY = screenHeight * 0.8f
+        val bubbleX = bubbleLayoutParams.x + (floatingBubbleView.width / 2f)
+        val bubbleY = bubbleLayoutParams.y + (floatingBubbleView.height / 2f)
+        
+        val distance = hypot(holeX - bubbleX, holeY - bubbleY)
+
+        // إذا اقتربت الفقاعة مسافة 600 بكسل من الثقب
+        if (distance < 600f) {
             showBlackHole()
+            // اهتزاز خفيف عند دخول النطاق المغناطيسي
+            if (!isVibrating && distance < 400f) {
+                isVibrating = true
+                vibratePhone(30)
+            }
         } else {
             hideBlackHole()
         }
@@ -207,7 +228,6 @@ class FloatingService : Service() {
         
         val holeX = screenWidth / 2f
         val holeY = screenHeight * 0.8f
-        
         val bubbleX = bubbleLayoutParams.x + (floatingBubbleView.width / 2f)
         val bubbleY = bubbleLayoutParams.y + (floatingBubbleView.height / 2f)
         
@@ -252,32 +272,30 @@ class FloatingService : Service() {
     private fun triggerDissolve() {
         try {
             hideHub()
+            vibratePhone(100) // اهتزاز قوي عند الابتلاع
             
             val screenHeight = resources.displayMetrics.heightPixels
             val screenWidth = resources.displayMetrics.widthPixels
             
-            // إحداثيات البداية (مكان الفقاعة الحالي)
             val startX = bubbleLayoutParams.x
             val startY = bubbleLayoutParams.y
             
-            // إحداثيات النهاية (مركز الثقب الأسود)
             val targetX = (screenWidth / 2) - (floatingBubbleView.width / 2)
             val targetY = (screenHeight * 0.8).toInt() - (floatingBubbleView.height / 2)
 
             // 1. أنيميشن سحب الفقاعة نحو الثقب
             val suckAnimator = ValueAnimator.ofFloat(0f, 1f)
-            suckAnimator.duration = 400 // نصف ثانية للسحب
-            suckAnimator.interpolator = AccelerateInterpolator() // يبدأ بطيئاً ثم يسرع (مثل الجاذبية)
+            suckAnimator.duration = 500 // نصف ثانية للسحب
+            suckAnimator.interpolator = AccelerateInterpolator(2f) // تسارع قوي كأنه جاذبية
             
             suckAnimator.addUpdateListener { animation ->
                 val progress = animation.animatedValue as Float
                 
-                // تحريك الفقاعة
                 bubbleLayoutParams.x = (startX + (targetX - startX) * progress).toInt()
                 bubbleLayoutParams.y = (startY + (targetY - startY) * progress).toInt()
                 
                 // تصغير الفقاعة أثناء السحب
-                val currentScale = bubbleScale * (1f - progress * 0.7f) 
+                val currentScale = bubbleScale * (1f - progress * 0.8f) 
                 floatingBubbleView.scaleX = currentScale
                 floatingBubbleView.scaleY = currentScale
                 
@@ -290,11 +308,9 @@ class FloatingService : Service() {
                     floatingBubbleView.visibility = View.INVISIBLE
                     hideBlackHole()
                     
-                    // إعادة الحجم الأصلي للفقاعة استعداداً للمرة القادمة
                     floatingBubbleView.scaleX = bubbleScale
                     floatingBubbleView.scaleY = bubbleScale
                     
-                    // تحميل الصورة وتجهيزها
                     val originalBitmap = BitmapFactory.decodeResource(resources, R.drawable.ic_monolith_new)
                     val scaledBitmap = Bitmap.createScaledBitmap(originalBitmap, floatingBubbleView.width, floatingBubbleView.height, true)
                     
@@ -313,15 +329,12 @@ class FloatingService : Service() {
                     windowManager.addView(dissolveOverlay, dissolveLayoutParams)
                     
                     dissolveOverlay?.post {
-                        // نبدأ الجزيئات من مركز الثقب (حيث انتهت الفقاعة)
                         dissolveOverlay?.startDissolve(scaledBitmap, targetX.toFloat(), targetY.toFloat(), centerScreenX, centerScreenY) {
-                            // 3. عند انتهاء التفتيت
                             windowManager.removeView(dissolveOverlay)
                             dissolveOverlay = null
                             
                             Toast.makeText(this@FloatingService, "تم الإخفاء في الثقب الأسود!", Toast.LENGTH_SHORT).show()
                             
-                            // إعادة إظهار الفقاعة في مكانها الأصلي
                             floatingBubbleView.visibility = View.VISIBLE
                             bubbleLayoutParams.x = 100
                             bubbleLayoutParams.y = 300
@@ -334,15 +347,27 @@ class FloatingService : Service() {
             
         } catch (e: Exception) {
             e.printStackTrace()
-            Toast.makeText(this, "حدث خطأ أثناء التفتيت", Toast.LENGTH_SHORT).show()
             floatingBubbleView.visibility = View.VISIBLE
             floatingBubbleView.scaleX = bubbleScale
             floatingBubbleView.scaleY = bubbleScale
         }
     }
 
+    private fun vibratePhone(duration: Long) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator.vibrate(android.os.VibrationEffect.createOneShot(duration, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(duration)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     // ==========================================
-    // القائمة العائمة (Hub)
+    // القائمة العائمة (Hub) - نفس الكود السابق بدون تغيير
     // ==========================================
     private fun showHub() {
         try {
@@ -366,27 +391,13 @@ class FloatingService : Service() {
             hubLayoutParams?.x = bubbleLayoutParams.x
             hubLayoutParams?.y = bubbleLayoutParams.y - (120).toInt()
 
-            floatingHubView?.findViewById<LinearLayout>(R.id.btnVolume)?.setOnClickListener {
-                toggleVolumePanel()
-            }
-            floatingHubView?.findViewById<LinearLayout>(R.id.btnResize)?.setOnClickListener {
-                toggleResizePanel()
-            }
-            floatingHubView?.findViewById<LinearLayout>(R.id.btnCustomize)?.setOnClickListener {
-                Toast.makeText(this, "شاشة التخصيص (قريباً)", Toast.LENGTH_SHORT).show()
-            }
-            floatingHubView?.findViewById<LinearLayout>(R.id.btnHome)?.setOnClickListener {
-                Toast.makeText(this, "الرئيسية", Toast.LENGTH_SHORT).show()
-            }
-            floatingHubView?.findViewById<LinearLayout>(R.id.btnCode)?.setOnClickListener {
-                Toast.makeText(this, "الأكواد", Toast.LENGTH_SHORT).show()
-            }
-            floatingHubView?.findViewById<LinearLayout>(R.id.btnSchedule)?.setOnClickListener {
-                Toast.makeText(this, "الجدولة", Toast.LENGTH_SHORT).show()
-            }
-            floatingHubView?.findViewById<LinearLayout>(R.id.btnMessages)?.setOnClickListener {
-                Toast.makeText(this, "الرسائل", Toast.LENGTH_SHORT).show()
-            }
+            floatingHubView?.findViewById<LinearLayout>(R.id.btnVolume)?.setOnClickListener { toggleVolumePanel() }
+            floatingHubView?.findViewById<LinearLayout>(R.id.btnResize)?.setOnClickListener { toggleResizePanel() }
+            floatingHubView?.findViewById<LinearLayout>(R.id.btnCustomize)?.setOnClickListener { Toast.makeText(this, "شاشة التخصيص (قريباً)", Toast.LENGTH_SHORT).show() }
+            floatingHubView?.findViewById<LinearLayout>(R.id.btnHome)?.setOnClickListener { Toast.makeText(this, "الرئيسية", Toast.LENGTH_SHORT).show() }
+            floatingHubView?.findViewById<LinearLayout>(R.id.btnCode)?.setOnClickListener { Toast.makeText(this, "الأكواد", Toast.LENGTH_SHORT).show() }
+            floatingHubView?.findViewById<LinearLayout>(R.id.btnSchedule)?.setOnClickListener { Toast.makeText(this, "الجدولة", Toast.LENGTH_SHORT).show() }
+            floatingHubView?.findViewById<LinearLayout>(R.id.btnMessages)?.setOnClickListener { Toast.makeText(this, "الرسائل", Toast.LENGTH_SHORT).show() }
 
             floatingHubView?.setOnTouchListener(object : View.OnTouchListener {
                 private var initialX = 0
@@ -413,27 +424,21 @@ class FloatingService : Service() {
                                 hubLayoutParams?.x = initialX + deltaX.toInt()
                                 hubLayoutParams?.y = initialY + deltaY.toInt()
                                 hubLayoutParams?.let { params ->
-                                    floatingHubView?.let { view ->
-                                        windowManager.updateViewLayout(view, params)
-                                    }
+                                    floatingHubView?.let { view -> windowManager.updateViewLayout(view, params) }
                                 }
                                 updatePanelsPosition()
                                 return true
                             }
                             return false
                         }
-                        MotionEvent.ACTION_UP -> {
-                            return isDraggingHub
-                        }
+                        MotionEvent.ACTION_UP -> { return isDraggingHub }
                     }
                     return false
                 }
             })
 
             windowManager.addView(floatingHubView, hubLayoutParams)
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+        } catch (e: Exception) { e.printStackTrace() }
     }
 
     private fun hideHub() {
@@ -444,9 +449,6 @@ class FloatingService : Service() {
         }
     }
 
-    // ==========================================
-    // لوحة الصوت
-    // ==========================================
     private fun toggleVolumePanel() {
         if (volumePanelView != null) {
             windowManager.removeView(volumePanelView)
@@ -459,7 +461,6 @@ class FloatingService : Service() {
     private fun showVolumePanel() {
         try {
             volumePanelView = LayoutInflater.from(this).inflate(R.layout.floating_volume_panel, null)
-
             val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
             } else {
@@ -467,78 +468,40 @@ class FloatingService : Service() {
             }
 
             val params = WindowManager.LayoutParams(
-                WindowManager.LayoutParams.WRAP_CONTENT,
-                WindowManager.LayoutParams.WRAP_CONTENT,
-                layoutFlag,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-                PixelFormat.TRANSLUCENT
+                WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
+                layoutFlag, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT
             )
-
             params.gravity = Gravity.TOP or Gravity.START
             volumePanelView?.let { updatePanelCoordinates(params, it) }
 
             val seekBar = volumePanelView?.findViewById<SeekBar>(R.id.seekBarVolume)
             val tvPercentage = volumePanelView?.findViewById<TextView>(R.id.tvVolumePercentage)
-            val imgIcon = volumePanelView?.findViewById<ImageView>(R.id.imgVolumeIcon)
             val btnClose = volumePanelView?.findViewById<ImageView>(R.id.btnCloseVolumePanel)
 
             val maxVolume = audioManager.getStreamMaxVolume(currentStream)
             val currentVolume = audioManager.getStreamVolume(currentStream)
-            
             seekBar?.max = 100
             seekBar?.progress = (currentVolume * 100) / maxVolume
             tvPercentage?.text = "${seekBar?.progress}%"
 
             btnClose?.setOnClickListener { toggleVolumePanel() }
-
             seekBar?.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                     if (fromUser) {
                         tvPercentage?.text = "$progress%"
-                        val targetVolume = (progress * maxVolume) / 100
-                        audioManager.setStreamVolume(currentStream, targetVolume, 0)
-                        
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            vibrator.vibrate(android.os.VibrationEffect.createOneShot(20, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
-                        } else {
-                            @Suppress("DEPRECATION")
-                            vibrator.vibrate(20)
-                        }
+                        audioManager.setStreamVolume(currentStream, (progress * maxVolume) / 100, 0)
+                        vibratePhone(20)
                     }
                 }
                 override fun onStartTrackingTouch(seekBar: SeekBar?) {}
                 override fun onStopTrackingTouch(seekBar: SeekBar?) {}
             })
 
-            val imgStreamSwitch = volumePanelView?.findViewById<ImageView>(R.id.imgStreamSwitch)
-            imgStreamSwitch?.setOnClickListener {
-                toggleStreamSelector()
-            }
-
+            volumePanelView?.findViewById<ImageView>(R.id.imgStreamSwitch)?.setOnClickListener { toggleStreamSelector() }
             volumePanelView?.let { windowManager.addView(it, params) }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            Toast.makeText(this, "فشل فتح لوحة الصوت", Toast.LENGTH_SHORT).show()
-        }
+        } catch (e: Exception) { e.printStackTrace() }
     }
 
-    private fun updatePanelStream(seekBar: SeekBar?, tvPercentage: TextView?, imgIcon: ImageView?) {
-        val maxVolume = audioManager.getStreamMaxVolume(currentStream)
-        val currentVolume = audioManager.getStreamVolume(currentStream)
-        
-        seekBar?.progress = (currentVolume * 100) / maxVolume
-        tvPercentage?.text = "${seekBar?.progress}%"
-        
-        when (currentStream) {
-            AudioManager.STREAM_RING -> imgIcon?.setImageResource(R.drawable.ic_stream_ring)
-            AudioManager.STREAM_ALARM -> imgIcon?.setImageResource(R.drawable.ic_stream_alarm)
-            else -> imgIcon?.setImageResource(R.drawable.ic_stream_media)
-        }
-    }
-
-    // ==========================================
-    // لوحة اختيار المسار
-    // ==========================================
     private fun toggleStreamSelector() {
         if (streamSelectorView != null) {
             windowManager.removeView(streamSelectorView)
@@ -551,21 +514,11 @@ class FloatingService : Service() {
     private fun showStreamSelector() {
         try {
             streamSelectorView = LayoutInflater.from(this).inflate(R.layout.stream_selector, null)
-
-            val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-            } else {
-                WindowManager.LayoutParams.TYPE_PHONE
-            }
-
+            val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else WindowManager.LayoutParams.TYPE_PHONE
             val params = WindowManager.LayoutParams(
-                WindowManager.LayoutParams.WRAP_CONTENT,
-                WindowManager.LayoutParams.WRAP_CONTENT,
-                layoutFlag,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-                PixelFormat.TRANSLUCENT
+                WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
+                layoutFlag, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT
             )
-
             params.gravity = Gravity.TOP or Gravity.START
             params.x = bubbleLayoutParams.x
             params.y = bubbleLayoutParams.y - 240 
@@ -574,32 +527,28 @@ class FloatingService : Service() {
             val tvPercentage = volumePanelView?.findViewById<TextView>(R.id.tvVolumePercentage)
             val imgIcon = volumePanelView?.findViewById<ImageView>(R.id.imgVolumeIcon)
 
-            streamSelectorView?.findViewById<LinearLayout>(R.id.streamMedia)?.setOnClickListener {
-                currentStream = AudioManager.STREAM_MUSIC
-                updatePanelStream(seekBar, tvPercentage, imgIcon)
+            val updateStream = { stream: Int ->
+                currentStream = stream
+                val maxVol = audioManager.getStreamMaxVolume(stream)
+                val curVol = audioManager.getStreamVolume(stream)
+                seekBar?.progress = (curVol * 100) / maxVol
+                tvPercentage?.text = "${seekBar?.progress}%"
+                when (stream) {
+                    AudioManager.STREAM_RING -> imgIcon?.setImageResource(R.drawable.ic_stream_ring)
+                    AudioManager.STREAM_ALARM -> imgIcon?.setImageResource(R.drawable.ic_stream_alarm)
+                    else -> imgIcon?.setImageResource(R.drawable.ic_stream_media)
+                }
                 toggleStreamSelector()
             }
-            streamSelectorView?.findViewById<LinearLayout>(R.id.streamRing)?.setOnClickListener {
-                currentStream = AudioManager.STREAM_RING
-                updatePanelStream(seekBar, tvPercentage, imgIcon)
-                toggleStreamSelector()
-            }
-            streamSelectorView?.findViewById<LinearLayout>(R.id.streamAlarm)?.setOnClickListener {
-                currentStream = AudioManager.STREAM_ALARM
-                updatePanelStream(seekBar, tvPercentage, imgIcon)
-                toggleStreamSelector()
-            }
+
+            streamSelectorView?.findViewById<LinearLayout>(R.id.streamMedia)?.setOnClickListener { updateStream(AudioManager.STREAM_MUSIC) }
+            streamSelectorView?.findViewById<LinearLayout>(R.id.streamRing)?.setOnClickListener { updateStream(AudioManager.STREAM_RING) }
+            streamSelectorView?.findViewById<LinearLayout>(R.id.streamAlarm)?.setOnClickListener { updateStream(AudioManager.STREAM_ALARM) }
 
             streamSelectorView?.let { windowManager.addView(it, params) }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            Toast.makeText(this, "فشل فتح لوحة المسارات", Toast.LENGTH_SHORT).show()
-        }
+        } catch (e: Exception) { e.printStackTrace() }
     }
 
-    // ==========================================
-    // لوحة الحجم
-    // ==========================================
     private fun toggleResizePanel() {
         if (resizePanelView != null) {
             windowManager.removeView(resizePanelView)
@@ -612,21 +561,11 @@ class FloatingService : Service() {
     private fun showResizePanel() {
         try {
             resizePanelView = LayoutInflater.from(this).inflate(R.layout.floating_resize_panel, null)
-
-            val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-            } else {
-                WindowManager.LayoutParams.TYPE_PHONE
-            }
-
+            val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else WindowManager.LayoutParams.TYPE_PHONE
             val params = WindowManager.LayoutParams(
-                WindowManager.LayoutParams.WRAP_CONTENT,
-                WindowManager.LayoutParams.WRAP_CONTENT,
-                layoutFlag,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-                PixelFormat.TRANSLUCENT
+                WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
+                layoutFlag, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT
             )
-
             params.gravity = Gravity.TOP or Gravity.START
             resizePanelView?.let { updatePanelCoordinates(params, it) }
 
@@ -639,23 +578,15 @@ class FloatingService : Service() {
             tvPercentage?.text = "$currentScaleInt%"
 
             btnClose?.setOnClickListener { toggleResizePanel() }
-
             seekBar?.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                     if (fromUser) {
                         val actualSize = if (progress < 50) 50 else if (progress > 150) 150 else progress
                         tvPercentage?.text = "$actualSize%"
-                        
                         bubbleScale = actualSize / 100f
                         applySafeScaleToBubble()
                         updatePanelsPosition()
-                        
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            vibrator.vibrate(android.os.VibrationEffect.createOneShot(10, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
-                        } else {
-                            @Suppress("DEPRECATION")
-                            vibrator.vibrate(10)
-                        }
+                        vibratePhone(10)
                     }
                 }
                 override fun onStartTrackingTouch(seekBar: SeekBar?) {}
@@ -663,66 +594,36 @@ class FloatingService : Service() {
                     prefs.edit().putInt("bubble_scale_int", (bubbleScale * 100).toInt()).apply()
                 }
             })
-
             resizePanelView?.let { windowManager.addView(it, params) }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            Toast.makeText(this, "فشل فتح لوحة الحجم", Toast.LENGTH_SHORT).show()
-        }
+        } catch (e: Exception) { e.printStackTrace() }
     }
 
     private fun updatePanelCoordinates(params: WindowManager.LayoutParams, panelView: View) {
         val baseX = if (floatingHubView != null && hubLayoutParams != null) hubLayoutParams?.x ?: bubbleLayoutParams.x else bubbleLayoutParams.x
         val baseY = if (floatingHubView != null && hubLayoutParams != null) hubLayoutParams?.y ?: bubbleLayoutParams.y else bubbleLayoutParams.y
-        
         params.x = baseX
         params.y = baseY - 120 
     }
 
     private fun updatePanelsPosition() {
-        volumePanelView?.let { panel ->
-            val params = panel.layoutParams as WindowManager.LayoutParams
-            updatePanelCoordinates(params, panel)
-            windowManager.updateViewLayout(panel, params)
-        }
-        resizePanelView?.let { panel ->
-            val params = panel.layoutParams as WindowManager.LayoutParams
-            updatePanelCoordinates(params, panel)
-            windowManager.updateViewLayout(panel, params)
-        }
-        streamSelectorView?.let { panel ->
-            val params = panel.layoutParams as WindowManager.LayoutParams
-            params.x = bubbleLayoutParams.x
-            params.y = bubbleLayoutParams.y - 240 
-            windowManager.updateViewLayout(panel, params)
-        }
-        floatingHubView?.let { view ->
-            hubLayoutParams?.let { params ->
-                params.y = bubbleLayoutParams.y - 120 
-                windowManager.updateViewLayout(view, params)
-            }
-        }
+        volumePanelView?.let { val params = it.layoutParams as WindowManager.LayoutParams; updatePanelCoordinates(params, it); windowManager.updateViewLayout(it, params) }
+        resizePanelView?.let { val params = it.layoutParams as WindowManager.LayoutParams; updatePanelCoordinates(params, it); windowManager.updateViewLayout(it, params) }
+        streamSelectorView?.let { val params = it.layoutParams as WindowManager.LayoutParams; params.x = bubbleLayoutParams.x; params.y = bubbleLayoutParams.y - 240; windowManager.updateViewLayout(it, params) }
+        floatingHubView?.let { hubLayoutParams?.let { params -> params.y = bubbleLayoutParams.y - 120; windowManager.updateViewLayout(it, params) } }
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        return START_STICKY
-    }
-
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
         super.onDestroy()
         try {
-            if (::floatingBubbleView.isInitialized) {
-                windowManager.removeView(floatingBubbleView)
-            }
+            if (::floatingBubbleView.isInitialized) windowManager.removeView(floatingBubbleView)
             floatingHubView?.let { windowManager.removeView(it) }
             volumePanelView?.let { windowManager.removeView(it) }
             resizePanelView?.let { windowManager.removeView(it) }
             streamSelectorView?.let { windowManager.removeView(it) }
-            dissolveOverlay?.let { windowManager.removeView(it) } 
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+            dissolveOverlay?.let { windowManager.removeView(it) }
+        } catch (e: Exception) { e.printStackTrace() }
     }
 }
