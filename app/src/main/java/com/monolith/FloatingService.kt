@@ -19,6 +19,7 @@ import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.view.animation.AccelerateInterpolator
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.SeekBar
@@ -27,6 +28,8 @@ import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import kotlin.math.abs
 import kotlin.math.hypot
+import android.animation.ValueAnimator
+import android.animation.AnimatorListenerAdapter
 
 class FloatingService : Service() {
 
@@ -148,7 +151,6 @@ class FloatingService : Service() {
                             updatePanelsPosition()
                             hideHub() 
                             
-                            // إظهار الثقب الأسود عند الاقتراب من الأسفل
                             checkBlackHoleProximity()
                         }
                         return true
@@ -161,7 +163,6 @@ class FloatingService : Service() {
                                 showHub()
                             }
                         } else {
-                            // إذا تم إفلاتها فوق الثقب الأسود
                             if (isOverBlackHole()) {
                                 triggerDissolve()
                             } else {
@@ -193,7 +194,6 @@ class FloatingService : Service() {
     
     private fun checkBlackHoleProximity() {
         val screenHeight = resources.displayMetrics.heightPixels
-        // إذا اقتربت الفقاعة مسافة 600 بكسل من أسفل الشاشة
         if (bubbleLayoutParams.y > screenHeight - 600) {
             showBlackHole()
         } else {
@@ -212,7 +212,7 @@ class FloatingService : Service() {
         val bubbleY = bubbleLayoutParams.y + (floatingBubbleView.height / 2f)
         
         val distance = hypot(holeX - bubbleX, holeY - bubbleY)
-        return distance < 250f // نطاق الالتقاط
+        return distance < 250f 
     }
 
     private fun showBlackHole() {
@@ -246,61 +246,98 @@ class FloatingService : Service() {
         }
     }
 
+    // ==========================================
+    // الأنيميشن السحري (سحب الفقاعة ثم تفتيتها)
+    // ==========================================
     private fun triggerDissolve() {
         try {
-            floatingBubbleView.visibility = View.INVISIBLE
             hideHub()
-            hideBlackHole()
-
-            // جلب الصورة وتجهيزها
-            val originalBitmap = BitmapFactory.decodeResource(resources, R.drawable.ic_monolith_new)
-            // ضبط حجم الصورة ليتطابق مع حجم الفقاعة على الشاشة
-            val bubbleWidth = floatingBubbleView.width
-            val bubbleHeight = floatingBubbleView.height
-            val scaledBitmap = Bitmap.createScaledBitmap(originalBitmap, bubbleWidth, bubbleHeight, true)
-
+            
             val screenHeight = resources.displayMetrics.heightPixels
             val screenWidth = resources.displayMetrics.widthPixels
             
-            // إحداثيات البداية (مكان الفقاعة على الشاشة)
-            val startX = bubbleLayoutParams.x.toFloat()
-            val startY = bubbleLayoutParams.y.toFloat()
+            // إحداثيات البداية (مكان الفقاعة الحالي)
+            val startX = bubbleLayoutParams.x
+            val startY = bubbleLayoutParams.y
             
             // إحداثيات النهاية (مركز الثقب الأسود)
-            val targetX = screenWidth / 2f
-            val targetY = screenHeight * 0.8f
+            val targetX = (screenWidth / 2) - (floatingBubbleView.width / 2)
+            val targetY = (screenHeight * 0.8).toInt() - (floatingBubbleView.height / 2)
 
-            dissolveOverlay = ParticleDissolveView(this)
-            dissolveLayoutParams = WindowManager.LayoutParams(
-                WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-                PixelFormat.TRANSLUCENT
-            )
+            // 1. أنيميشن سحب الفقاعة نحو الثقب
+            val suckAnimator = ValueAnimator.ofFloat(0f, 1f)
+            suckAnimator.duration = 400 // نصف ثانية للسحب
+            suckAnimator.interpolator = AccelerateInterpolator() // يبدأ بطيئاً ثم يسرع (مثل الجاذبية)
             
-            windowManager.addView(dissolveOverlay, dissolveLayoutParams)
-            
-            dissolveOverlay?.post {
-                dissolveOverlay?.startDissolve(scaledBitmap, startX, startY, targetX, targetY) {
-                    // عند انتهاء الأنيميشن
-                    windowManager.removeView(dissolveOverlay)
-                    dissolveOverlay = null
-                    
-                    Toast.makeText(this, "تم الإخفاء في الثقب الأسود!", Toast.LENGTH_SHORT).show()
-                    
-                    // إعادة إظهار الفقاعة في مكانها الأصلي
-                    floatingBubbleView.visibility = View.VISIBLE
-                    bubbleLayoutParams.x = 100
-                    bubbleLayoutParams.y = 300
-                    windowManager.updateViewLayout(floatingBubbleView, bubbleLayoutParams)
-                }
+            suckAnimator.addUpdateListener { animation ->
+                val progress = animation.animatedValue as Float
+                
+                // تحريك الفقاعة
+                bubbleLayoutParams.x = (startX + (targetX - startX) * progress).toInt()
+                bubbleLayoutParams.y = (startY + (targetY - startY) * progress).toInt()
+                
+                // تصغير الفقاعة أثناء السحب
+                val currentScale = bubbleScale * (1f - progress * 0.7f) 
+                floatingBubbleView.scaleX = currentScale
+                floatingBubbleView.scaleY = currentScale
+                
+                windowManager.updateViewLayout(floatingBubbleView, bubbleLayoutParams)
             }
+            
+            suckAnimator.addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: android.animation.Animator) {
+                    // 2. بمجرد وصول الفقاعة للثقب، نخفيها ونطلق التفتيت
+                    floatingBubbleView.visibility = View.INVISIBLE
+                    hideBlackHole()
+                    
+                    // إعادة الحجم الأصلي للفقاعة استعداداً للمرة القادمة
+                    floatingBubbleView.scaleX = bubbleScale
+                    floatingBubbleView.scaleY = bubbleScale
+                    
+                    // تحميل الصورة وتجهيزها
+                    val originalBitmap = BitmapFactory.decodeResource(resources, R.drawable.ic_monolith_new)
+                    val scaledBitmap = Bitmap.createScaledBitmap(originalBitmap, floatingBubbleView.width, floatingBubbleView.height, true)
+                    
+                    val centerScreenX = screenWidth / 2f
+                    val centerScreenY = screenHeight * 0.8f
+
+                    dissolveOverlay = ParticleDissolveView(this@FloatingService)
+                    dissolveLayoutParams = WindowManager.LayoutParams(
+                        WindowManager.LayoutParams.MATCH_PARENT,
+                        WindowManager.LayoutParams.MATCH_PARENT,
+                        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                        WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                        PixelFormat.TRANSLUCENT
+                    )
+                    
+                    windowManager.addView(dissolveOverlay, dissolveLayoutParams)
+                    
+                    dissolveOverlay?.post {
+                        // نبدأ الجزيئات من مركز الثقب (حيث انتهت الفقاعة)
+                        dissolveOverlay?.startDissolve(scaledBitmap, targetX.toFloat(), targetY.toFloat(), centerScreenX, centerScreenY) {
+                            // 3. عند انتهاء التفتيت
+                            windowManager.removeView(dissolveOverlay)
+                            dissolveOverlay = null
+                            
+                            Toast.makeText(this@FloatingService, "تم الإخفاء في الثقب الأسود!", Toast.LENGTH_SHORT).show()
+                            
+                            // إعادة إظهار الفقاعة في مكانها الأصلي
+                            floatingBubbleView.visibility = View.VISIBLE
+                            bubbleLayoutParams.x = 100
+                            bubbleLayoutParams.y = 300
+                            windowManager.updateViewLayout(floatingBubbleView, bubbleLayoutParams)
+                        }
+                    }
+                }
+            })
+            suckAnimator.start()
             
         } catch (e: Exception) {
             e.printStackTrace()
             Toast.makeText(this, "حدث خطأ أثناء التفتيت", Toast.LENGTH_SHORT).show()
             floatingBubbleView.visibility = View.VISIBLE
+            floatingBubbleView.scaleX = bubbleScale
+            floatingBubbleView.scaleY = bubbleScale
         }
     }
 
@@ -683,7 +720,7 @@ class FloatingService : Service() {
             volumePanelView?.let { windowManager.removeView(it) }
             resizePanelView?.let { windowManager.removeView(it) }
             streamSelectorView?.let { windowManager.removeView(it) }
-            dissolveOverlay?.let { windowManager.removeView(it) } // تنظيف الثقب الأسود
+            dissolveOverlay?.let { windowManager.removeView(it) } 
         } catch (e: Exception) {
             e.printStackTrace()
         }
