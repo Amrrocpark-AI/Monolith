@@ -35,7 +35,7 @@ class FloatingService : Service() {
 
     private var volumePanelView: View? = null
     private var resizePanelView: View? = null
-    private var streamSelectorView: View? = null // لوحة اختيار المسار الجديدة
+    private var streamSelectorView: View? = null 
     
     private lateinit var audioManager: AudioManager
     private var currentStream = AudioManager.STREAM_MUSIC
@@ -233,7 +233,11 @@ class FloatingService : Service() {
                                 isDraggingHub = true
                                 hubLayoutParams?.x = initialX + deltaX.toInt()
                                 hubLayoutParams?.y = initialY + deltaY.toInt()
-                                hubLayoutParams?.let { windowManager.updateViewLayout(floatingHubView, it) }
+                                hubLayoutParams?.let { params ->
+                                    floatingHubView?.let { view ->
+                                        windowManager.updateViewLayout(view, params)
+                                    }
+                                }
                                 updatePanelsPosition()
                                 return true
                             }
@@ -297,7 +301,7 @@ class FloatingService : Service() {
             )
 
             params.gravity = Gravity.TOP or Gravity.START
-            updatePanelCoordinates(params, volumePanelView)
+            volumePanelView?.let { updatePanelCoordinates(params, it) }
 
             val seekBar = volumePanelView?.findViewById<SeekBar>(R.id.seekBarVolume)
             val tvPercentage = volumePanelView?.findViewById<TextView>(R.id.tvVolumePercentage)
@@ -332,13 +336,12 @@ class FloatingService : Service() {
                 override fun onStopTrackingTouch(seekBar: SeekBar?) {}
             })
 
-            // *** استدعاء لوحة اختيار المسار المخصصة (بدل PopupMenu) ***
             val imgStreamSwitch = volumePanelView?.findViewById<ImageView>(R.id.imgStreamSwitch)
             imgStreamSwitch?.setOnClickListener {
                 toggleStreamSelector()
             }
 
-            windowManager.addView(volumePanelView, params)
+            volumePanelView?.let { windowManager.addView(it, params) }
         } catch (e: Exception) {
             e.printStackTrace()
             Toast.makeText(this, "فشل فتح لوحة الصوت", Toast.LENGTH_SHORT).show()
@@ -360,7 +363,7 @@ class FloatingService : Service() {
     }
 
     // ==========================================
-    // لوحة اختيار المسار (الجديدة - بدل الإيموجي)
+    // لوحة اختيار المسار
     // ==========================================
     private fun toggleStreamSelector() {
         if (streamSelectorView != null) {
@@ -395,7 +398,6 @@ class FloatingService : Service() {
             )
 
             params.gravity = Gravity.TOP or Gravity.START
-            // اللوحة تظهر فوق لوحة الصوت
             params.x = bubbleLayoutParams.x
             params.y = bubbleLayoutParams.y - (240 * bubbleScale).toInt()
 
@@ -403,7 +405,6 @@ class FloatingService : Service() {
             val tvPercentage = volumePanelView?.findViewById<TextView>(R.id.tvVolumePercentage)
             val imgIcon = volumePanelView?.findViewById<ImageView>(R.id.imgVolumeIcon)
 
-            // ربط الخيارات
             streamSelectorView?.findViewById<LinearLayout>(R.id.streamMedia)?.setOnClickListener {
                 currentStream = AudioManager.STREAM_MUSIC
                 updatePanelStream(seekBar, tvPercentage, imgIcon)
@@ -420,7 +421,7 @@ class FloatingService : Service() {
                 toggleStreamSelector()
             }
 
-            windowManager.addView(streamSelectorView, params)
+            streamSelectorView?.let { windowManager.addView(it, params) }
         } catch (e: Exception) {
             e.printStackTrace()
             Toast.makeText(this, "فشل فتح لوحة المسارات", Toast.LENGTH_SHORT).show()
@@ -463,7 +464,7 @@ class FloatingService : Service() {
             )
 
             params.gravity = Gravity.TOP or Gravity.START
-            updatePanelCoordinates(params, resizePanelView)
+            resizePanelView?.let { updatePanelCoordinates(params, it) }
 
             val seekBar = resizePanelView?.findViewById<SeekBar>(R.id.seekBarResize)
             val tvPercentage = resizePanelView?.findViewById<TextView>(R.id.tvResizePercentage)
@@ -513,7 +514,7 @@ class FloatingService : Service() {
                 }
             })
 
-            windowManager.addView(resizePanelView, params)
+            resizePanelView?.let { windowManager.addView(it, params) }
         } catch (e: Exception) {
             e.printStackTrace()
             Toast.makeText(this, "فشل فتح لوحة الحجم", Toast.LENGTH_SHORT).show()
@@ -528,26 +529,29 @@ class FloatingService : Service() {
         params.y = baseY - (120 * bubbleScale).toInt()
     }
 
+    // *** الدالة المصححة لتفادي أخطاء Smart Cast ***
     private fun updatePanelsPosition() {
-        if (volumePanelView != null) {
-            val params = volumePanelView?.layoutParams as WindowManager.LayoutParams
-            updatePanelCoordinates(params, volumePanelView!!)
-            windowManager.updateViewLayout(volumePanelView, params)
+        volumePanelView?.let { panel ->
+            val params = panel.layoutParams as WindowManager.LayoutParams
+            updatePanelCoordinates(params, panel)
+            windowManager.updateViewLayout(panel, params)
         }
-        if (resizePanelView != null) {
-            val params = resizePanelView?.layoutParams as WindowManager.LayoutParams
-            updatePanelCoordinates(params, resizePanelView!!)
-            windowManager.updateViewLayout(resizePanelView, params)
+        resizePanelView?.let { panel ->
+            val params = panel.layoutParams as WindowManager.LayoutParams
+            updatePanelCoordinates(params, panel)
+            windowManager.updateViewLayout(panel, params)
         }
-        if (streamSelectorView != null) {
-            val params = streamSelectorView?.layoutParams as WindowManager.LayoutParams
+        streamSelectorView?.let { panel ->
+            val params = panel.layoutParams as WindowManager.LayoutParams
             params.x = bubbleLayoutParams.x
             params.y = bubbleLayoutParams.y - (240 * bubbleScale).toInt()
-            windowManager.updateViewLayout(streamSelectorView, params)
+            windowManager.updateViewLayout(panel, params)
         }
-        if (floatingHubView != null && hubLayoutParams != null) {
-            hubLayoutParams?.y = bubbleLayoutParams.y - (120 * bubbleScale).toInt()
-            windowManager.updateViewLayout(floatingHubView, hubLayoutParams)
+        floatingHubView?.let { view ->
+            hubLayoutParams?.let { params ->
+                params.y = bubbleLayoutParams.y - (120 * bubbleScale).toInt()
+                windowManager.updateViewLayout(view, params)
+            }
         }
     }
 
@@ -563,10 +567,10 @@ class FloatingService : Service() {
             if (::floatingBubbleView.isInitialized) {
                 windowManager.removeView(floatingBubbleView)
             }
-            if (floatingHubView != null) windowManager.removeView(floatingHubView)
-            if (volumePanelView != null) windowManager.removeView(volumePanelView)
-            if (resizePanelView != null) windowManager.removeView(resizePanelView)
-            if (streamSelectorView != null) windowManager.removeView(streamSelectorView)
+            floatingHubView?.let { windowManager.removeView(it) }
+            volumePanelView?.let { windowManager.removeView(it) }
+            resizePanelView?.let { windowManager.removeView(it) }
+            streamSelectorView?.let { windowManager.removeView(it) }
         } catch (e: Exception) {
             e.printStackTrace()
         }
