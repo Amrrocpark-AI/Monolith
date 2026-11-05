@@ -49,7 +49,9 @@ class FloatingService : Service() {
         try {
             prefs = getSharedPreferences("Settings", MODE_PRIVATE)
             val savedScale = prefs.getInt("bubble_scale_int", 100)
-            bubbleScale = savedScale / 100f
+            // حماية إضافية: التأكد أن القيمة المحفوظة لا تتجاوز الحدود الآمنة
+            val safeSavedScale = if (savedScale < 50) 50 else if (savedScale > 150) 150 else savedScale
+            bubbleScale = safeSavedScale / 100f
 
             startForegroundService()
             setupFloatingBubble() 
@@ -89,8 +91,8 @@ class FloatingService : Service() {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         floatingBubbleView = LayoutInflater.from(this).inflate(R.layout.layout_floating_bubble, null)
 
-        floatingBubbleView.scaleX = bubbleScale
-        floatingBubbleView.scaleY = bubbleScale
+        // ضبط التكبير الآمن للأيقونة العائمة فقط
+        applySafeScaleToBubble()
 
         val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -160,14 +162,24 @@ class FloatingService : Service() {
         windowManager.addView(floatingBubbleView, bubbleLayoutParams)
     }
 
+    // دالة مساعدة لتطبيق التكبير بشكل آمن من المنتصف
+    private fun applySafeScaleToBubble() {
+        floatingBubbleView.scaleX = bubbleScale
+        floatingBubbleView.scaleY = bubbleScale
+        // ضبط نقطة الارتكاز لتكون في المنتصف لتجنب قفز الأيقونة
+        floatingBubbleView.post {
+            floatingBubbleView.pivotX = floatingBubbleView.width / 2f
+            floatingBubbleView.pivotY = floatingBubbleView.height / 2f
+        }
+    }
+
     private fun showHub() {
         try {
             floatingHubView = LayoutInflater.from(this).inflate(R.layout.floating_hub, null)
             
-            floatingHubView?.scaleX = bubbleScale
-            floatingHubView?.scaleY = bubbleScale
-            floatingHubView?.pivotX = 0f
-            floatingHubView?.pivotY = 0f
+            // تم إزالة التكبير من الهب (Hub) لكي تبقى النصوص والأزرار واضحة وثابتة
+            // floatingHubView?.scaleX = bubbleScale 
+            // floatingHubView?.scaleY = bubbleScale
 
             val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -185,7 +197,7 @@ class FloatingService : Service() {
 
             hubLayoutParams?.gravity = Gravity.TOP or Gravity.START
             hubLayoutParams?.x = bubbleLayoutParams.x
-            hubLayoutParams?.y = bubbleLayoutParams.y - (120 * bubbleScale).toInt() 
+            hubLayoutParams?.y = bubbleLayoutParams.y - (120).toInt() // مسافة ثابتة بدلاً من المتغيرة
 
             floatingHubView?.findViewById<LinearLayout>(R.id.btnVolume)?.setOnClickListener {
                 toggleVolumePanel()
@@ -281,11 +293,8 @@ class FloatingService : Service() {
         try {
             volumePanelView = LayoutInflater.from(this).inflate(R.layout.floating_volume_panel, null)
             
-            volumePanelView?.scaleX = bubbleScale
-            volumePanelView?.scaleY = bubbleScale
-            volumePanelView?.pivotX = 0f
-            volumePanelView?.pivotY = 0f
-
+            // تم إزالة التكبير من اللوحة لكي تبقى ثابتة
+            
             val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
             } else {
@@ -378,11 +387,6 @@ class FloatingService : Service() {
         try {
             streamSelectorView = LayoutInflater.from(this).inflate(R.layout.stream_selector, null)
             
-            streamSelectorView?.scaleX = bubbleScale
-            streamSelectorView?.scaleY = bubbleScale
-            streamSelectorView?.pivotX = 0f
-            streamSelectorView?.pivotY = 0f
-
             val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
             } else {
@@ -399,7 +403,7 @@ class FloatingService : Service() {
 
             params.gravity = Gravity.TOP or Gravity.START
             params.x = bubbleLayoutParams.x
-            params.y = bubbleLayoutParams.y - (240 * bubbleScale).toInt()
+            params.y = bubbleLayoutParams.y - 240 // مسافة ثابتة
 
             val seekBar = volumePanelView?.findViewById<SeekBar>(R.id.seekBarVolume)
             val tvPercentage = volumePanelView?.findViewById<TextView>(R.id.tvVolumePercentage)
@@ -429,7 +433,7 @@ class FloatingService : Service() {
     }
 
     // ==========================================
-    // لوحة الحجم
+    // لوحة الحجم (تم إصلاح المشكلة هنا)
     // ==========================================
     private fun toggleResizePanel() {
         if (resizePanelView != null) {
@@ -444,10 +448,7 @@ class FloatingService : Service() {
         try {
             resizePanelView = LayoutInflater.from(this).inflate(R.layout.floating_resize_panel, null)
             
-            resizePanelView?.scaleX = bubbleScale
-            resizePanelView?.scaleY = bubbleScale
-            resizePanelView?.pivotX = 0f
-            resizePanelView?.pivotY = 0f
+            // تم إزالة التكبير من لوحة التحكم لكي لا تتكبر أثناء سحب المؤشر
 
             val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -479,24 +480,14 @@ class FloatingService : Service() {
             seekBar?.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                     if (fromUser) {
-                        val actualSize = if (progress < 50) 50 else progress
+                        // تقييد الحجم بين 50% و 150% لحماية واجهة المستخدم
+                        val actualSize = if (progress < 50) 50 else if (progress > 150) 150 else progress
                         tvPercentage?.text = "$actualSize%"
                         
                         bubbleScale = actualSize / 100f
-                        floatingBubbleView.scaleX = bubbleScale
-                        floatingBubbleView.scaleY = bubbleScale
                         
-                        floatingHubView?.scaleX = bubbleScale
-                        floatingHubView?.scaleY = bubbleScale
-                        
-                        volumePanelView?.scaleX = bubbleScale
-                        volumePanelView?.scaleY = bubbleScale
-                        
-                        streamSelectorView?.scaleX = bubbleScale
-                        streamSelectorView?.scaleY = bubbleScale
-                        
-                        resizePanelView?.scaleX = bubbleScale
-                        resizePanelView?.scaleY = bubbleScale
+                        // تطبيق التكبير على الأيقونة العائمة فقط!
+                        applySafeScaleToBubble()
 
                         updatePanelsPosition()
                         
@@ -526,10 +517,10 @@ class FloatingService : Service() {
         val baseY = if (floatingHubView != null && hubLayoutParams != null) hubLayoutParams?.y ?: bubbleLayoutParams.y else bubbleLayoutParams.y
         
         params.x = baseX
-        params.y = baseY - (120 * bubbleScale).toInt()
+        // مسافة ثابتة (120) لأن اللوحة لم تعد تتكبر
+        params.y = baseY - 120 
     }
 
-    // *** الدالة المصححة لتفادي أخطاء Smart Cast ***
     private fun updatePanelsPosition() {
         volumePanelView?.let { panel ->
             val params = panel.layoutParams as WindowManager.LayoutParams
@@ -544,12 +535,12 @@ class FloatingService : Service() {
         streamSelectorView?.let { panel ->
             val params = panel.layoutParams as WindowManager.LayoutParams
             params.x = bubbleLayoutParams.x
-            params.y = bubbleLayoutParams.y - (240 * bubbleScale).toInt()
+            params.y = bubbleLayoutParams.y - 240 // مسافة ثابتة
             windowManager.updateViewLayout(panel, params)
         }
         floatingHubView?.let { view ->
             hubLayoutParams?.let { params ->
-                params.y = bubbleLayoutParams.y - (120 * bubbleScale).toInt()
+                params.y = bubbleLayoutParams.y - 120 // مسافة ثابتة
                 windowManager.updateViewLayout(view, params)
             }
         }
