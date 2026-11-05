@@ -80,14 +80,6 @@
             android:textStyle="bold"
             android:layout_marginBottom="8dp"/>
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="لون النيون:"
-            android:textColor="#FFFFFF"
-            android:textSize="16sp"
-            android:layout_marginBottom="8dp"/>
-
         <RadioGroup
             android:id="@+id/rgNeonColor"
             android:layout_width="match_parent"
@@ -122,14 +114,6 @@
                 android:textColor="#FFFFFF"
                 android:buttonTint="#00FF00" />
         </RadioGroup>
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="شكل الحواف:"
-            android:textColor="#FFFFFF"
-            android:textSize="16sp"
-            android:layout_marginBottom="8dp"/>
 
         <RadioGroup
             android:id="@+id/rgFrameStyle"
@@ -182,14 +166,6 @@
             android:textStyle="bold"
             android:layout_marginBottom="16dp" />
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="لغة التطبيق"
-            android:textColor="#FFFFFF"
-            android:textSize="20sp"
-            android:textStyle="bold" />
-
         <Spinner
             android:id="@+id/languageSpinner"
             android:layout_width="match_parent"
@@ -206,48 +182,16 @@
             android:backgroundTint="#00D4FF"
             android:textColor="#000000" />
 
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="#333333"
-            android:layout_marginTop="32dp"
-            android:layout_marginBottom="32dp" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="خلفية التطبيق"
-            android:textColor="#FFFFFF"
-            android:textSize="20sp"
-            android:textStyle="bold" />
-
         <RadioGroup
             android:id="@+id/backgroundGroup"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="16dp"
             android:orientation="vertical">
 
-            <RadioButton
-                android:id="@+id/rbDark"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="داكن (افتراضي)"
-                android:textColor="#FFFFFF" />
-
-            <RadioButton
-                android:id="@+id/rbLight"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="فاتح (أبيض)"
-                android:textColor="#FFFFFF" />
-
-            <RadioButton
-                android:id="@+id/rbCyber"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="سايبربانك (أخضر)"
-                android:textColor="#00FF00" />
+            <RadioButton android:id="@+id/rbDark" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="داكن (افتراضي)" android:textColor="#FFFFFF" />
+            <RadioButton android:id="@+id/rbLight" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="فاتح (أبيض)" android:textColor="#FFFFFF" />
+            <RadioButton android:id="@+id/rbCyber" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="سايبربانك (أخضر)" android:textColor="#00FF00" />
         </RadioGroup>
 
         <Button
@@ -274,60 +218,17 @@
             android:textSize="20sp"
             android:textStyle="bold" />
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="الأحمر (Red)"
-            android:textColor="#FF4444"
-            android:layout_marginTop="8dp"/>
-        <SeekBar
-            android:id="@+id/sbRed"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="255"
-            android:progress="0"
-            android:progressTint="#FF4444" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="الأحمر (Red)" android:textColor="#FF4444" android:layout_marginTop="8dp"/>
+        <SeekBar android:id="@+id/sbRed" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="255" android:progress="0" android:progressTint="#FF4444" />
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="الأخضر (Green)"
-            android:textColor="#00FF00" />
-        <SeekBar
-            android:id="@+id/sbGreen"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="255"
-            android:progress="255"
-            android:progressTint="#00FF00" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="الأخضر (Green)" android:textColor="#00FF00" />
+        <SeekBar android:id="@+id/sbGreen" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="255" android:progress="255" android:progressTint="#00FF00" />
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="الأزرق (Blue)"
-            android:textColor="#4444FF" />
-        <SeekBar
-            android:id="@+id/sbBlue"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="255"
-            android:progress="0"
-            android:progressTint="#4444FF" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="الأزرق (Blue)" android:textColor="#4444FF" />
+        <SeekBar android:id="@+id/sbBlue" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="255" android:progress="0" android:progressTint="#4444FF" />
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="معاينة اللون:"
-            android:textColor="#FFFFFF"
-            android:layout_marginTop="16dp" />
-
-        <View
-            android:id="@+id/viewColorPreview"
-            android:layout_width="match_parent"
-            android:layout_height="60dp"
-            android:background="#00FF00"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="16dp" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="معاينة اللون:" android:textColor="#FFFFFF" android:layout_marginTop="16dp" />
+        <View android:id="@+id/viewColorPreview" android:layout_width="match_parent" android:layout_height="60dp" android:background="#00FF00" android:layout_marginTop="8dp" android:layout_marginBottom="16dp" />
 
         <Button
             android:id="@+id/btnSaveColor"
@@ -353,6 +254,35 @@
             android:textSize="24sp"
             android:textStyle="bold"
             android:layout_marginBottom="16dp" />
+
+        <!-- *** قسم التحكم في حجم الأيقونة الجديد *** -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="حجم الأيقونة العائمة"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp"
+            android:layout_marginBottom="8dp"/>
+
+        <TextView
+            android:id="@+id/tvBubbleSizeValue"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="100% (الحجم الافتراضي)"
+            android:textColor="#00D4FF"
+            android:textSize="14sp"
+            android:layout_marginBottom="8dp"/>
+
+        <SeekBar
+            android:id="@+id/seekBarBubbleSize"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="150"
+            android:progress="100"
+            android:progressTint="#00D4FF"
+            android:thumbTint="#00D4FF"
+            android:layout_marginBottom="24dp" />
+        <!-- *** ---------------------------------- *** -->
 
         <com.google.android.material.switchmaterial.SwitchMaterial
             android:id="@+id/switchFloatingBubble"
