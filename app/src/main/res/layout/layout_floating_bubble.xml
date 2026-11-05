@@ -5,8 +5,8 @@
 
     <ImageView
         android:id="@+id/imgBubble"
-        android:layout_width="72dp"
-        android:layout_height="72dp"
+        android:layout_width="90dp"
+        android:layout_height="90dp"
         android:padding="4dp"
         android:src="@drawable/ic_monolith_new"
         android:elevation="12dp" />
