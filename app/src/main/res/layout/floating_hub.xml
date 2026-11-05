@@ -12,7 +12,6 @@
     android:paddingBottom="8dp"
     android:elevation="10dp">
 
-    <!-- شريط التمرير الأفقي للأدوات -->
     <HorizontalScrollView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -69,7 +68,7 @@
                     android:textSize="10sp" />
             </LinearLayout>
 
-            <!-- زر الجدولة (النشط) -->
+            <!-- زر الجدولة -->
             <LinearLayout
                 android:id="@+id/btnSchedule"
                 android:layout_width="wrap_content"
@@ -82,12 +81,12 @@
                     android:layout_width="24dp"
                     android:layout_height="24dp"
                     android:src="@android:drawable/ic_menu_my_calendar"
-                    app:tint="#B39DDB" /> <!-- لون نشط -->
+                    app:tint="#B39DDB" />
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Schedule"
-                    android:textColor="#B39DDB" /> <!-- لون نشط -->
+                    android:textColor="#B39DDB" />
             </LinearLayout>
 
             <!-- زر الرسائل -->
@@ -112,10 +111,32 @@
                     android:textSize="10sp" />
             </LinearLayout>
 
+            <!-- *** زر الصوت الجديد *** -->
+            <LinearLayout
+                android:id="@+id/btnVolume"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp">
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@drawable/ic_volume_up"
+                    app:tint="#FFFFFF" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Volume"
+                    android:textColor="#FFFFFF"
+                    android:textSize="10sp" />
+            </LinearLayout>
+
         </LinearLayout>
     </HorizontalScrollView>
 
-    <!-- زر التخصيص المنفصل -->
+    <!-- زر التخصيص (بنفسجي) -->
     <LinearLayout
         android:id="@+id/btnCustomize"
         android:layout_width="64dp"
