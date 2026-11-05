@@ -30,7 +30,9 @@ class FloatingService : Service() {
     private lateinit var windowManager: WindowManager
     private lateinit var floatingBubbleView: View 
     private var floatingHubView: View? = null 
+    
     private lateinit var bubbleLayoutParams: WindowManager.LayoutParams
+    private var hubLayoutParams: WindowManager.LayoutParams? = null // إحداثيات الشريط الجديدة
 
     // متغيرات لوحة الصوت
     private var volumePanelView: View? = null
@@ -65,7 +67,7 @@ class FloatingService : Service() {
         val notification: Notification = NotificationCompat.Builder(this, channelId)
             .setContentTitle("Monolith يعمل في الخلفية")
             .setContentText("مركز التحكم العائم نشط")
-            .setSmallIcon(R.drawable.ic_monolith_new) // استخدمنا الأيقونة الجديدة هنا كمان
+            .setSmallIcon(R.drawable.ic_monolith_new)
             .setOngoing(true)
             .build()
 
@@ -158,7 +160,7 @@ class FloatingService : Service() {
                 WindowManager.LayoutParams.TYPE_PHONE
             }
 
-            val hubParams = WindowManager.LayoutParams(
+            hubLayoutParams = WindowManager.LayoutParams(
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 layoutFlag,
@@ -166,10 +168,12 @@ class FloatingService : Service() {
                 PixelFormat.TRANSLUCENT
             )
 
-            hubParams.gravity = Gravity.TOP or Gravity.START
-            hubParams.x = bubbleLayoutParams.x
-            hubParams.y = bubbleLayoutParams.y - 120 
+            hubLayoutParams?.gravity = Gravity.TOP or Gravity.START
+            // الشريط يظهر فوق الفقاعة شوية
+            hubLayoutParams?.x = bubbleLayoutParams.x
+            hubLayoutParams?.y = bubbleLayoutParams.y - 120 
 
+            // ربط أزرار الشريط
             floatingHubView?.findViewById<LinearLayout>(R.id.btnVolume)?.setOnClickListener {
                 toggleVolumePanel()
             }
@@ -189,7 +193,46 @@ class FloatingService : Service() {
                 Toast.makeText(this, "الرسائل", Toast.LENGTH_SHORT).show()
             }
 
-            windowManager.addView(floatingHubView, hubParams)
+            // *** إضافة خاصية السحب للشريط ***
+            floatingHubView?.setOnTouchListener(object : View.OnTouchListener {
+                private var initialX = 0
+                private var initialY = 0
+                private var initialTouchX = 0f
+                private var initialTouchY = 0f
+                private var isDraggingHub = false
+
+                override fun onTouch(v: View?, event: MotionEvent?): Boolean {
+                    when (event?.action) {
+                        MotionEvent.ACTION_DOWN -> {
+                            initialX = hubLayoutParams?.x ?: 0
+                            initialY = hubLayoutParams?.y ?: 0
+                            initialTouchX = event.rawX
+                            initialTouchY = event.rawY
+                            isDraggingHub = false
+                            return false // نرجع false عشان الأزرار تشتغل لو ضغطنا ضغطة عادية
+                        }
+                        MotionEvent.ACTION_MOVE -> {
+                            val deltaX = event.rawX - initialTouchX
+                            val deltaY = event.rawY - initialTouchY
+                            if (abs(deltaX) > 15 || abs(deltaY) > 15) {
+                                isDraggingHub = true
+                                hubLayoutParams?.x = initialX + deltaX.toInt()
+                                hubLayoutParams?.y = initialY + deltaY.toInt()
+                                hubLayoutParams?.let { windowManager.updateViewLayout(floatingHubView, it) }
+                                updateVolumePanelPosition()
+                                return true // نستهلك الحركة عشان ميتحركش التطبيق اللي وراه
+                            }
+                            return false
+                        }
+                        MotionEvent.ACTION_UP -> {
+                            return isDraggingHub // لو كنا بنسحب، نستهلك الحدث
+                        }
+                    }
+                    return false
+                }
+            })
+
+            windowManager.addView(floatingHubView, hubLayoutParams)
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -199,9 +242,13 @@ class FloatingService : Service() {
         if (floatingHubView != null) {
             windowManager.removeView(floatingHubView)
             floatingHubView = null
+            hubLayoutParams = null
         }
     }
 
+    // ==========================================
+    // كود لوحة الصوت
+    // ==========================================
     private fun toggleVolumePanel() {
         if (volumePanelView != null) {
             windowManager.removeView(volumePanelView)
@@ -303,9 +350,17 @@ class FloatingService : Service() {
         }
     }
 
+    // تحديث مكان لوحة الصوت بناءً على حركة الشريط (أو الفقاعة)
     private fun updateVolumePanelCoordinates(params: WindowManager.LayoutParams) {
-        params.x = bubbleLayoutParams.x
-        params.y = bubbleLayoutParams.y - 120 
+        if (floatingHubView != null && hubLayoutParams != null) {
+            // لو الشريط مفتوح، لوحة الصوت تظهر فوق الشريط
+            params.x = hubLayoutParams?.x ?: bubbleLayoutParams.x
+            params.y = (hubLayoutParams?.y ?: bubbleLayoutParams.y) - 120 
+        } else {
+            // لو الشريط مقفول، لوحة الصوت تظهر فوق الفقاعة
+            params.x = bubbleLayoutParams.x
+            params.y = bubbleLayoutParams.y - 120 
+        }
     }
 
     private fun updateVolumePanelPosition() {
