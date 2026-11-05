@@ -9,9 +9,7 @@ import android.content.Intent
 import android.graphics.PixelFormat
 import android.media.AudioManager
 import android.os.Build
-import android.os.Handler
 import android.os.IBinder
-import android.os.Looper
 import android.os.Vibrator
 import android.view.Gravity
 import android.view.LayoutInflater
@@ -30,8 +28,8 @@ import kotlin.math.abs
 class FloatingService : Service() {
 
     private lateinit var windowManager: WindowManager
-    private lateinit var floatingBubbleView: View // الفقاعة الدائرية الأساسية
-    private var floatingHubView: View? = null // الشريط العائم (مخفي افتراضياً)
+    private lateinit var floatingBubbleView: View 
+    private var floatingHubView: View? = null 
     private lateinit var bubbleLayoutParams: WindowManager.LayoutParams
 
     // متغيرات لوحة الصوت
@@ -44,7 +42,7 @@ class FloatingService : Service() {
         super.onCreate()
         try {
             startForegroundService()
-            setupFloatingBubble() // نبدأ بالفقاعة
+            setupFloatingBubble() 
             
             audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
             vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
@@ -67,7 +65,7 @@ class FloatingService : Service() {
         val notification: Notification = NotificationCompat.Builder(this, channelId)
             .setContentTitle("Monolith يعمل في الخلفية")
             .setContentText("مركز التحكم العائم نشط")
-            .setSmallIcon(R.drawable.ic_bubble_monolith)
+            .setSmallIcon(R.drawable.ic_monolith_new) // استخدمنا الأيقونة الجديدة هنا كمان
             .setOngoing(true)
             .build()
 
@@ -128,13 +126,12 @@ class FloatingService : Service() {
                             bubbleLayoutParams.y = initialY + deltaY.toInt()
                             windowManager.updateViewLayout(floatingBubbleView, bubbleLayoutParams)
                             updateVolumePanelPosition()
-                            hideHub() // إخفاء الشريط أثناء السحب
+                            hideHub() 
                         }
                         return true
                     }
                     MotionEvent.ACTION_UP -> {
                         if (!isDragging) {
-                            // لو ضغط بدون سحب، نفتح/نقفل الشريط
                             if (floatingHubView != null) {
                                 hideHub()
                             } else {
@@ -151,9 +148,6 @@ class FloatingService : Service() {
         windowManager.addView(floatingBubbleView, bubbleLayoutParams)
     }
 
-    // ==========================================
-    // إظهار وإخفاء الشريط العائم
-    // ==========================================
     private fun showHub() {
         try {
             floatingHubView = LayoutInflater.from(this).inflate(R.layout.floating_hub, null)
@@ -173,14 +167,11 @@ class FloatingService : Service() {
             )
 
             hubParams.gravity = Gravity.TOP or Gravity.START
-            // نظهر الشريط فوق الفقاعة شوية
             hubParams.x = bubbleLayoutParams.x
             hubParams.y = bubbleLayoutParams.y - 120 
 
-            // ربط أزرار الشريط
             floatingHubView?.findViewById<LinearLayout>(R.id.btnVolume)?.setOnClickListener {
                 toggleVolumePanel()
-                // hideHub() // لو عايزين الشريط يختفي لما نفتح الصوت
             }
             floatingHubView?.findViewById<LinearLayout>(R.id.btnCustomize)?.setOnClickListener {
                 Toast.makeText(this, "شاشة التخصيص (قريباً)", Toast.LENGTH_SHORT).show()
@@ -211,9 +202,6 @@ class FloatingService : Service() {
         }
     }
 
-    // ==========================================
-    // كود لوحة الصوت
-    // ==========================================
     private fun toggleVolumePanel() {
         if (volumePanelView != null) {
             windowManager.removeView(volumePanelView)
