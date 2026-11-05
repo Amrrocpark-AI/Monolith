@@ -40,14 +40,17 @@ class FloatingService : Service() {
     private var currentStream = AudioManager.STREAM_MUSIC
     private lateinit var vibrator: Vibrator
 
+    // متغيرات لوحة الحجم
+    private var resizePanelView: View? = null
+    
     // الحجم المخصص
     private var bubbleScale = 1.0f
+    private lateinit var prefs: android.content.SharedPreferences
 
     override fun onCreate() {
         super.onCreate()
         try {
-            // قراءة الحجم من الإعدادات (القيمة الافتراضية 100%)
-            val prefs = getSharedPreferences("Settings", MODE_PRIVATE)
+            prefs = getSharedPreferences("Settings", MODE_PRIVATE)
             val savedScale = prefs.getInt("bubble_scale_int", 100)
             bubbleScale = savedScale / 100f
 
@@ -89,7 +92,6 @@ class FloatingService : Service() {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         floatingBubbleView = LayoutInflater.from(this).inflate(R.layout.layout_floating_bubble, null)
 
-        // تطبيق التكبير على الفقاعة
         floatingBubbleView.scaleX = bubbleScale
         floatingBubbleView.scaleY = bubbleScale
 
@@ -138,7 +140,7 @@ class FloatingService : Service() {
                             bubbleLayoutParams.x = initialX + deltaX.toInt()
                             bubbleLayoutParams.y = initialY + deltaY.toInt()
                             windowManager.updateViewLayout(floatingBubbleView, bubbleLayoutParams)
-                            updateVolumePanelPosition()
+                            updatePanelsPosition()
                             hideHub() 
                         }
                         return true
@@ -165,10 +167,8 @@ class FloatingService : Service() {
         try {
             floatingHubView = LayoutInflater.from(this).inflate(R.layout.floating_hub, null)
             
-            // تطبيق التكبير على الشريط
             floatingHubView?.scaleX = bubbleScale
             floatingHubView?.scaleY = bubbleScale
-            // تحديد نقطة التكبير (اليسار العلوي) عشان الشريط ميتحركش من مكانه
             floatingHubView?.pivotX = 0f
             floatingHubView?.pivotY = 0f
 
@@ -192,6 +192,10 @@ class FloatingService : Service() {
 
             floatingHubView?.findViewById<LinearLayout>(R.id.btnVolume)?.setOnClickListener {
                 toggleVolumePanel()
+            }
+            // *** ربط زر Size ***
+            floatingHubView?.findViewById<LinearLayout>(R.id.btnResize)?.setOnClickListener {
+                toggleResizePanel()
             }
             floatingHubView?.findViewById<LinearLayout>(R.id.btnCustomize)?.setOnClickListener {
                 Toast.makeText(this, "شاشة التخصيص (قريباً)", Toast.LENGTH_SHORT).show()
@@ -234,7 +238,7 @@ class FloatingService : Service() {
                                 hubLayoutParams?.x = initialX + deltaX.toInt()
                                 hubLayoutParams?.y = initialY + deltaY.toInt()
                                 hubLayoutParams?.let { windowManager.updateViewLayout(floatingHubView, it) }
-                                updateVolumePanelPosition()
+                                updatePanelsPosition()
                                 return true
                             }
                             return false
@@ -262,7 +266,7 @@ class FloatingService : Service() {
     }
 
     // ==========================================
-    // كود لوحة الصوت
+    // لوحة الصوت
     // ==========================================
     private fun toggleVolumePanel() {
         if (volumePanelView != null) {
@@ -277,7 +281,6 @@ class FloatingService : Service() {
         try {
             volumePanelView = LayoutInflater.from(this).inflate(R.layout.floating_volume_panel, null)
             
-            // تطبيق التكبير على لوحة الصوت كمان
             volumePanelView?.scaleX = bubbleScale
             volumePanelView?.scaleY = bubbleScale
             volumePanelView?.pivotX = 0f
@@ -298,7 +301,7 @@ class FloatingService : Service() {
             )
 
             params.gravity = Gravity.TOP or Gravity.START
-            updateVolumePanelCoordinates(params)
+            updatePanelCoordinates(params, volumePanelView)
 
             val seekBar = volumePanelView?.findViewById<SeekBar>(R.id.seekBarVolume)
             val tvPercentage = volumePanelView?.findViewById<TextView>(R.id.tvVolumePercentage)
@@ -371,21 +374,126 @@ class FloatingService : Service() {
         }
     }
 
-    private fun updateVolumePanelCoordinates(params: WindowManager.LayoutParams) {
-        if (floatingHubView != null && hubLayoutParams != null) {
-            params.x = hubLayoutParams?.x ?: bubbleLayoutParams.x
-            params.y = (hubLayoutParams?.y ?: bubbleLayoutParams.y) - (120 * bubbleScale).toInt() 
+    // ==========================================
+    // لوحة الحجم الجديدة
+    // ==========================================
+    private fun toggleResizePanel() {
+        if (resizePanelView != null) {
+            windowManager.removeView(resizePanelView)
+            resizePanelView = null
         } else {
-            params.x = bubbleLayoutParams.x
-            params.y = bubbleLayoutParams.y - (120 * bubbleScale).toInt() 
+            showResizePanel()
         }
     }
 
-    private fun updateVolumePanelPosition() {
+    private fun showResizePanel() {
+        try {
+            resizePanelView = LayoutInflater.from(this).inflate(R.layout.floating_resize_panel, null)
+            
+            resizePanelView?.scaleX = bubbleScale
+            resizePanelView?.scaleY = bubbleScale
+            resizePanelView?.pivotX = 0f
+            resizePanelView?.pivotY = 0f
+
+            val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            } else {
+                WindowManager.LayoutParams.TYPE_PHONE
+            }
+
+            val params = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                layoutFlag,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                PixelFormat.TRANSLUCENT
+            )
+
+            params.gravity = Gravity.TOP or Gravity.START
+            updatePanelCoordinates(params, resizePanelView)
+
+            val seekBar = resizePanelView?.findViewById<SeekBar>(R.id.seekBarResize)
+            val tvPercentage = resizePanelView?.findViewById<TextView>(R.id.tvResizePercentage)
+            val btnClose = resizePanelView?.findViewById<ImageView>(R.id.btnCloseResizePanel)
+
+            val currentScaleInt = (bubbleScale * 100).toInt()
+            seekBar?.progress = currentScaleInt
+            tvPercentage?.text = "$currentScaleInt%"
+
+            btnClose?.setOnClickListener { toggleResizePanel() }
+
+            seekBar?.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    if (fromUser) {
+                        // الحد الأدنى 50% والأقصى 150%
+                        val actualSize = if (progress < 50) 50 else progress
+                        tvPercentage?.text = "$actualSize%"
+                        
+                        // تحديث الحجم فوراً (Live)
+                        bubbleScale = actualSize / 100f
+                        floatingBubbleView.scaleX = bubbleScale
+                        floatingBubbleView.scaleY = bubbleScale
+                        
+                        floatingHubView?.scaleX = bubbleScale
+                        floatingHubView?.scaleY = bubbleScale
+                        
+                        volumePanelView?.scaleX = bubbleScale
+                        volumePanelView?.scaleY = bubbleScale
+                        
+                        resizePanelView?.scaleX = bubbleScale
+                        resizePanelView?.scaleY = bubbleScale
+
+                        updatePanelsPosition()
+                        
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            vibrator.vibrate(android.os.VibrationEffect.createOneShot(10, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
+                        } else {
+                            @Suppress("DEPRECATION")
+                            vibrator.vibrate(10)
+                        }
+                    }
+                }
+                override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+                override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                    // حفظ الحجم الجديد في الذاكرة
+                    prefs.edit().putInt("bubble_scale_int", (bubbleScale * 100).toInt()).apply()
+                }
+            })
+
+            windowManager.addView(resizePanelView, params)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Toast.makeText(this, "فشل فتح لوحة الحجم", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // ==========================================
+    // تحديث إحداثيات اللوحات (صوت وحجم)
+    // ==========================================
+    private fun updatePanelCoordinates(params: WindowManager.LayoutParams, panelView: View) {
+        val baseX = if (floatingHubView != null && hubLayoutParams != null) hubLayoutParams?.x ?: bubbleLayoutParams.x else bubbleLayoutParams.x
+        val baseY = if (floatingHubView != null && hubLayoutParams != null) hubLayoutParams?.y ?: bubbleLayoutParams.y else bubbleLayoutParams.y
+        
+        // اللوحة تظهر فوق الشريط أو الفقاعة
+        params.x = baseX
+        params.y = baseY - (120 * bubbleScale).toInt()
+    }
+
+    private fun updatePanelsPosition() {
         if (volumePanelView != null) {
             val params = volumePanelView?.layoutParams as WindowManager.LayoutParams
-            updateVolumePanelCoordinates(params)
+            updatePanelCoordinates(params, volumePanelView!!)
             windowManager.updateViewLayout(volumePanelView, params)
+        }
+        if (resizePanelView != null) {
+            val params = resizePanelView?.layoutParams as WindowManager.LayoutParams
+            updatePanelCoordinates(params, resizePanelView!!)
+            windowManager.updateViewLayout(resizePanelView, params)
+        }
+        // تحديث مكان الشريط نفسه لو الحجم اتغير
+        if (floatingHubView != null && hubLayoutParams != null) {
+            hubLayoutParams?.y = bubbleLayoutParams.y - (120 * bubbleScale).toInt()
+            windowManager.updateViewLayout(floatingHubView, hubLayoutParams)
         }
     }
 
@@ -406,6 +514,9 @@ class FloatingService : Service() {
             }
             if (volumePanelView != null) {
                 windowManager.removeView(volumePanelView)
+            }
+            if (resizePanelView != null) {
+                windowManager.removeView(resizePanelView)
             }
         } catch (e: Exception) {
             e.printStackTrace()
