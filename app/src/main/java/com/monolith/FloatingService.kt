@@ -18,7 +18,6 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.PopupMenu
 import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
@@ -34,16 +33,14 @@ class FloatingService : Service() {
     private lateinit var bubbleLayoutParams: WindowManager.LayoutParams
     private var hubLayoutParams: WindowManager.LayoutParams? = null 
 
-    // متغيرات لوحة الصوت
     private var volumePanelView: View? = null
+    private var resizePanelView: View? = null
+    private var streamSelectorView: View? = null // لوحة اختيار المسار الجديدة
+    
     private lateinit var audioManager: AudioManager
     private var currentStream = AudioManager.STREAM_MUSIC
     private lateinit var vibrator: Vibrator
 
-    // متغيرات لوحة الحجم
-    private var resizePanelView: View? = null
-    
-    // الحجم المخصص
     private var bubbleScale = 1.0f
     private lateinit var prefs: android.content.SharedPreferences
 
@@ -193,7 +190,6 @@ class FloatingService : Service() {
             floatingHubView?.findViewById<LinearLayout>(R.id.btnVolume)?.setOnClickListener {
                 toggleVolumePanel()
             }
-            // *** ربط زر Size ***
             floatingHubView?.findViewById<LinearLayout>(R.id.btnResize)?.setOnClickListener {
                 toggleResizePanel()
             }
@@ -336,21 +332,10 @@ class FloatingService : Service() {
                 override fun onStopTrackingTouch(seekBar: SeekBar?) {}
             })
 
+            // *** استدعاء لوحة اختيار المسار المخصصة (بدل PopupMenu) ***
             val imgStreamSwitch = volumePanelView?.findViewById<ImageView>(R.id.imgStreamSwitch)
             imgStreamSwitch?.setOnClickListener {
-                val streamMenu = PopupMenu(this, it)
-                streamMenu.menu.add("🎵 الميديا")
-                streamMenu.menu.add("🔔 الرنين")
-                streamMenu.menu.add("⏰ المنبه")
-                streamMenu.setOnMenuItemClickListener { menuItem ->
-                    when (menuItem.title) {
-                        "🎵 الميديا" -> { currentStream = AudioManager.STREAM_MUSIC; updatePanelStream(seekBar, tvPercentage, imgIcon) }
-                        "🔔 الرنين" -> { currentStream = AudioManager.STREAM_RING; updatePanelStream(seekBar, tvPercentage, imgIcon) }
-                        "⏰ المنبه" -> { currentStream = AudioManager.STREAM_ALARM; updatePanelStream(seekBar, tvPercentage, imgIcon) }
-                    }
-                    true
-                }
-                streamMenu.show()
+                toggleStreamSelector()
             }
 
             windowManager.addView(volumePanelView, params)
@@ -368,14 +353,82 @@ class FloatingService : Service() {
         tvPercentage?.text = "${seekBar?.progress}%"
         
         when (currentStream) {
-            AudioManager.STREAM_RING -> imgIcon?.setImageResource(android.R.drawable.ic_lock_silent_mode_off)
-            AudioManager.STREAM_ALARM -> imgIcon?.setImageResource(android.R.drawable.ic_lock_idle_alarm)
-            else -> imgIcon?.setImageResource(R.drawable.ic_volume_up)
+            AudioManager.STREAM_RING -> imgIcon?.setImageResource(R.drawable.ic_stream_ring)
+            AudioManager.STREAM_ALARM -> imgIcon?.setImageResource(R.drawable.ic_stream_alarm)
+            else -> imgIcon?.setImageResource(R.drawable.ic_stream_media)
         }
     }
 
     // ==========================================
-    // لوحة الحجم الجديدة
+    // لوحة اختيار المسار (الجديدة - بدل الإيموجي)
+    // ==========================================
+    private fun toggleStreamSelector() {
+        if (streamSelectorView != null) {
+            windowManager.removeView(streamSelectorView)
+            streamSelectorView = null
+        } else {
+            showStreamSelector()
+        }
+    }
+
+    private fun showStreamSelector() {
+        try {
+            streamSelectorView = LayoutInflater.from(this).inflate(R.layout.stream_selector, null)
+            
+            streamSelectorView?.scaleX = bubbleScale
+            streamSelectorView?.scaleY = bubbleScale
+            streamSelectorView?.pivotX = 0f
+            streamSelectorView?.pivotY = 0f
+
+            val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            } else {
+                WindowManager.LayoutParams.TYPE_PHONE
+            }
+
+            val params = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                layoutFlag,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                PixelFormat.TRANSLUCENT
+            )
+
+            params.gravity = Gravity.TOP or Gravity.START
+            // اللوحة تظهر فوق لوحة الصوت
+            params.x = bubbleLayoutParams.x
+            params.y = bubbleLayoutParams.y - (240 * bubbleScale).toInt()
+
+            val seekBar = volumePanelView?.findViewById<SeekBar>(R.id.seekBarVolume)
+            val tvPercentage = volumePanelView?.findViewById<TextView>(R.id.tvVolumePercentage)
+            val imgIcon = volumePanelView?.findViewById<ImageView>(R.id.imgVolumeIcon)
+
+            // ربط الخيارات
+            streamSelectorView?.findViewById<LinearLayout>(R.id.streamMedia)?.setOnClickListener {
+                currentStream = AudioManager.STREAM_MUSIC
+                updatePanelStream(seekBar, tvPercentage, imgIcon)
+                toggleStreamSelector()
+            }
+            streamSelectorView?.findViewById<LinearLayout>(R.id.streamRing)?.setOnClickListener {
+                currentStream = AudioManager.STREAM_RING
+                updatePanelStream(seekBar, tvPercentage, imgIcon)
+                toggleStreamSelector()
+            }
+            streamSelectorView?.findViewById<LinearLayout>(R.id.streamAlarm)?.setOnClickListener {
+                currentStream = AudioManager.STREAM_ALARM
+                updatePanelStream(seekBar, tvPercentage, imgIcon)
+                toggleStreamSelector()
+            }
+
+            windowManager.addView(streamSelectorView, params)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Toast.makeText(this, "فشل فتح لوحة المسارات", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // ==========================================
+    // لوحة الحجم
     // ==========================================
     private fun toggleResizePanel() {
         if (resizePanelView != null) {
@@ -425,11 +478,9 @@ class FloatingService : Service() {
             seekBar?.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                     if (fromUser) {
-                        // الحد الأدنى 50% والأقصى 150%
                         val actualSize = if (progress < 50) 50 else progress
                         tvPercentage?.text = "$actualSize%"
                         
-                        // تحديث الحجم فوراً (Live)
                         bubbleScale = actualSize / 100f
                         floatingBubbleView.scaleX = bubbleScale
                         floatingBubbleView.scaleY = bubbleScale
@@ -439,6 +490,9 @@ class FloatingService : Service() {
                         
                         volumePanelView?.scaleX = bubbleScale
                         volumePanelView?.scaleY = bubbleScale
+                        
+                        streamSelectorView?.scaleX = bubbleScale
+                        streamSelectorView?.scaleY = bubbleScale
                         
                         resizePanelView?.scaleX = bubbleScale
                         resizePanelView?.scaleY = bubbleScale
@@ -455,7 +509,6 @@ class FloatingService : Service() {
                 }
                 override fun onStartTrackingTouch(seekBar: SeekBar?) {}
                 override fun onStopTrackingTouch(seekBar: SeekBar?) {
-                    // حفظ الحجم الجديد في الذاكرة
                     prefs.edit().putInt("bubble_scale_int", (bubbleScale * 100).toInt()).apply()
                 }
             })
@@ -467,14 +520,10 @@ class FloatingService : Service() {
         }
     }
 
-    // ==========================================
-    // تحديث إحداثيات اللوحات (صوت وحجم)
-    // ==========================================
     private fun updatePanelCoordinates(params: WindowManager.LayoutParams, panelView: View) {
         val baseX = if (floatingHubView != null && hubLayoutParams != null) hubLayoutParams?.x ?: bubbleLayoutParams.x else bubbleLayoutParams.x
         val baseY = if (floatingHubView != null && hubLayoutParams != null) hubLayoutParams?.y ?: bubbleLayoutParams.y else bubbleLayoutParams.y
         
-        // اللوحة تظهر فوق الشريط أو الفقاعة
         params.x = baseX
         params.y = baseY - (120 * bubbleScale).toInt()
     }
@@ -490,7 +539,12 @@ class FloatingService : Service() {
             updatePanelCoordinates(params, resizePanelView!!)
             windowManager.updateViewLayout(resizePanelView, params)
         }
-        // تحديث مكان الشريط نفسه لو الحجم اتغير
+        if (streamSelectorView != null) {
+            val params = streamSelectorView?.layoutParams as WindowManager.LayoutParams
+            params.x = bubbleLayoutParams.x
+            params.y = bubbleLayoutParams.y - (240 * bubbleScale).toInt()
+            windowManager.updateViewLayout(streamSelectorView, params)
+        }
         if (floatingHubView != null && hubLayoutParams != null) {
             hubLayoutParams?.y = bubbleLayoutParams.y - (120 * bubbleScale).toInt()
             windowManager.updateViewLayout(floatingHubView, hubLayoutParams)
@@ -509,15 +563,10 @@ class FloatingService : Service() {
             if (::floatingBubbleView.isInitialized) {
                 windowManager.removeView(floatingBubbleView)
             }
-            if (floatingHubView != null) {
-                windowManager.removeView(floatingHubView)
-            }
-            if (volumePanelView != null) {
-                windowManager.removeView(volumePanelView)
-            }
-            if (resizePanelView != null) {
-                windowManager.removeView(resizePanelView)
-            }
+            if (floatingHubView != null) windowManager.removeView(floatingHubView)
+            if (volumePanelView != null) windowManager.removeView(volumePanelView)
+            if (resizePanelView != null) windowManager.removeView(resizePanelView)
+            if (streamSelectorView != null) windowManager.removeView(streamSelectorView)
         } catch (e: Exception) {
             e.printStackTrace()
         }
