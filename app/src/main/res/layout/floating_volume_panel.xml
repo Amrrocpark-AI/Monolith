@@ -45,13 +45,13 @@
         android:src="@drawable/ic_more_vert"
         app:tint="#FFFFFF" />
 
-    <!-- *** زرار الإغلاق الجديد *** -->
+    <!-- *** الأيقونة الجديدة *** -->
     <ImageView
         android:id="@+id/btnCloseVolumePanel"
         android:layout_width="24dp"
         android:layout_height="24dp"
         android:layout_marginStart="12dp"
-        android:src="@android:drawable/ic_menu_close_clear_cancel"
+        android:src="@drawable/ic_close_modern"
         app:tint="#FF5555" />
 
 </LinearLayout>
