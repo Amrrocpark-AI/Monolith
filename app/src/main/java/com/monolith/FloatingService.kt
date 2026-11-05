@@ -32,7 +32,7 @@ class FloatingService : Service() {
     private var floatingHubView: View? = null 
     
     private lateinit var bubbleLayoutParams: WindowManager.LayoutParams
-    private var hubLayoutParams: WindowManager.LayoutParams? = null // إحداثيات الشريط الجديدة
+    private var hubLayoutParams: WindowManager.LayoutParams? = null 
 
     // متغيرات لوحة الصوت
     private var volumePanelView: View? = null
@@ -40,17 +40,24 @@ class FloatingService : Service() {
     private var currentStream = AudioManager.STREAM_MUSIC
     private lateinit var vibrator: Vibrator
 
+    // الحجم المخصص
+    private var bubbleScale = 1.0f
+
     override fun onCreate() {
         super.onCreate()
         try {
+            // قراءة الحجم من الإعدادات (القيمة الافتراضية 100%)
+            val prefs = getSharedPreferences("Settings", MODE_PRIVATE)
+            val savedScale = prefs.getInt("bubble_scale_int", 100)
+            bubbleScale = savedScale / 100f
+
             startForegroundService()
             setupFloatingBubble() 
             
             audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
             vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
 
-            getSharedPreferences("Settings", MODE_PRIVATE)
-                .edit().putBoolean("bubble_enabled", true).apply()
+            prefs.edit().putBoolean("bubble_enabled", true).apply()
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -81,6 +88,10 @@ class FloatingService : Service() {
     private fun setupFloatingBubble() {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         floatingBubbleView = LayoutInflater.from(this).inflate(R.layout.layout_floating_bubble, null)
+
+        // تطبيق التكبير على الفقاعة
+        floatingBubbleView.scaleX = bubbleScale
+        floatingBubbleView.scaleY = bubbleScale
 
         val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -154,6 +165,13 @@ class FloatingService : Service() {
         try {
             floatingHubView = LayoutInflater.from(this).inflate(R.layout.floating_hub, null)
             
+            // تطبيق التكبير على الشريط
+            floatingHubView?.scaleX = bubbleScale
+            floatingHubView?.scaleY = bubbleScale
+            // تحديد نقطة التكبير (اليسار العلوي) عشان الشريط ميتحركش من مكانه
+            floatingHubView?.pivotX = 0f
+            floatingHubView?.pivotY = 0f
+
             val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
             } else {
@@ -169,11 +187,9 @@ class FloatingService : Service() {
             )
 
             hubLayoutParams?.gravity = Gravity.TOP or Gravity.START
-            // الشريط يظهر فوق الفقاعة شوية
             hubLayoutParams?.x = bubbleLayoutParams.x
-            hubLayoutParams?.y = bubbleLayoutParams.y - 120 
+            hubLayoutParams?.y = bubbleLayoutParams.y - (120 * bubbleScale).toInt() 
 
-            // ربط أزرار الشريط
             floatingHubView?.findViewById<LinearLayout>(R.id.btnVolume)?.setOnClickListener {
                 toggleVolumePanel()
             }
@@ -193,7 +209,6 @@ class FloatingService : Service() {
                 Toast.makeText(this, "الرسائل", Toast.LENGTH_SHORT).show()
             }
 
-            // *** إضافة خاصية السحب للشريط ***
             floatingHubView?.setOnTouchListener(object : View.OnTouchListener {
                 private var initialX = 0
                 private var initialY = 0
@@ -209,7 +224,7 @@ class FloatingService : Service() {
                             initialTouchX = event.rawX
                             initialTouchY = event.rawY
                             isDraggingHub = false
-                            return false // نرجع false عشان الأزرار تشتغل لو ضغطنا ضغطة عادية
+                            return false
                         }
                         MotionEvent.ACTION_MOVE -> {
                             val deltaX = event.rawX - initialTouchX
@@ -220,12 +235,12 @@ class FloatingService : Service() {
                                 hubLayoutParams?.y = initialY + deltaY.toInt()
                                 hubLayoutParams?.let { windowManager.updateViewLayout(floatingHubView, it) }
                                 updateVolumePanelPosition()
-                                return true // نستهلك الحركة عشان ميتحركش التطبيق اللي وراه
+                                return true
                             }
                             return false
                         }
                         MotionEvent.ACTION_UP -> {
-                            return isDraggingHub // لو كنا بنسحب، نستهلك الحدث
+                            return isDraggingHub
                         }
                     }
                     return false
@@ -262,6 +277,12 @@ class FloatingService : Service() {
         try {
             volumePanelView = LayoutInflater.from(this).inflate(R.layout.floating_volume_panel, null)
             
+            // تطبيق التكبير على لوحة الصوت كمان
+            volumePanelView?.scaleX = bubbleScale
+            volumePanelView?.scaleY = bubbleScale
+            volumePanelView?.pivotX = 0f
+            volumePanelView?.pivotY = 0f
+
             val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
             } else {
@@ -350,16 +371,13 @@ class FloatingService : Service() {
         }
     }
 
-    // تحديث مكان لوحة الصوت بناءً على حركة الشريط (أو الفقاعة)
     private fun updateVolumePanelCoordinates(params: WindowManager.LayoutParams) {
         if (floatingHubView != null && hubLayoutParams != null) {
-            // لو الشريط مفتوح، لوحة الصوت تظهر فوق الشريط
             params.x = hubLayoutParams?.x ?: bubbleLayoutParams.x
-            params.y = (hubLayoutParams?.y ?: bubbleLayoutParams.y) - 120 
+            params.y = (hubLayoutParams?.y ?: bubbleLayoutParams.y) - (120 * bubbleScale).toInt() 
         } else {
-            // لو الشريط مقفول، لوحة الصوت تظهر فوق الفقاعة
             params.x = bubbleLayoutParams.x
-            params.y = bubbleLayoutParams.y - 120 
+            params.y = bubbleLayoutParams.y - (120 * bubbleScale).toInt() 
         }
     }
 
