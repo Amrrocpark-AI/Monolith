@@ -30,8 +30,9 @@ import kotlin.math.abs
 class FloatingService : Service() {
 
     private lateinit var windowManager: WindowManager
-    private lateinit var floatingHubView: View
-    private lateinit var layoutParams: WindowManager.LayoutParams
+    private lateinit var floatingBubbleView: View // الفقاعة الدائرية الأساسية
+    private var floatingHubView: View? = null // الشريط العائم (مخفي افتراضياً)
+    private lateinit var bubbleLayoutParams: WindowManager.LayoutParams
 
     // متغيرات لوحة الصوت
     private var volumePanelView: View? = null
@@ -39,17 +40,11 @@ class FloatingService : Service() {
     private var currentStream = AudioManager.STREAM_MUSIC
     private lateinit var vibrator: Vibrator
 
-    // متغيرات السحب
-    private var initialX = 0
-    private var initialY = 0
-    private var initialTouchX = 0f
-    private var initialTouchY = 0f
-
     override fun onCreate() {
         super.onCreate()
         try {
             startForegroundService()
-            setupFloatingHub()
+            setupFloatingBubble() // نبدأ بالفقاعة
             
             audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
             vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
@@ -83,10 +78,9 @@ class FloatingService : Service() {
         }
     }
 
-    private fun setupFloatingHub() {
+    private fun setupFloatingBubble() {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-        // ربط التصميم الجديد (الشريط العائم)
-        floatingHubView = LayoutInflater.from(this).inflate(R.layout.floating_hub, null)
+        floatingBubbleView = LayoutInflater.from(this).inflate(R.layout.layout_floating_bubble, null)
 
         val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -94,7 +88,7 @@ class FloatingService : Service() {
             WindowManager.LayoutParams.TYPE_PHONE
         }
 
-        layoutParams = WindowManager.LayoutParams(
+        bubbleLayoutParams = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             layoutFlag,
@@ -102,34 +96,51 @@ class FloatingService : Service() {
             PixelFormat.TRANSLUCENT
         )
 
-        layoutParams.gravity = Gravity.TOP or Gravity.START
-        layoutParams.x = 100
-        layoutParams.y = 300
+        bubbleLayoutParams.gravity = Gravity.TOP or Gravity.START
+        bubbleLayoutParams.x = 100
+        bubbleLayoutParams.y = 300
 
-        // إضافة مستمع السحب للشريط بالكامل
-        floatingHubView.setOnTouchListener(object : View.OnTouchListener {
+        val imgBubble = floatingBubbleView.findViewById<ImageView>(R.id.imgBubble)
+        
+        imgBubble.setOnTouchListener(object : View.OnTouchListener {
+            private var initialX = 0
+            private var initialY = 0
+            private var initialTouchX = 0f
+            private var initialTouchY = 0f
+            private var isDragging = false
+
             override fun onTouch(v: View?, event: MotionEvent?): Boolean {
                 when (event?.action) {
                     MotionEvent.ACTION_DOWN -> {
-                        initialX = layoutParams.x
-                        initialY = layoutParams.y
+                        initialX = bubbleLayoutParams.x
+                        initialY = bubbleLayoutParams.y
                         initialTouchX = event.rawX
                         initialTouchY = event.rawY
+                        isDragging = false
                         return true
                     }
                     MotionEvent.ACTION_MOVE -> {
-                        // سحب الشريط
                         val deltaX = event.rawX - initialTouchX
                         val deltaY = event.rawY - initialTouchY
                         if (abs(deltaX) > 10 || abs(deltaY) > 10) {
-                            layoutParams.x = initialX + deltaX.toInt()
-                            layoutParams.y = initialY + deltaY.toInt()
-                            windowManager.updateViewLayout(floatingHubView, layoutParams)
+                            isDragging = true
+                            bubbleLayoutParams.x = initialX + deltaX.toInt()
+                            bubbleLayoutParams.y = initialY + deltaY.toInt()
+                            windowManager.updateViewLayout(floatingBubbleView, bubbleLayoutParams)
                             updateVolumePanelPosition()
-                            return true
+                            hideHub() // إخفاء الشريط أثناء السحب
                         }
+                        return true
                     }
                     MotionEvent.ACTION_UP -> {
+                        if (!isDragging) {
+                            // لو ضغط بدون سحب، نفتح/نقفل الشريط
+                            if (floatingHubView != null) {
+                                hideHub()
+                            } else {
+                                showHub()
+                            }
+                        }
                         return true
                     }
                 }
@@ -137,30 +148,71 @@ class FloatingService : Service() {
             }
         })
 
-        // إعداد أزرار الشريط
-        floatingHubView.findViewById<LinearLayout>(R.id.btnCustomize)?.setOnClickListener {
-            // حالياً: زر التخصيص يفتح لوحة الصوت (ممكن نغيرها بعدين)
-            toggleVolumePanel()
-        }
-
-        floatingHubView.findViewById<LinearLayout>(R.id.btnHome)?.setOnClickListener {
-            Toast.makeText(this, "الرئيسية", Toast.LENGTH_SHORT).show()
-        }
-        floatingHubView.findViewById<LinearLayout>(R.id.btnCode)?.setOnClickListener {
-            Toast.makeText(this, "الأكواد", Toast.LENGTH_SHORT).show()
-        }
-        floatingHubView.findViewById<LinearLayout>(R.id.btnSchedule)?.setOnClickListener {
-            Toast.makeText(this, "الجدولة", Toast.LENGTH_SHORT).show()
-        }
-        floatingHubView.findViewById<LinearLayout>(R.id.btnMessages)?.setOnClickListener {
-            Toast.makeText(this, "الرسائل", Toast.LENGTH_SHORT).show()
-        }
-
-        windowManager.addView(floatingHubView, layoutParams)
+        windowManager.addView(floatingBubbleView, bubbleLayoutParams)
     }
 
     // ==========================================
-    // كود لوحة الصوت (كما هو بدون تغيير)
+    // إظهار وإخفاء الشريط العائم
+    // ==========================================
+    private fun showHub() {
+        try {
+            floatingHubView = LayoutInflater.from(this).inflate(R.layout.floating_hub, null)
+            
+            val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            } else {
+                WindowManager.LayoutParams.TYPE_PHONE
+            }
+
+            val hubParams = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                layoutFlag,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                PixelFormat.TRANSLUCENT
+            )
+
+            hubParams.gravity = Gravity.TOP or Gravity.START
+            // نظهر الشريط فوق الفقاعة شوية
+            hubParams.x = bubbleLayoutParams.x
+            hubParams.y = bubbleLayoutParams.y - 120 
+
+            // ربط أزرار الشريط
+            floatingHubView?.findViewById<LinearLayout>(R.id.btnVolume)?.setOnClickListener {
+                toggleVolumePanel()
+                // hideHub() // لو عايزين الشريط يختفي لما نفتح الصوت
+            }
+            floatingHubView?.findViewById<LinearLayout>(R.id.btnCustomize)?.setOnClickListener {
+                Toast.makeText(this, "شاشة التخصيص (قريباً)", Toast.LENGTH_SHORT).show()
+            }
+            floatingHubView?.findViewById<LinearLayout>(R.id.btnHome)?.setOnClickListener {
+                Toast.makeText(this, "الرئيسية", Toast.LENGTH_SHORT).show()
+            }
+            floatingHubView?.findViewById<LinearLayout>(R.id.btnCode)?.setOnClickListener {
+                Toast.makeText(this, "الأكواد", Toast.LENGTH_SHORT).show()
+            }
+            floatingHubView?.findViewById<LinearLayout>(R.id.btnSchedule)?.setOnClickListener {
+                Toast.makeText(this, "الجدولة", Toast.LENGTH_SHORT).show()
+            }
+            floatingHubView?.findViewById<LinearLayout>(R.id.btnMessages)?.setOnClickListener {
+                Toast.makeText(this, "الرسائل", Toast.LENGTH_SHORT).show()
+            }
+
+            windowManager.addView(floatingHubView, hubParams)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun hideHub() {
+        if (floatingHubView != null) {
+            windowManager.removeView(floatingHubView)
+            floatingHubView = null
+        }
+    }
+
+    // ==========================================
+    // كود لوحة الصوت
     // ==========================================
     private fun toggleVolumePanel() {
         if (volumePanelView != null) {
@@ -264,8 +316,8 @@ class FloatingService : Service() {
     }
 
     private fun updateVolumePanelCoordinates(params: WindowManager.LayoutParams) {
-        params.x = layoutParams.x
-        params.y = layoutParams.y - 120 
+        params.x = bubbleLayoutParams.x
+        params.y = bubbleLayoutParams.y - 120 
     }
 
     private fun updateVolumePanelPosition() {
@@ -280,16 +332,15 @@ class FloatingService : Service() {
         return START_STICKY
     }
 
-    override fun onTaskRemoved(rootIntent: Intent?) {
-        super.onTaskRemoved(rootIntent)
-    }
-
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
         super.onDestroy()
         try {
-            if (::floatingHubView.isInitialized) {
+            if (::floatingBubbleView.isInitialized) {
+                windowManager.removeView(floatingBubbleView)
+            }
+            if (floatingHubView != null) {
                 windowManager.removeView(floatingHubView)
             }
             if (volumePanelView != null) {
