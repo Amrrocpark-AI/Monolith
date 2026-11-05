@@ -15,16 +15,13 @@ class ParticleDissolveView(context: Context) : View(context) {
     private var particles = mutableListOf<Particle>()
     private var animator: ValueAnimator? = null
     private var progress = 0f
+    private var vortexRotation = 0f
     
-    // إعدادات رسم الثقب الأسود
-    private val vortexRotation = floatArrayOf(0f, 0f) // زوايا دوران الأذرع
-    private val cyanGlowPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val purpleGlowPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val voidPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.BLACK }
-    private val eventHorizonPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { 
-        color = Color.CYAN
-        style = Paint.Style.STROKE
-        strokeWidth = 4f
+    // متغيرات لرسم الثقب الأسود من الصورة
+    private var vortexBitmap: Bitmap? = null
+    private val vortexPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        // هذا السطر هو "السحر" الذي يجعل اللون الأسود في الصورة شفافاً
+        xfermode = PorterDuffXfermode(PorterDuff.Mode.SCREEN)
     }
 
     data class Particle(
@@ -37,10 +34,17 @@ class ParticleDissolveView(context: Context) : View(context) {
     )
 
     init {
-        // إعداد تأثير التوهج الحقيقي (Blur)
-        val blurFilter = BlurMaskFilter(50f, BlurMaskFilter.Blur.NORMAL)
-        cyanGlowPaint.maskFilter = blurFilter
-        purpleGlowPaint.maskFilter = blurFilter
+        try {
+            // تحميل الصورة التي قمت برفعها
+            val originalBitmap = BitmapFactory.decodeResource(context.resources, R.drawable.vortex_bg)
+            if (originalBitmap != null) {
+                // تصغير الصورة قليلاً لتناسب حجم الشاشة
+                val targetSize = 800
+                vortexBitmap = Bitmap.createScaledBitmap(originalBitmap, targetSize, (targetSize * originalBitmap.height / originalBitmap.width), true)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     fun startDissolve(bitmap: Bitmap, originX: Float, originY: Float, targetX: Float, targetY: Float, onComplete: () -> Unit) {
@@ -73,8 +77,7 @@ class ParticleDissolveView(context: Context) : View(context) {
             interpolator = AccelerateInterpolator(1.5f)
             addUpdateListener { animation ->
                 progress = animation.animatedValue as Float
-                vortexRotation[0] += 25f
-                vortexRotation[1] -= 35f
+                vortexRotation += 8f // دوران الصورة ببطء لإعطاء إيحاء بالحركة
                 updateParticles(targetX, targetY)
                 invalidate()
             }
@@ -113,81 +116,32 @@ class ParticleDissolveView(context: Context) : View(context) {
         
         val cx = width / 2f
         val cy = height * 0.8f
-        val holeRadius = 120f
 
-        // 1. رسم الهالة الخارجية (النيون السماوي والأرجواني)
-        cyanGlowPaint.color = Color.parseColor("#AA00E5FF")
-        purpleGlowPaint.color = Color.parseColor("#AA8A2BE2")
-        
-        canvas.drawCircle(cx, cy, holeRadius + 80f, cyanGlowPaint)
-        canvas.drawCircle(cx, cy, holeRadius + 40f, purpleGlowPaint)
-
-        // 2. رسم أذرع الدوامة (Spiral Arms) لتبدو 3D
-        val spiralPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = 25f
-            maskFilter = BlurMaskFilter(20f, BlurMaskFilter.Blur.NORMAL)
+        // 1. رسم صورة الثقب الأسود وتدويرها
+        vortexBitmap?.let { bmp ->
+            canvas.save()
+            canvas.translate(cx, cy)
+            canvas.rotate(vortexRotation)
+            // رسم الصورة في المنتصف
+            canvas.drawBitmap(bmp, -bmp.width / 2f, -bmp.height / 2f, vortexPaint)
+            canvas.restore()
         }
 
-        canvas.save()
-        canvas.translate(cx, cy)
-        
-        // الذراع الأولى (بنفسجي)
-        spiralPaint.color = Color.parseColor("#8A2BE2")
-        canvas.save()
-        canvas.rotate(vortexRotation[0])
-        drawSpiral(canvas, holeRadius + 50f, spiralPaint)
-        canvas.restore()
-
-        // الذراع الثانية (سماوي)
-        spiralPaint.color = Color.parseColor("#00E5FF")
-        canvas.save()
-        canvas.rotate(vortexRotation[1])
-        drawSpiral(canvas, holeRadius + 50f, spiralPaint)
-        canvas.restore()
-
-        canvas.restore()
-
-        // 3. رسم مركز الثقب الأسود (الفراغ الحالك)
-        canvas.drawCircle(cx, cy, holeRadius, voidPaint)
-        
-        // 4. رسم أفق الحدث (الخط المضيء حول الثقب)
-        val horizonGlow = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#CC00FFFF")
-            style = Paint.Style.STROKE
-            strokeWidth = 6f
-            maskFilter = BlurMaskFilter(15f, BlurMaskFilter.Blur.SOLID)
-        }
-        canvas.drawCircle(cx, cy, holeRadius, horizonGlow)
-
-        // 5. رسم الجزيئات (الغبار الرقمي)
+        // 2. رسم الجزيئات (الغبار الرقمي) المتطايرة فوق الصورة
         val particlePaint = Paint(Paint.ANTI_ALIAS_FLAG)
         for (p in particles) {
             if (p.radius > 0) {
                 particlePaint.color = p.color
                 particlePaint.alpha = ((1f - progress) * 255).toInt().coerceIn(0, 255)
                 
-                // رسم الجزيئات كخطوط ممتدة باتجاه المركز
                 canvas.save()
                 canvas.translate(p.currentX, p.currentY)
                 val angleToCenter = Math.toDegrees(atan2((cy - p.currentY).toDouble(), (cx - p.currentX).toDouble())).toFloat()
                 canvas.rotate(angleToCenter)
+                // رسم الجزيئات كخطوط ممتدة
                 canvas.drawOval(-p.radius, -p.radius * 3f, p.radius, p.radius * 3f, particlePaint)
                 canvas.restore()
             }
         }
-    }
-
-    // دالة مساعدة لرسم شكل حلزوني
-    private fun drawSpiral(canvas: Canvas, radius: Float, paint: Paint) {
-        val path = Path()
-        path.moveTo(radius, 0f)
-        // رسم منحنى بيزير يلتف نحو الداخل
-        path.cubicTo(
-            radius * 0.5f, radius * 0.5f, 
-            -radius * 0.5f, radius * 0.2f, 
-            radius * 0.2f, 0f
-        )
-        canvas.drawPath(path, paint)
     }
 }
