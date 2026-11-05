@@ -45,7 +45,6 @@
         android:src="@drawable/ic_more_vert"
         app:tint="#FFFFFF" />
 
-    <!-- *** الأيقونة الجديدة *** -->
     <ImageView
         android:id="@+id/btnCloseVolumePanel"
         android:layout_width="24dp"
