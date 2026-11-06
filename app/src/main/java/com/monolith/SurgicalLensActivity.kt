@@ -9,29 +9,23 @@ import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
 import android.view.View
-import android.widget.ImageButton
-import android.widget.ImageView
-import android.widget.SeekBar
-import android.widget.TextView
-import android.widget.Button
-import android.widget.ProgressBar // [إضافة جديدة]
+import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.lifecycle.lifecycleScope // [إضافة جديدة]
-import kotlinx.coroutines.Dispatchers // [إضافة جديدة]
-import kotlinx.coroutines.launch // [إضافة جديدة]
-import kotlinx.coroutines.withContext // [إضافة جديدة]
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.IOException
 
 class SurgicalLensActivity : AppCompatActivity() {
 
     private lateinit var surgicalMaskView: SurgicalMaskView
-    private lateinit var ivImage: ImageView
     private lateinit var seekBar: SeekBar
     private lateinit var tvValue: TextView
     private lateinit var btnEraser: ImageButton
-    private lateinit var btnMagicWand: ImageButton // [إضافة جديدة]
-    private lateinit var progressBar: ProgressBar // [إضافة جديدة]
+    private lateinit var btnMagicWand: ImageButton
+    private lateinit var progressBar: ProgressBar
 
     private val pickImage = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) loadImage(uri)
@@ -42,38 +36,22 @@ class SurgicalLensActivity : AppCompatActivity() {
         setContentView(R.layout.activity_surgical_lens)
 
         surgicalMaskView = findViewById(R.id.surgicalMaskView)
-        ivImage = findViewById(R.id.ivSurgicalImage)
         seekBar = findViewById(R.id.seekBarSurgical)
         tvValue = findViewById(R.id.tvSurgicalValue)
         btnEraser = findViewById(R.id.btnEraserSurgical)
-        btnMagicWand = findViewById(R.id.btnMagicWandSurgical) // [إضافة جديدة]
-        progressBar = findViewById(R.id.progressBarSurgical) // [إضافة جديدة]
+        btnMagicWand = findViewById(R.id.btnMagicWandSurgical)
+        progressBar = findViewById(R.id.progressBarSurgical)
 
-        // 1. إغلاق الشاشة
         findViewById<ImageButton>(R.id.btnCloseSurgical).setOnClickListener { finish() }
+        findViewById<Button>(R.id.btnPickSurgicalImage).setOnClickListener { pickImage.launch("image/*") }
 
-        // 2. اختيار الصورة
-        findViewById<Button>(R.id.btnPickSurgicalImage).setOnClickListener {
-            pickImage.launch("image/*")
-        }
-
-        // 3. التراجع والإعادة
-        findViewById<ImageButton>(R.id.btnUndoSurgical).setOnClickListener {
-            surgicalMaskView.undo()
-        }
-        findViewById<ImageButton>(R.id.btnRedoSurgical).setOnClickListener {
-            surgicalMaskView.redo()
-        }
-
-        // 4. تفعيل الممحاة
         btnEraser.setOnClickListener {
             surgicalMaskView.isEraser = true
-            surgicalMaskView.isMagicWand = false // [إضافة جديدة]
+            surgicalMaskView.isMagicWand = false
             btnEraser.setColorFilter(0xFF26A69A.toInt())
-            btnMagicWand.setColorFilter(0xFFFFFFFF.toInt()) // [إضافة جديدة]
+            btnMagicWand.setColorFilter(0xFFFFFFFF.toInt())
         }
 
-        // [إضافة جديدة] 4.1 تفعيل العصا السحرية
         btnMagicWand.setOnClickListener {
             surgicalMaskView.isMagicWand = true
             surgicalMaskView.isEraser = false
@@ -81,12 +59,11 @@ class SurgicalLensActivity : AppCompatActivity() {
             btnEraser.setColorFilter(0xFFFFFFFF.toInt())
         }
 
-        // 5. التحكم في شريط التمرير (تم تعديله ليدعم العصا السحرية)
         seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
                 tvValue.text = progress.toString()
                 if (surgicalMaskView.isMagicWand) {
-                    surgicalMaskView.tolerance = progress // [إضافة جديدة]
+                    surgicalMaskView.tolerance = progress
                 } else {
                     surgicalMaskView.brushSize = progress.toFloat() * 2f
                 }
@@ -95,12 +72,6 @@ class SurgicalLensActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(sb: SeekBar?) {}
         })
 
-        // 6. أزرار التطبيق والحفظ
-        findViewById<Button>(R.id.btnApplySurgical).setOnClickListener {
-            // سيتم برمجة منطق القص هنا لاحقاً
-        }
-
-        // [إضافة جديدة] 6.1 ربط زر الحفظ بدالة القص
         findViewById<Button>(R.id.btnSaveSurgical).setOnClickListener {
             savePNG()
         }
@@ -110,15 +81,11 @@ class SurgicalLensActivity : AppCompatActivity() {
         try {
             val inputStream = contentResolver.openInputStream(uri)
             val bitmap = BitmapFactory.decodeStream(inputStream)
-            ivImage.visibility = View.GONE // [إضافة جديدة] إخفاء الصورة القديمة لأن المحرك سيرسمها
-            surgicalMaskView.setImageBitmap(bitmap) // [إضافة جديدة] إرسال الصورة للمحرك
             findViewById<Button>(R.id.btnPickSurgicalImage).visibility = View.GONE
-        } catch (e: IOException) {
-            // التطبيق صامت تماماً، لا رسائل خطأ
-        }
+            surgicalMaskView.setImageBitmap(bitmap) // إرسال الصورة للمحرك
+        } catch (e: IOException) { }
     }
 
-    // [إضافة جديدة] دالة القص والحفظ
     private fun savePNG() {
         progressBar.visibility = View.VISIBLE
         lifecycleScope.launch(Dispatchers.Default) {
@@ -133,7 +100,6 @@ class SurgicalLensActivity : AppCompatActivity() {
         }
     }
 
-    // [إضافة جديدة] دالة الحفظ في المعرض
     private fun writeToGallery(bmp: Bitmap) {
         val values = ContentValues().apply {
             put(MediaStore.Images.Media.DISPLAY_NAME, "Monolith_PNG_${System.currentTimeMillis()}.png")
