@@ -6,7 +6,6 @@
     android:layoutDirection="rtl"
     android:orientation="vertical">
 
-    <!-- الشريط العلوي -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="56dp"
@@ -15,157 +14,34 @@
         android:paddingStart="8dp"
         android:paddingEnd="8dp">
 
-        <ImageButton
-            android:id="@+id/btnClose"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="إغلاق"
-            android:src="@drawable/ic_close" />
+        <ImageButton android:id="@+id/btnClose" android:layout_width="44dp" android:layout_height="44dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_close" />
+        <ImageButton android:id="@+id/btnUndo" android:layout_width="44dp" android:layout_height="44dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_undo" />
+        <ImageButton android:id="@+id/btnRedo" android:layout_width="44dp" android:layout_height="44dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_redo" />
+        <ImageButton android:id="@+id/btnEraser" android:layout_width="44dp" android:layout_height="44dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_eraser" />
 
-        <ImageButton
-            android:id="@+id/btnUndo"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="تراجع"
-            android:src="@drawable/ic_undo" />
+        <View android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
 
-        <ImageButton
-            android:id="@+id/btnRedo"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="إعادة"
-            android:src="@drawable/ic_redo" />
-
-        <ImageButton
-            android:id="@+id/btnEraser"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="ممحاة"
-            android:src="@drawable/ic_eraser" />
-
-        <View
-            android:layout_width="0dp"
-            android:layout_height="1dp"
-            android:layout_weight="1" />
-
-        <Button
-            android:id="@+id/btnApply"
-            style="?android:attr/borderlessButtonStyle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minWidth="0dp"
-            android:text="تطبيق"
-            android:textColor="#26A69A" />
-
-        <Button
-            android:id="@+id/btnSave"
-            style="?android:attr/borderlessButtonStyle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minWidth="0dp"
-            android:text="حفظ"
-            android:textColor="#00E5FF" />
+        <Button android:id="@+id/btnApply" style="?android:attr/borderlessButtonStyle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minWidth="0dp" android:text="تطبيق" android:textColor="#26A69A" />
+        <Button android:id="@+id/btnSave" style="?android:attr/borderlessButtonStyle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minWidth="0dp" android:text="حفظ" android:textColor="#00E5FF" />
     </LinearLayout>
 
-    <!-- منطقة الصورة -->
-    <FrameLayout
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1">
-
-        <com.monolith.DispersionView
-            android:id="@+id/dispersionView"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent" />
-
-        <!-- مؤشر التحميل (يظهر أثناء الحفظ أو التطبيق) -->
-        <ProgressBar
-            android:id="@+id/progressBar"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:visibility="gone"
-            android:indeterminateTint="#00E5FF" />
-
-        <Button
-            android:id="@+id/btnPick"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:backgroundTint="#00E5FF"
-            android:text="اختر صورة لتحريرها"
-            android:textColor="#000000" />
+    <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
+        <com.monolith.DispersionView android:id="@+id/dispersionView" android:layout_width="match_parent" android:layout_height="match_parent" />
+        <ProgressBar android:id="@+id/progressBar" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center" android:visibility="gone" android:indeterminateTint="#00E5FF" />
+        <Button android:id="@+id/btnPick" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center" android:backgroundTint="#00E5FF" android:text="اختر صورة لتحريرها" android:textColor="#000000" />
     </FrameLayout>
 
-    <!-- اللوحة السفلية -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="#1E1E1E"
-        android:orientation="vertical">
-
-        <FrameLayout
-            android:layout_width="match_parent"
-            android:layout_height="56dp">
-
-            <LinearLayout
-                android:id="@+id/sliderRow"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingStart="16dp"
-                android:paddingEnd="16dp">
-
-                <TextView
-                    android:id="@+id/tvLabel"
-                    android:layout_width="72dp"
-                    android:layout_height="wrap_content"
-                    android:textColor="#FFFFFF"
-                    android:textSize="12sp" />
-
-                <SeekBar
-                    android:id="@+id/seekBar"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:max="100"
-                    android:progressTint="#FFFFFF"
-                    android:thumbTint="#FFFFFF" />
-
-                <TextView
-                    android:id="@+id/tvValue"
-                    android:layout_width="40dp"
-                    android:layout_height="wrap_content"
-                    android:gravity="end"
-                    android:textColor="#FFFFFF"
-                    android:textSize="12sp" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:background="#1E1E1E" android:orientation="vertical">
+        <FrameLayout android:layout_width="match_parent" android:layout_height="56dp">
+            <LinearLayout android:id="@+id/sliderRow" android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center_vertical" android:orientation="horizontal" android:paddingStart="16dp" android:paddingEnd="16dp">
+                <TextView android:id="@+id/tvLabel" android:layout_width="72dp" android:layout_height="wrap_content" android:textColor="#FFFFFF" android:textSize="12sp" />
+                <SeekBar android:id="@+id/seekBar" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:max="100" android:progressTint="#FFFFFF" android:thumbTint="#FFFFFF" />
+                <TextView android:id="@+id/tvValue" android:layout_width="40dp" android:layout_height="wrap_content" android:gravity="end" android:textColor="#FFFFFF" android:textSize="12sp" />
             </LinearLayout>
-
-            <HorizontalScrollView
-                android:id="@+id/blendScroll"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:scrollbars="none"
-                android:visibility="gone">
-
-                <LinearLayout
-                    android:id="@+id/blendRow"
-                    android:layout_width="wrap_content"
-                    android:layout_height="match_parent"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal" />
+            <HorizontalScrollView android:id="@+id/blendScroll" android:layout_width="match_parent" android:layout_height="match_parent" android:scrollbars="none" android:visibility="gone">
+                <LinearLayout android:id="@+id/blendRow" android:layout_width="wrap_content" android:layout_height="match_parent" android:gravity="center_vertical" android:orientation="horizontal" />
             </HorizontalScrollView>
         </FrameLayout>
-
-        <LinearLayout
-            android:id="@+id/toolsRow"
-            android:layout_width="match_parent"
-            android:layout_height="68dp"
-            android:orientation="horizontal" />
+        <LinearLayout android:id="@+id/toolsRow" android:layout_width="match_parent" android:layout_height="68dp" android:orientation="horizontal" />
     </LinearLayout>
 </LinearLayout>
