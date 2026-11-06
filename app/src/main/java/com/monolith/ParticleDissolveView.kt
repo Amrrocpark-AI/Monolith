@@ -1,146 +1,151 @@
 package com.monolith
 
-import android.animation.Animator
-import android.animation.AnimatorListenerAdapter
-import android.animation.ValueAnimator
 import android.content.Context
-import android.graphics.*
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
 import android.view.View
-import android.view.animation.AccelerateInterpolator
-import kotlin.math.*
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
 import kotlin.random.Random
 
 class ParticleDissolveView(context: Context) : View(context) {
 
-    private var particles = mutableListOf<Particle>()
-    private var animator: ValueAnimator? = null
-    private var progress = 0f
-    private var vortexRotation = 0f
-    
-    // متغيرات لرسم الثقب الأسود من الصورة
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private var isAnimating = false
+    private var isVortexVisible = false
+
+    // إعدادات الثقب الأسود
+    private var vortexCenterX = 0f
+    private var vortexCenterY = 0f
     private var vortexBitmap: Bitmap? = null
-    private val vortexPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        // هذا السطر هو "السحر" الذي يجعل اللون الأسود في الصورة شفافاً
-        xfermode = PorterDuffXfermode(PorterDuff.Mode.SCREEN)
-    }
+
+    private var originalBitmap: Bitmap? = null
+    private var particles = mutableListOf<Particle>()
+    private var startX = 0f
+    private var startY = 0f
+    private var progress = 0f
+    private var onAnimationEnd: (() -> Unit)? = null
 
     data class Particle(
-        var startX: Float, var startY: Float,
+        var x: Float,
+        var y: Float,
+        var vx: Float,
+        var vy: Float,
         var color: Int,
-        var currentX: Float = startX, var currentY: Float = startY,
-        var radius: Float = Random.nextFloat() * 2f + 1f,
-        var angle: Float = Random.nextFloat() * 360f,
-        var speed: Float = Random.nextFloat() * 0.5f + 0.5f
+        var size: Float,
+        var life: Float = 1f
     )
 
     init {
+        // تحميل صورة الدوامة (تأكد من أن الاسم مطابق للموجود في مجلد drawable)
         try {
-            // تحميل الصورة التي قمت برفعها
-            val originalBitmap = BitmapFactory.decodeResource(context.resources, R.drawable.vortex_bg)
-            if (originalBitmap != null) {
-                // تصغير الصورة قليلاً لتناسب حجم الشاشة
-                val targetSize = 800
-                vortexBitmap = Bitmap.createScaledBitmap(originalBitmap, targetSize, (targetSize * originalBitmap.height / originalBitmap.width), true)
-            }
+            vortexBitmap = BitmapFactory.decodeResource(resources, R.drawable.vortex_bg_edited)
         } catch (e: Exception) {
             e.printStackTrace()
         }
     }
 
-    fun startDissolve(bitmap: Bitmap, originX: Float, originY: Float, targetX: Float, targetY: Float, onComplete: () -> Unit) {
-        particles.clear()
-        progress = 0f
+    fun startDissolve(
+        bmp: Bitmap,
+        targetX: Float,
+        targetY: Float,
+        centerX: Float,
+        centerY: Float,
+        onEnd: () -> Unit
+    ) {
+        this.originalBitmap = bmp
+        this.startX = targetX
+        this.startY = targetY
+        this.vortexCenterX = centerX
+        this.vortexCenterY = centerY
+        this.onAnimationEnd = onEnd
+        this.isAnimating = true
+        this.isVortexVisible = true
+        this.progress = 0f
+        this.particles.clear()
 
-        val width = bitmap.width
-        val height = bitmap.height
-        val pixels = IntArray(width * height)
-        bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
-
-        val step = 2 
-        for (y in 0 until height step step) {
-            for (x in 0 until width step step) {
-                val index = y * width + x
-                val color = pixels[index]
-                val alpha = Color.alpha(color)
-                
-                if (alpha > 50) {
-                    val realX = originX + x.toFloat()
-                    val realY = originY + y.toFloat()
-                    val fallSpeed = if (y > height / 2) 1.5f else 0.8f
-                    particles.add(Particle(realX, realY, color, speed = fallSpeed))
-                }
-            }
-        }
-
-        animator = ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = 2000 
-            interpolator = AccelerateInterpolator(1.5f)
-            addUpdateListener { animation ->
-                progress = animation.animatedValue as Float
-                vortexRotation += 8f // دوران الصورة ببطء لإعطاء إيحاء بالحركة
-                updateParticles(targetX, targetY)
-                invalidate()
-            }
-            addListener(object : AnimatorListenerAdapter() {
-                override fun onAnimationEnd(animation: Animator) {
-                    onComplete()
-                }
-            })
-            start()
-        }
+        // استخراج الألوان من الصورة لتكوين الجزيئات
+        generateParticles(bmp, targetX, targetY)
+        invalidate()
     }
 
-    private fun updateParticles(targetX: Float, targetY: Float) {
-        for (p in particles) {
-            val dx = targetX - p.startX
-            val dy = targetY - p.startY
-            val fallProgress = (progress * p.speed).coerceAtMost(1f)
-            val swirlProgress = (progress - 0.2f).coerceAtLeast(0f) / 0.8f
-            
-            val baseX = p.startX + dx * fallProgress
-            val baseY = p.startY + dy * fallProgress
-            
-            val swirlRadius = 150f * (1f - swirlProgress) 
-            p.angle += 30f * p.speed * swirlProgress
-            
-            val rad = Math.toRadians(p.angle.toDouble())
-            p.currentX = baseX + (swirlRadius * cos(rad) * swirlProgress).toFloat()
-            p.currentY = baseY + (swirlRadius * sin(rad) * swirlProgress).toFloat()
-            
-            p.radius = (Random.nextFloat() * 2f + 1f) * (1f - fallProgress * 0.9f)
+    private fun generateParticles(bmp: Bitmap, x: Float, y: Float) {
+        // نأخذ عينة من بكسلات الصورة السفلية لتحويلها لجزيئات
+        val step = 4 // كل 4 بكسل نأخذ لوناً
+        for (i in 0 until bmp.width step step) {
+            for (j in (bmp.height / 2) until bmp.height step step) { // الجزء السفلي فقط
+                val pixel = bmp.getPixel(i, j)
+                if (Color.alpha(pixel) > 50) {
+                    val angle = Random.nextFloat() * Math.PI * 2
+                    val speed = Random.nextFloat() * 5f + 2f
+                    particles.add(
+                        Particle(
+                            x = x + i,
+                            y = y + j,
+                            vx = (cos(angle) * speed).toFloat(),
+                            vy = (sin(angle) * speed).toFloat(),
+                            color = pixel,
+                            size = Random.nextFloat() * 4f + 2f
+                        )
+                    )
+                }
+            }
         }
     }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        
-        val cx = width / 2f
-        val cy = height * 0.8f
 
-        // 1. رسم صورة الثقب الأسود وتدويرها
-        vortexBitmap?.let { bmp ->
-            canvas.save()
-            canvas.translate(cx, cy)
-            canvas.rotate(vortexRotation)
-            // رسم الصورة في المنتصف
-            canvas.drawBitmap(bmp, -bmp.width / 2f, -bmp.height / 2f, vortexPaint)
-            canvas.restore()
+        // 1. رسم الثقب الأسود (الدوامة الثابتة)
+        if (isVortexVisible && vortexBitmap != null) {
+            val left = vortexCenterX - (vortexBitmap!!.width / 2f)
+            val top = vortexCenterY - (vortexBitmap!!.height / 2f)
+            canvas.drawBitmap(vortexBitmap!!, left, top, paint)
         }
 
-        // 2. رسم الجزيئات (الغبار الرقمي) المتطايرة فوق الصورة
-        val particlePaint = Paint(Paint.ANTI_ALIAS_FLAG)
-        for (p in particles) {
-            if (p.radius > 0) {
-                particlePaint.color = p.color
-                particlePaint.alpha = ((1f - progress) * 255).toInt().coerceIn(0, 255)
-                
-                canvas.save()
-                canvas.translate(p.currentX, p.currentY)
-                val angleToCenter = Math.toDegrees(atan2((cy - p.currentY).toDouble(), (cx - p.currentX).toDouble())).toFloat()
-                canvas.rotate(angleToCenter)
-                // رسم الجزيئات كخطوط ممتدة
-                canvas.drawOval(-p.radius, -p.radius * 3f, p.radius, p.radius * 3f, particlePaint)
-                canvas.restore()
+        // 2. رسم الجزيئات المتطايرة (التذويب)
+        if (isAnimating) {
+            progress += 0.02f
+            
+            for (p in particles) {
+                // جذب الجزيئات نحو مركز الثقب
+                val dx = vortexCenterX - p.x
+                val dy = vortexCenterY - p.y
+                val distance = kotlin.math.hypot(dx, dy)
+
+                if (distance > 20f) {
+                    // قوة الجاذبية
+                    p.vx += (dx / distance) * 1.5f
+                    p.vy += (dy / distance) * 1.5f
+                } else {
+                    p.life -= 0.1f // اختفاء عند الوصول للمركز
+                }
+
+                p.x += p.vx
+                p.y += p.vy
+                p.life -= 0.015f // تلاشي تدريجي
+
+                if (p.life > 0) {
+                    paint.color = p.color
+                    paint.alpha = (p.life * 255).toInt()
+                    canvas.drawCircle(p.x, p.y, p.size, paint)
+                }
+            }
+
+            // إزالة الجزيئات الميتة
+            particles.removeAll { it.life <= 0f }
+
+            // التحقق من انتهاء الأنيميشن
+            if (progress >= 1f && particles.isEmpty()) {
+                isAnimating = false
+                isVortexVisible = false
+                onAnimationEnd?.invoke()
+            } else {
+                invalidate() // إعادة الرسم
             }
         }
     }
