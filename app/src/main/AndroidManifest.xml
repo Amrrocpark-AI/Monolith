@@ -20,8 +20,6 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
-    
-    <!-- *** صلاحية التحكم في الصوت *** -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
     <application
@@ -49,7 +47,7 @@
         <activity android:name=".ImageEditorActivity" android:theme="@style/Theme.Monolith" android:screenOrientation="portrait" />
         <activity android:name=".DispersionEditorActivity" android:theme="@style/Theme.Monolith" android:screenOrientation="portrait" />
         
-        <!-- *** السطر الجديد الذي تمت إضافته *** -->
+        <!-- شاشة العدسة الجراحية الجديدة مسجلة هنا -->
         <activity android:name=".SurgicalLensActivity" android:theme="@style/Theme.Monolith" android:screenOrientation="portrait" />
         
         <activity android:name=".CapturePermissionActivity" android:theme="@android:style/Theme.Translucent.NoTitleBar" android:excludeFromRecents="true" android:exported="false" />
