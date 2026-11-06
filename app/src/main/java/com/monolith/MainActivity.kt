@@ -1,101 +1,94 @@
-package com.monolith
+package com.monolith // تأكد أن هذا هو اسم الحزمة الخاص بك
 
-import android.content.Intent
-import android.net.Uri
-import android.os.Build
+import android.animation.AnimatorSet
+import android.animation.ObjectAnimator
 import android.os.Bundle
-import android.os.SystemClock
-import android.provider.Settings
-import android.view.HapticFeedbackConstants
+import android.view.MotionEvent
 import android.view.View
-import android.widget.Toast
+import android.view.animation.AccelerateInterpolator
+import android.widget.ImageView
 import androidx.appcompat.app.AppCompatActivity
-import com.google.android.material.card.MaterialCardView
+import kotlin.math.hypot
 
 class MainActivity : AppCompatActivity() {
 
-    private var lastClickTime = 0L
+    private lateinit var icon: ImageView
+    private lateinit var vortex: ImageView
+
+    // متغيرات لحفظ إحداثيات السحب
+    private var dX = 0f
+    private var dY = 0f
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        // ربط العناصر بالواجهة
-        val btnGalleryTop = findViewById<MaterialCardView>(R.id.btnGalleryTop)
-        val btnAIChat = findViewById<MaterialCardView>(R.id.btnAIChat)
-        val btnImageStudio = findViewById<View>(R.id.btnImageStudio)
-        val btnTextEditor = findViewById<View>(R.id.btnTextEditor)
-        val btnSettings = findViewById<View>(R.id.btnSettings)
+        icon = findViewById(R.id.ivDraggableIcon)
+        vortex = findViewById(R.id.ivVortex)
 
-        // إعداد المستمعين للنقرات العادية
-        btnGalleryTop.setOnClickListener { navigateTo(FileManagerActivity::class.java) }
-        btnAIChat.setOnClickListener { navigateTo(ChatActivity::class.java) }
-        btnImageStudio.setOnClickListener { navigateTo(ImageEditorActivity::class.java) }
-        btnTextEditor.setOnClickListener { 
-            Toast.makeText(this, "محرر النصوص قيد التطوير...", Toast.LENGTH_SHORT).show()
-        }
-        btnSettings.setOnClickListener { navigateTo(SettingsActivity::class.java) }
-
-        // *** إضافة جديدة: تشغيل الفقاعة العائمة بالضغط المطول على زر الدردشة ***
-        btnAIChat.setOnLongClickListener {
-            Toast.makeText(this, "جاري تشغيل الفقاعة العائمة...", Toast.LENGTH_SHORT).show()
-            startFloatingBubble()
-            true
-        }
-    }
-
-    // دالة الانتقال الآمن بين الشاشات
-    private fun navigateTo(targetActivity: Class<*>) {
-        val currentTime = SystemClock.elapsedRealtime()
-        if (currentTime - lastClickTime < 1500) return
-        lastClickTime = currentTime
-
-        window.decorView.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-
-        startActivity(Intent(this, targetActivity))
-        overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
-    }
-
-    // ==========================================
-    // كود تشغيل الفقاعة العائمة (الوحدة الأولى)
-    // ==========================================
-    private fun startFloatingBubble() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (!Settings.canDrawOverlays(this)) {
-                // طلب الصلاحية
-                val intent = Intent(
-                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                    Uri.parse("package:$packageName")
-                )
-                startActivityForResult(intent, 1001)
-                Toast.makeText(this, "يرجى السماح للتطبيق بالرسم فوق التطبيقات الأخرى", Toast.LENGTH_LONG).show()
-            } else {
-                // تشغيل الخدمة
-                val serviceIntent = Intent(this, FloatingService::class.java)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    startForegroundService(serviceIntent)
-                } else {
-                    startService(serviceIntent)
+        // 1. تفعيل السحب والإفلات (Drag & Drop) للأيقونة
+        icon.setOnTouchListener { view, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    dX = view.x - event.rawX
+                    dY = view.y - event.rawY
+                    true
                 }
-                Toast.makeText(this, "تم تشغيل الفقاعة العائمة", Toast.LENGTH_SHORT).show()
+                MotionEvent.ACTION_MOVE -> {
+                    view.animate()
+                        .x(event.rawX + dX)
+                        .y(event.rawY + dY)
+                        .setDuration(0)
+                        .start()
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
+                    // 2. التحقق من المسافة عند إفلات الأيقونة
+                    checkDistanceAndAbsorb()
+                    true
+                }
+                else -> false
             }
-        } else {
-            // لأجهزة أندرويد القديمة
-            val serviceIntent = Intent(this, FloatingService::class.java)
-            startService(serviceIntent)
-            Toast.makeText(this, "تم تشغيل الفقاعة العائمة", Toast.LENGTH_SHORT).show()
         }
     }
 
-    // استقبال نتيجة الصلاحية
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == 1001) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && Settings.canDrawOverlays(this)) {
-                startFloatingBubble() // إعادة المحاولة بعد أخذ الصلاحية
-            } else {
-                Toast.makeText(this, "لم يتم منح الصلاحية، الفقاعة لن تعمل", Toast.LENGTH_SHORT).show()
-            }
+    private fun checkDistanceAndAbsorb() {
+        // حساب مركز الأيقونة
+        val iconCenterX = icon.x + icon.width / 2f
+        val iconCenterY = icon.y + icon.height / 2f
+
+        // حساب مركز الدوامة
+        val vortexCenterX = vortex.x + vortex.width / 2f
+        val vortexCenterY = vortex.y + vortex.height / 2f
+
+        // حساب المسافة بينهما (قانون فيثاغورس)
+        val distance = hypot((iconCenterX - vortexCenterX).toDouble(), (iconCenterY - vortexCenterY).toDouble())
+
+        // إذا كانت المسافة أقل من 250 بكسل (أي أنها قريبة جداً من الدوامة)
+        if (distance < 250) {
+            animateAbsorption(vortexCenterX, vortexCenterY)
         }
+    }
+
+    private fun animateAbsorption(targetX: Float, targetY: Float) {
+        // 3. تأثير الامتصاص والذوبان
+        // أ. تحريك الأيقونة نحو مركز الدوامة
+        val moveToCenter = ObjectAnimator.ofFloat(icon, "x", targetX - icon.width / 2f)
+        val moveToCenterY = ObjectAnimator.ofFloat(icon, "y", targetY - icon.height / 2f)
+
+        // ب. تأثير "الذوبان" (تصغير الطول من الأعلى للأسفل)
+        // نقطة الارتكاز (pivotY) في أعلى الأيقونة، لكي يذوب الجزء السفلي للأعلى
+        icon.pivotY = 0f 
+        val melt = ObjectAnimator.ofFloat(icon, "scaleY", 1f, 0f)
+
+        // ج. التلاشي التدريجي
+        val fadeOut = ObjectAnimator.ofFloat(icon, "alpha", 1f, 0f)
+
+        // دمج الحركات معاً في وقت واحد
+        val animatorSet = AnimatorSet()
+        animatorSet.playTogether(moveToCenter, moveToCenterY, melt, fadeOut)
+        animatorSet.duration = 800 // مدة الحركة (0.8 ثانية)
+        animatorSet.interpolator = AccelerateInterpolator() // تسريع الحركة كلما اقتربت من الثقب
+        animatorSet.start()
     }
 }
