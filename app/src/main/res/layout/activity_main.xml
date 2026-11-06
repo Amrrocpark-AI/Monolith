@@ -20,7 +20,7 @@
         android:id="@+id/ivDraggableIcon"
         android:layout_width="100dp"
         android:layout_height="100dp"
-        android:src="@drawable/ic_launcher_foreground"
+        android:src="@drawable/ic_monolith_new"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
