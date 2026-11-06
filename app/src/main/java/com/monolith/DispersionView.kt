@@ -197,7 +197,8 @@ class DispersionView @JvmOverloads constructor(
                 strokeJoin = Paint.Join.ROUND
                 strokeWidth = sw
                 color = Color.BLACK
-                maskFilter = BlurMaskFilter(max(1f, sw * 0.18f), BlurMaskFilter.Blur.NORMAL)
+                // [تحديث] جعل الفرشاة ناعمة جداً (Soft Brush) مثل Picsart
+                maskFilter = BlurMaskFilter(max(1f, sw * 0.65f), BlurMaskFilter.Blur.NORMAL)
                 if (s.erase) xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_OUT)
             }
             val path = Path()
@@ -259,7 +260,7 @@ class DispersionView @JvmOverloads constructor(
         val rowBytes = mask.rowBytes
         val mb = ByteArray(rowBytes * h)
         mask.copyPixelsToBuffer(ByteBuffer.wrap(mb))
-        mask.recycle() // تحسين الذاكرة: تدمير القناع فوراً
+        mask.recycle()
 
         val cell = max(w / 180f, (0.006f + values[TOOL_SIZE] / 100f * 0.04f) * w)
         val cols = ceil(w / cell).toInt()
@@ -302,7 +303,8 @@ class DispersionView @JvmOverloads constructor(
 
             for (k in 0..1) {
                 val s = row * 2 + k
-                val prob = (0.12f + 0.88f * t.pow(0.9f)) * m
+                // [تحديث] التلاشي التدريجي (Gradient Fade) لجزيئات الأطراف
+                val prob = (0.12f + 0.88f * t.pow(0.9f)) * (m * m)
                 if (hash(s, col, 1) > prob) continue
 
                 if (diag) {
