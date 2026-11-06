@@ -7,7 +7,6 @@
     android:layoutDirection="rtl"
     android:orientation="vertical">
 
-    <!-- الشريط العلوي -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="56dp"
@@ -16,85 +15,29 @@
         android:paddingStart="8dp"
         android:paddingEnd="8dp">
 
-        <ImageButton
-            android:id="@+id/btnCloseSurgical"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@drawable/ic_close" />
+        <ImageButton android:id="@+id/btnCloseSurgical" android:layout_width="44dp" android:layout_height="44dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_close" />
+        <ImageButton android:id="@+id/btnUndoSurgical" android:layout_width="44dp" android:layout_height="44dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_undo" />
+        <ImageButton android:id="@+id/btnRedoSurgical" android:layout_width="44dp" android:layout_height="44dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_redo" />
+        <ImageButton android:id="@+id/btnEraserSurgical" android:layout_width="44dp" android:layout_height="44dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_eraser" />
+        <ImageButton android:id="@+id/btnMagicWandSurgical" android:layout_width="44dp" android:layout_height="44dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@android:drawable/ic_menu_view" app:tint="#FFFFFF" />
 
-        <ImageButton
-            android:id="@+id/btnUndoSurgical"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@drawable/ic_undo" />
+        <View android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
 
-        <ImageButton
-            android:id="@+id/btnRedoSurgical"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@drawable/ic_redo" />
-
-        <ImageButton
-            android:id="@+id/btnEraserSurgical"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@drawable/ic_eraser" />
-            
-        <!-- [إضافة] زر العصا السحرية -->
-        <ImageButton
-            android:id="@+id/btnMagicWandSurgical"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_menu_view" 
-            app:tint="#FFFFFF" />
-
-        <View
-            android:layout_width="0dp"
-            android:layout_height="1dp"
-            android:layout_weight="1" />
-
-        <Button
-            android:id="@+id/btnApplySurgical"
-            style="?android:attr/borderlessButtonStyle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minWidth="0dp"
-            android:text="تطبيق"
-            android:textColor="#26A69A" />
-
-        <Button
-            android:id="@+id/btnSaveSurgical"
-            style="?android:attr/borderlessButtonStyle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minWidth="0dp"
-            android:text="حفظ"
-            android:textColor="#00E5FF" />
+        <Button android:id="@+id/btnApplySurgical" style="?android:attr/borderlessButtonStyle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minWidth="0dp" android:text="تطبيق" android:textColor="#26A69A" />
+        <Button android:id="@+id/btnSaveSurgical" style="?android:attr/borderlessButtonStyle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minWidth="0dp" android:text="حفظ" android:textColor="#00E5FF" />
     </LinearLayout>
 
-    <!-- منطقة الصورة والقناع -->
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1">
 
-        <ImageView
-            android:id="@+id/ivSurgicalImage"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:scaleType="fitCenter" />
-
+        <!-- المحرك الوحيد الذي سيعرض الصورة ويرسم عليها -->
         <com.monolith.SurgicalMaskView
             android:id="@+id/surgicalMaskView"
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
 
-        <!-- [إضافة] مؤشر التحميل أثناء الحفظ -->
         <ProgressBar
             android:id="@+id/progressBarSurgical"
             android:layout_width="wrap_content"
@@ -113,7 +56,6 @@
             android:textColor="#000000" />
     </FrameLayout>
 
-    <!-- اللوحة السفلية -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -128,38 +70,9 @@
             android:paddingStart="16dp"
             android:paddingEnd="16dp">
 
-            <TextView
-                android:id="@+id/tvSurgicalLabel"
-                android:layout_width="72dp"
-                android:layout_height="wrap_content"
-                android:text="الحجم"
-                android:textColor="#FFFFFF"
-                android:textSize="12sp" />
-
-            <SeekBar
-                android:id="@+id/seekBarSurgical"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:max="100"
-                android:progress="50"
-                android:progressTint="#FFFFFF"
-                android:thumbTint="#FFFFFF" />
-
-            <TextView
-                android:id="@+id/tvSurgicalValue"
-                android:layout_width="40dp"
-                android:layout_height="wrap_content"
-                android:gravity="end"
-                android:text="50"
-                android:textColor="#FFFFFF"
-                android:textSize="12sp" />
+            <TextView android:id="@+id/tvSurgicalLabel" android:layout_width="72dp" android:layout_height="wrap_content" android:text="الحجم" android:textColor="#FFFFFF" android:textSize="12sp" />
+            <SeekBar android:id="@+id/seekBarSurgical" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:max="100" android:progress="50" android:progressTint="#FFFFFF" android:thumbTint="#FFFFFF" />
+            <TextView android:id="@+id/tvSurgicalValue" android:layout_width="40dp" android:layout_height="wrap_content" android:gravity="end" android:text="50" android:textColor="#FFFFFF" android:textSize="12sp" />
         </LinearLayout>
-
-        <LinearLayout
-            android:id="@+id/surgicalToolsRow"
-            android:layout_width="match_parent"
-            android:layout_height="68dp"
-            android:orientation="horizontal" />
     </LinearLayout>
 </LinearLayout>
