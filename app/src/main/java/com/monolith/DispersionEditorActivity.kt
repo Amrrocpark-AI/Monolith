@@ -122,7 +122,6 @@ class DispersionEditorActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(sb: SeekBar) {}
         })
 
-        // معالجة زر الرجوع في الهاتف
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 checkUnsavedAndFinish()
