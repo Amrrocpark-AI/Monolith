@@ -17,7 +17,8 @@ class SurgicalMaskView @JvmOverloads constructor(
     
     private val maskPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val eraserPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    
+    private var currentPath: Path? = null
+
     var isDrawingEnabled = false
     var isEraser = false
     var isMagicWand = false
@@ -35,7 +36,7 @@ class SurgicalMaskView @JvmOverloads constructor(
         maskPaint.style = Paint.Style.STROKE
         maskPaint.strokeCap = Paint.Cap.ROUND
         maskPaint.strokeJoin = Paint.Join.ROUND
-        maskPaint.color = Color.WHITE
+        maskPaint.color = Color.WHITE // نرسم باللون الأبيض على القناع المخفي
 
         eraserPaint.style = Paint.Style.STROKE
         eraserPaint.strokeCap = Paint.Cap.ROUND
@@ -51,31 +52,50 @@ class SurgicalMaskView @JvmOverloads constructor(
         invalidate()
     }
 
+    fun hasMask(): Boolean {
+        // التحقق من وجود أي بكسل غير شفاف في القناع
+        val pixels = IntArray(maskBitmap?.width ?: 0 * maskBitmap?.height ?: 0)
+        maskBitmap?.getPixels(pixels, 0, maskBitmap!!.width, 0, 0, maskBitmap!!.width, maskBitmap!!.height)
+        return pixels.any { it != Color.TRANSPARENT }
+    }
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         val src = sourceBitmap ?: return
         val mask = maskBitmap ?: return
 
         val rect = RectF(0f, 0f, width.toFloat(), height.toFloat())
-        
-        // 1. رسم الصورة
+
+        // 1. رسم خلفية الشطرنج (لرؤية الشفافية)
+        drawCheckerboard(canvas, rect)
+
+        // 2. رسم الصورة الأصلية
         canvas.drawBitmap(src, null, rect, null)
 
-        // 2. رسم القناع الأحمر
+        // 3. رسم القناع (اللون الأحمر)
         val displayMask = Bitmap.createBitmap(mask.width, mask.height, Bitmap.Config.ARGB_8888)
         val c = Canvas(displayMask)
         c.drawBitmap(mask, 0f, 0f, null)
-        
         val redPaint = Paint()
         redPaint.xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN)
         redPaint.color = Color.parseColor("#80FF0000")
         c.drawRect(0f, 0f, mask.width.toFloat(), mask.height.toFloat(), redPaint)
-
         canvas.drawBitmap(displayMask, null, rect, null)
     }
 
+    private fun drawCheckerboard(canvas: Canvas, rect: RectF) {
+        val paint = Paint()
+        val size = 40f
+        for (i in 0..(rect.width() / size).toInt()) {
+            for (j in 0..(rect.height() / size).toInt()) {
+                paint.color = if ((i + j) % 2 == 0) Color.parseColor("#CCCCCC") else Color.WHITE
+                canvas.drawRect(rect.left + i * size, rect.top + j * size, rect.left + (i + 1) * size, rect.top + (j + 1) * size, paint)
+            }
+        }
+    }
+
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        if (!isDrawingEnabled) return false // [حماية] يمنع الرسم قبل التحميل
+        if (!isDrawingEnabled) return false
         
         val src = sourceBitmap ?: return false
         val scaleX = src.width.toFloat() / width.toFloat()
@@ -89,15 +109,24 @@ class SurgicalMaskView @JvmOverloads constructor(
                     applyMagicWand(x.toInt(), y.toInt())
                     return true
                 }
+                currentPath = Path()
+                currentPath?.moveTo(x, y)
+                // رسم نقطة البداية
                 val p = if (isEraser) eraserPaint else maskPaint
                 p.strokeWidth = brushSize * scaleX
                 canvasMask.drawPoint(x, y, p)
             }
             MotionEvent.ACTION_MOVE -> {
                 if (isMagicWand) return true
+                currentPath?.lineTo(x, y)
                 val p = if (isEraser) eraserPaint else maskPaint
                 p.strokeWidth = brushSize * scaleX
-                canvasMask.drawPoint(x, y, p)
+                canvasMask.drawPath(currentPath!!, p)
+                currentPath = Path()
+                currentPath?.moveTo(x, y)
+            }
+            MotionEvent.ACTION_UP -> {
+                currentPath = null
             }
         }
         invalidate()
@@ -116,6 +145,9 @@ class SurgicalMaskView @JvmOverloads constructor(
         val visited = BooleanArray(width * height)
         queue.add(Point(startX, startY))
         
+        val paint = Paint()
+        paint.color = Color.WHITE
+
         while (queue.isNotEmpty()) {
             val p = queue.removeFirst()
             val index = p.y * width + p.x
@@ -139,18 +171,36 @@ class SurgicalMaskView @JvmOverloads constructor(
         return Math.sqrt(((r1 - r2) * (r1 - r2) + (g1 - g2) * (g1 - g2) + (b1 - b2) * (b1 - b2)).toDouble()).toInt()
     }
 
+    // دالة تطبيق القص فوراً داخل الشاشة
+    fun applyClip() {
+        val src = sourceBitmap ?: return
+        val mask = maskBitmap ?: return
+        val result = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(result)
+        canvas.drawBitmap(src, 0f, 0f, null)
+        
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
+        canvas.drawBitmap(mask, 0f, 0f, paint)
+        
+        // تحديث الصورة الأصلية لتصبح هي النتيجة المقصوصة
+        sourceBitmap = result
+        // مسح القناع
+        maskBitmap?.eraseColor(Color.TRANSPARENT)
+        invalidate()
+    }
+
+    // دالة استخراج النتيجة للحفظ
     fun exportPNG(): Bitmap? {
         val src = sourceBitmap ?: return null
         val mask = maskBitmap ?: return null
         val result = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(result)
         canvas.drawBitmap(src, 0f, 0f, null)
+        
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
         canvas.drawBitmap(mask, 0f, 0f, paint)
         return result
     }
-
-    fun undo() { /* سيتم إضافتها لاحقاً */ }
-    fun redo() { /* سيتم إضافتها لاحقاً */ }
 }
