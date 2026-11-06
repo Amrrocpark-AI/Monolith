@@ -11,40 +11,17 @@ class SurgicalMaskView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null
 ) : View(context, attrs) {
 
-    private val paths = ArrayList<Path>()
-    private val redoPaths = ArrayList<Path>()
-    private var currentPath: Path? = null
-
-    // إضافات جديدة للعصا السحرية والقناع
     private var sourceBitmap: Bitmap? = null
     private var maskBitmap: Bitmap? = null
     private val canvasMask = Canvas()
-    var isMagicWand = false
-    var tolerance = 30 // قيمة التسامح اللوني للعصا السحرية
-
-    // فرشاة التحديد (أحمر شفاف)
-    private val maskPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeCap = Paint.Cap.ROUND
-        strokeJoin = Paint.Join.ROUND
-        color = Color.parseColor("#80FF0000") // لون أحمر شفاف 50%
-        strokeWidth = 50f
-    }
-
-    // الممحاة (تمسح الخطوط الحمراء)
-    private val eraserPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeCap = Paint.Cap.ROUND
-        strokeJoin = Paint.Join.ROUND
-        strokeWidth = 50f
-        xfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR)
-    }
-
+    
+    private val maskPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val eraserPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    
+    var isDrawingEnabled = false
     var isEraser = false
-        set(value) {
-            field = value
-            invalidate()
-        }
+    var isMagicWand = false
+    var tolerance = 30 
 
     var brushSize = 50f
         set(value) {
@@ -54,81 +31,79 @@ class SurgicalMaskView @JvmOverloads constructor(
             invalidate()
         }
 
-    fun updateHardness(hardness: Float) {
-        val blurRadius = (100f - hardness) / 100f * (brushSize / 2f)
-        if (blurRadius > 0f) {
-            maskPaint.maskFilter = BlurMaskFilter(blurRadius, BlurMaskFilter.Blur.NORMAL)
-        } else {
-            maskPaint.maskFilter = null
-        }
-        invalidate()
+    init {
+        maskPaint.style = Paint.Style.STROKE
+        maskPaint.strokeCap = Paint.Cap.ROUND
+        maskPaint.strokeJoin = Paint.Join.ROUND
+        maskPaint.color = Color.WHITE
+
+        eraserPaint.style = Paint.Style.STROKE
+        eraserPaint.strokeCap = Paint.Cap.ROUND
+        eraserPaint.strokeJoin = Paint.Join.ROUND
+        eraserPaint.xfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR)
     }
 
-    // دالة إضافية: تهيئة القناع عند تحميل الصورة
     fun setImageBitmap(bitmap: Bitmap) {
         sourceBitmap = bitmap
         maskBitmap = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
         canvasMask.setBitmap(maskBitmap!!)
+        isDrawingEnabled = true
         invalidate()
     }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+        val src = sourceBitmap ?: return
+        val mask = maskBitmap ?: return
+
+        val rect = RectF(0f, 0f, width.toFloat(), height.toFloat())
         
-        canvas.saveLayer(0f, 0f, width.toFloat(), height.toFloat(), null)
+        // 1. رسم الصورة
+        canvas.drawBitmap(src, null, rect, null)
 
-        // رسم الخطوط العادية
-        for (path in paths) {
-            canvas.drawPath(path, if (isEraser) eraserPaint else maskPaint)
-        }
+        // 2. رسم القناع الأحمر
+        val displayMask = Bitmap.createBitmap(mask.width, mask.height, Bitmap.Config.ARGB_8888)
+        val c = Canvas(displayMask)
+        c.drawBitmap(mask, 0f, 0f, null)
         
-        currentPath?.let {
-            canvas.drawPath(it, if (isEraser) eraserPaint else maskPaint)
-        }
+        val redPaint = Paint()
+        redPaint.xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN)
+        redPaint.color = Color.parseColor("#80FF0000")
+        c.drawRect(0f, 0f, mask.width.toFloat(), mask.height.toFloat(), redPaint)
 
-        // رسم القناع البكسل (للعصا السحرية) إذا وجد
-        maskBitmap?.let { mask ->
-            val displayMask = Bitmap.createBitmap(mask.width, mask.height, Bitmap.Config.ARGB_8888)
-            val c = Canvas(displayMask)
-            c.drawBitmap(mask, 0f, 0f, null)
-            val redPaint = Paint()
-            redPaint.xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN)
-            redPaint.color = Color.parseColor("#80FF0000")
-            c.drawRect(0f, 0f, mask.width.toFloat(), mask.height.toFloat(), redPaint)
-            canvas.drawBitmap(displayMask, null, RectF(0f, 0f, width.toFloat(), height.toFloat()), null)
-        }
-
-        canvas.restore()
+        canvas.drawBitmap(displayMask, null, rect, null)
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        if (isMagicWand && event.action == MotionEvent.ACTION_DOWN) {
-            val src = sourceBitmap ?: return false
-            val scaleX = src.width.toFloat() / width.toFloat()
-            val scaleY = src.height.toFloat() / height.toFloat()
-            applyMagicWand((event.x * scaleX).toInt(), (event.y * scaleY).toInt())
-            return true
-        }
+        if (!isDrawingEnabled) return false // [حماية] يمنع الرسم قبل التحميل
+        
+        val src = sourceBitmap ?: return false
+        val scaleX = src.width.toFloat() / width.toFloat()
+        val scaleY = src.height.toFloat() / height.toFloat()
+        val x = event.x * scaleX
+        val y = event.y * scaleY
 
         when (event.action) {
             MotionEvent.ACTION_DOWN -> {
-                redoPaths.clear()
-                currentPath = Path()
-                currentPath?.moveTo(event.x, event.y)
+                if (isMagicWand) {
+                    applyMagicWand(x.toInt(), y.toInt())
+                    return true
+                }
+                val p = if (isEraser) eraserPaint else maskPaint
+                p.strokeWidth = brushSize * scaleX
+                canvasMask.drawPoint(x, y, p)
             }
             MotionEvent.ACTION_MOVE -> {
-                currentPath?.lineTo(event.x, event.y)
-            }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                currentPath?.let { paths.add(it) }
-                currentPath = null
+                if (isMagicWand) return true
+                val p = if (isEraser) eraserPaint else maskPaint
+                p.strokeWidth = brushSize * scaleX
+                canvasMask.drawPoint(x, y, p)
             }
         }
         invalidate()
         return true
     }
 
-    // دالة إضافية: العصا السحرية
     private fun applyMagicWand(startX: Int, startY: Int) {
         val src = sourceBitmap ?: return
         val mask = maskBitmap ?: return
@@ -164,7 +139,6 @@ class SurgicalMaskView @JvmOverloads constructor(
         return Math.sqrt(((r1 - r2) * (r1 - r2) + (g1 - g2) * (g1 - g2) + (b1 - b2) * (b1 - b2)).toDouble()).toInt()
     }
 
-    // دالة إضافية: تصدير PNG
     fun exportPNG(): Bitmap? {
         val src = sourceBitmap ?: return null
         val mask = maskBitmap ?: return null
@@ -177,25 +151,6 @@ class SurgicalMaskView @JvmOverloads constructor(
         return result
     }
 
-    fun undo() {
-        if (paths.isNotEmpty()) {
-            redoPaths.add(paths.removeAt(paths.size - 1))
-            invalidate()
-        }
-    }
-
-    fun redo() {
-        if (redoPaths.isNotEmpty()) {
-            paths.add(redoPaths.removeAt(redoPaths.size - 1))
-            invalidate()
-        }
-    }
-
-    fun clearAll() {
-        paths.clear()
-        redoPaths.clear()
-        currentPath = null
-        maskBitmap?.eraseColor(Color.TRANSPARENT) // إضافة مسح القناع
-        invalidate()
-    }
+    fun undo() { /* سيتم إضافتها لاحقاً */ }
+    fun redo() { /* سيتم إضافتها لاحقاً */ }
 }
