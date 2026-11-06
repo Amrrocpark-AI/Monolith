@@ -29,12 +29,12 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // 3. بطاقة محرر الصور (الفوتوشوب)
+        // 3. بطاقة محرر الصور (تم تحويلها مؤقتاً لتفتح العدسة الجراحية للتجربة)
         findViewById<MaterialCardView>(R.id.cardImageEditor).setOnClickListener {
             try {
-                startActivity(Intent(this, ImageEditorActivity::class.java))
+                startActivity(Intent(this, SurgicalLensActivity::class.java))
             } catch (e: Exception) {
-                Toast.makeText(this, "شاشة محرر الصور غير متوفرة", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "شاشة العدسة الجراحية غير متوفرة", Toast.LENGTH_SHORT).show()
             }
         }
 
