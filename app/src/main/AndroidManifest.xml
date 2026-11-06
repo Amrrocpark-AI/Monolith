@@ -48,6 +48,10 @@
         <activity android:name=".ImageViewerActivity" android:theme="@style/Theme.AppCompat.NoActionBar" />
         <activity android:name=".ImageEditorActivity" android:theme="@style/Theme.Monolith" android:screenOrientation="portrait" />
         <activity android:name=".DispersionEditorActivity" android:theme="@style/Theme.Monolith" android:screenOrientation="portrait" />
+        
+        <!-- *** السطر الجديد الذي تمت إضافته *** -->
+        <activity android:name=".SurgicalLensActivity" android:theme="@style/Theme.Monolith" android:screenOrientation="portrait" />
+        
         <activity android:name=".CapturePermissionActivity" android:theme="@android:style/Theme.Translucent.NoTitleBar" android:excludeFromRecents="true" android:exported="false" />
 
         <service android:name=".PlaybackService" android:foregroundServiceType="mediaPlayback" android:exported="true">
