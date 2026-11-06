@@ -59,7 +59,6 @@ class SettingsActivity : AppCompatActivity() {
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
         )
 
-        // 1. المحرك الذكي
         val providerSpinner = findViewById<Spinner>(R.id.providerSpinner)
         val etApiKey = findViewById<EditText>(R.id.etApiKey)
         val btnTestAndSave = findViewById<Button>(R.id.btnTestAndSave)
@@ -109,7 +108,6 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
-        // 2. تخصيص شريط التحديد
         val rgNeonColor = findViewById<RadioGroup>(R.id.rgNeonColor)
         val rgFrameStyle = findViewById<RadioGroup>(R.id.rgFrameStyle)
         val btnSaveSelectionStyle = findViewById<Button>(R.id.btnSaveSelectionStyle)
@@ -140,7 +138,6 @@ class SettingsActivity : AppCompatActivity() {
             Toast.makeText(this, "تم حفظ تخصيص شريط التحديد", Toast.LENGTH_SHORT).show()
         }
 
-        // 3. إعدادات المظهر
         val spinner = findViewById<Spinner>(R.id.languageSpinner)
         val btnApplyLanguage = findViewById<Button>(R.id.btnApplyLanguage)
         val backgroundGroup = findViewById<RadioGroup>(R.id.backgroundGroup)
@@ -219,12 +216,10 @@ class SettingsActivity : AppCompatActivity() {
             } catch (e: Exception) {}
         }
 
-        // 4. الأدوات السيادية
         switchFloatingBubble = findViewById(R.id.switchFloatingBubble)
         val btnAllowAutoStart = findViewById<Button>(R.id.btnAllowAutoStart)
         val btnEnableVolumeService = findViewById<Button>(R.id.btnEnableVolumeService)
         
-        // *** التحكم في حجم الأيقونة ***
         val seekBarBubbleSize = findViewById<SeekBar>(R.id.seekBarBubbleSize)
         val tvBubbleSizeValue = findViewById<TextView>(R.id.tvBubbleSizeValue)
         
@@ -234,7 +229,6 @@ class SettingsActivity : AppCompatActivity() {
 
         seekBarBubbleSize.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                // الحد الأدنى 50%، والأقصى 150%
                 val actualSize = if (progress < 50) 50 else progress
                 tvBubbleSizeValue.text = "$actualSize%"
             }
@@ -264,7 +258,9 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
-        btnAllowAutoStart.setOnClickListener { OemUtils.openAutoStartSettings(this) }
+        btnAllowAutoStart.setOnClickListener { 
+            Toast.makeText(this, "يرجى السماح بالتشغيل التلقائي من إعدادات الهاتف", Toast.LENGTH_LONG).show() 
+        }
 
         btnEnableVolumeService.setOnClickListener {
             Toast.makeText(this, "ابحث عن 'مونوليث' في القائمة وفعّل الخدمة", Toast.LENGTH_LONG).show()
@@ -292,7 +288,6 @@ class SettingsActivity : AppCompatActivity() {
     private fun stopFloatingService() {
         getSharedPreferences("Settings", MODE_PRIVATE).edit().putBoolean("bubble_enabled", false).apply()
         stopService(Intent(this, FloatingService::class.java))
-        stopService(Intent(this, ScreenCaptureService::class.java))
         Toast.makeText(this, "تم إيقاف الفقاعة العائمة", Toast.LENGTH_SHORT).show()
     }
 
