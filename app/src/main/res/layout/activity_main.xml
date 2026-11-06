@@ -1,198 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout 
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#050505">
+    android:background="#121212"> <!-- خلفية التطبيق الداكنة -->
 
-    <!-- 1. الشريط العلوي المتناسق -->
-    <LinearLayout
-        android:id="@+id/topBar"
-        android:layout_width="match_parent"
-        android:layout_height="80dp"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:paddingHorizontal="16dp"
-        app:layout_constraintTop_toTopOf="parent">
-
-        <!-- زر المعرض (يسار) - أصبح دائرة مطابقة لليمين -->
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/btnGalleryTop"
-            android:layout_width="56dp"
-            android:layout_height="56dp"
-            app:cardCornerRadius="28dp"
-            app:cardBackgroundColor="#111111"
-            app:strokeColor="#00D4FF"
-            app:strokeWidth="1dp"
-            app:rippleColor="#3300D4FF">
-            <ImageView
-                android:layout_width="36dp"
-                android:layout_height="36dp"
-                android:layout_gravity="center"
-                android:src="@drawable/ic_folder_top"
-                app:tint="#00D4FF" />
-        </com.google.android.material.card.MaterialCardView>
-
-        <!-- اسم التطبيق (وسط) -->
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="M O N O L I T H"
-            android:textColor="#00D4FF"
-            android:textSize="20sp"
-            android:textStyle="bold"
-            android:letterSpacing="0.2"
-            android:gravity="center"/>
-
-        <!-- زر الدردشة الذكية (يمين) - تم تكبيره ليتطابق مع اليسار -->
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/btnAIChat"
-            android:layout_width="56dp"
-            android:layout_height="56dp"
-            app:cardCornerRadius="28dp"
-            app:cardBackgroundColor="#111111"
-            app:strokeColor="#00D4FF"
-            app:strokeWidth="1dp"
-            app:rippleColor="#3300D4FF">
-            <ImageView
-                android:layout_width="36dp"
-                android:layout_height="36dp"
-                android:layout_gravity="center"
-                android:src="@android:drawable/ic_menu_edit"
-                app:tint="#00D4FF" />
-        </com.google.android.material.card.MaterialCardView>
-
-    </LinearLayout>
-
-    <!-- 2. شبكة الأدوات (المركز) -->
-    <GridLayout
-        android:id="@+id/toolsGrid"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:columnCount="2"
-        android:rowCount="2"
-        android:alignmentMode="alignMargins"
-        android:useDefaultMargins="true"
-        app:layout_constraintTop_toBottomOf="@+id/topBar"
+    <!-- 1. صورة الدوامة الثابتة -->
+    <ImageView
+        android:id="@+id/ivVortex"
+        android:layout_width="300dp"
+        android:layout_height="300dp"
+        android:src="@drawable/vortex_bg_edited" 
         app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+        android:layout_marginBottom="50dp"/>
 
-        <!-- 1. استوديو الصور (فوتوشوب) -->
-        <LinearLayout
-            android:id="@+id/btnImageStudio"
-            android:layout_width="140dp"
-            android:layout_height="140dp"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:clickable="true"
-            android:focusable="true"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:layout_margin="16dp">
-
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="90dp"
-                android:layout_height="90dp"
-                app:cardCornerRadius="45dp"
-                app:cardBackgroundColor="#151515"
-                app:strokeColor="#00D4FF"
-                app:strokeWidth="1dp"
-                app:rippleColor="#3300D4FF"
-                app:cardElevation="8dp">
-                <ImageView
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:layout_gravity="center"
-                    android:src="@android:drawable/ic_menu_crop"
-                    app:tint="#00D4FF" />
-            </com.google.android.material.card.MaterialCardView>
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="استوديو الصور"
-                android:textColor="#FFFFFF"
-                android:textSize="16sp"
-                android:layout_marginTop="12dp" />
-        </LinearLayout>
-
-        <!-- 2. محرر النصوص -->
-        <LinearLayout
-            android:id="@+id/btnTextEditor"
-            android:layout_width="140dp"
-            android:layout_height="140dp"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:clickable="true"
-            android:focusable="true"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:layout_margin="16dp">
-
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="90dp"
-                android:layout_height="90dp"
-                app:cardCornerRadius="45dp"
-                app:cardBackgroundColor="#151515"
-                app:strokeColor="#333333"
-                app:strokeWidth="1dp"
-                app:rippleColor="#33FFFFFF"
-                app:cardElevation="8dp">
-                <ImageView
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:layout_gravity="center"
-                    android:src="@android:drawable/ic_menu_edit"
-                    app:tint="#FFFFFF" />
-            </com.google.android.material.card.MaterialCardView>
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="محرر النصوص"
-                android:textColor="#FFFFFF"
-                android:textSize="16sp"
-                android:layout_marginTop="12dp" />
-        </LinearLayout>
-
-        <!-- 3. الإعدادات -->
-        <LinearLayout
-            android:id="@+id/btnSettings"
-            android:layout_width="140dp"
-            android:layout_height="140dp"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:clickable="true"
-            android:focusable="true"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:layout_margin="16dp">
-
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="90dp"
-                android:layout_height="90dp"
-                app:cardCornerRadius="45dp"
-                app:cardBackgroundColor="#151515"
-                app:strokeColor="#333333"
-                app:strokeWidth="1dp"
-                app:rippleColor="#33FFFFFF"
-                app:cardElevation="8dp">
-                <ImageView
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:layout_gravity="center"
-                    android:src="@android:drawable/ic_menu_preferences"
-                    app:tint="#FFFFFF" />
-            </com.google.android.material.card.MaterialCardView>
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="الإعدادات"
-                android:textColor="#FFFFFF"
-                android:textSize="16sp"
-                android:layout_marginTop="12dp" />
-        </LinearLayout>
-
-    </GridLayout>
+    <!-- 2. الأيقونة التي سيتم سحبها -->
+    <ImageView
+        android:id="@+id/ivDraggableIcon"
+        android:layout_width="100dp"
+        android:layout_height="100dp"
+        android:src="@drawable/ic_launcher_foreground" <!-- استبدل هذا باسم أيقونتك الحقيقية -->
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        android:layout_marginTop="100dp"/>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
