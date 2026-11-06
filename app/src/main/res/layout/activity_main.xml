@@ -4,9 +4,8 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#121212"> <!-- خلفية التطبيق الداكنة -->
+    android:background="#121212">
 
-    <!-- 1. صورة الدوامة الثابتة -->
     <ImageView
         android:id="@+id/ivVortex"
         android:layout_width="300dp"
@@ -17,12 +16,11 @@
         app:layout_constraintStart_toStartOf="parent"
         android:layout_marginBottom="50dp"/>
 
-    <!-- 2. الأيقونة التي سيتم سحبها -->
     <ImageView
         android:id="@+id/ivDraggableIcon"
         android:layout_width="100dp"
         android:layout_height="100dp"
-        android:src="@drawable/ic_launcher_foreground" <!-- استبدل هذا باسم أيقونتك الحقيقية -->
+        android:src="@drawable/ic_launcher_foreground"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
