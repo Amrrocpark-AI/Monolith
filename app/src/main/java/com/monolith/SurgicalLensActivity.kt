@@ -13,6 +13,9 @@ import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.segmentation.subject.SubjectSegmentation
+import com.google.mlkit.vision.segmentation.subject.SubjectSegmenterOptions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -25,8 +28,10 @@ class SurgicalLensActivity : AppCompatActivity() {
     private lateinit var tvValue: TextView
     private lateinit var btnEraser: ImageButton
     private lateinit var btnMagicWand: ImageButton
+    private lateinit var btnAiCutout: ImageButton // [إضافة جديدة]
     private lateinit var progressBar: ProgressBar
     private lateinit var btnPick: Button
+    private var currentBitmap: Bitmap? = null // [إضافة جديدة] لحفظ الصورة للذكاء الاصطناعي
 
     private val pickImage = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) loadImage(uri)
@@ -41,6 +46,7 @@ class SurgicalLensActivity : AppCompatActivity() {
         tvValue = findViewById(R.id.tvSurgicalValue)
         btnEraser = findViewById(R.id.btnEraserSurgical)
         btnMagicWand = findViewById(R.id.btnMagicWandSurgical)
+        btnAiCutout = findViewById(R.id.btnAiCutoutSurgical) // [إضافة جديدة]
         progressBar = findViewById(R.id.progressBarSurgical)
         btnPick = findViewById(R.id.btnPickSurgicalImage)
 
@@ -55,6 +61,7 @@ class SurgicalLensActivity : AppCompatActivity() {
             surgicalMaskView.isMagicWand = false
             btnEraser.setColorFilter(0xFF26A69A.toInt())
             btnMagicWand.setColorFilter(0xFFFFFFFF.toInt())
+            btnAiCutout.setColorFilter(0xFFFFD700.toInt()) // [إعادة لون زر AI]
         }
 
         // تفعيل العصا السحرية
@@ -63,6 +70,12 @@ class SurgicalLensActivity : AppCompatActivity() {
             surgicalMaskView.isEraser = false
             btnMagicWand.setColorFilter(0xFF26A69A.toInt())
             btnEraser.setColorFilter(0xFFFFFFFF.toInt())
+            btnAiCutout.setColorFilter(0xFFFFD700.toInt()) // [إعادة لون زر AI]
+        }
+
+        // [إضافة جديدة] تفعيل الذكاء الاصطناعي
+        btnAiCutout.setOnClickListener {
+            performAiCutout()
         }
 
         // شريط التمرير
@@ -97,8 +110,34 @@ class SurgicalLensActivity : AppCompatActivity() {
             val inputStream = contentResolver.openInputStream(uri)
             val bitmap = BitmapFactory.decodeStream(inputStream)
             btnPick.visibility = View.GONE // إخفاء زر الاختيار بعد تحميل الصورة
+            currentBitmap = bitmap // [إضافة جديدة] حفظ الصورة
             surgicalMaskView.setImageBitmap(bitmap)
         } catch (e: IOException) { }
+    }
+
+    // [إضافة جديدة] دالة الذكاء الاصطناعي
+    private fun performAiCutout() {
+        val bitmap = currentBitmap ?: return
+        progressBar.visibility = View.VISIBLE
+        
+        val image = InputImage.fromBitmap(bitmap, 0)
+        val options = SubjectSegmenterOptions.Builder()
+            .enableForegroundBitmap()
+            .build()
+        val segmenter = SubjectSegmentation.getClient(options)
+
+        segmenter.process(image)
+            .addOnSuccessListener { result ->
+                val foregroundBitmap = result.foregroundBitmap
+                if (foregroundBitmap != null) {
+                    currentBitmap = foregroundBitmap
+                    surgicalMaskView.setImageBitmap(foregroundBitmap)
+                }
+                progressBar.visibility = View.GONE
+            }
+            .addOnFailureListener {
+                progressBar.visibility = View.GONE
+            }
     }
 
     private fun savePNG() {
