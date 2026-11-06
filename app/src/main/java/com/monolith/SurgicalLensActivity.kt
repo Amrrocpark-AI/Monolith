@@ -26,6 +26,7 @@ class SurgicalLensActivity : AppCompatActivity() {
     private lateinit var btnEraser: ImageButton
     private lateinit var btnMagicWand: ImageButton
     private lateinit var progressBar: ProgressBar
+    private lateinit var btnPick: Button
 
     private val pickImage = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) loadImage(uri)
@@ -41,10 +42,14 @@ class SurgicalLensActivity : AppCompatActivity() {
         btnEraser = findViewById(R.id.btnEraserSurgical)
         btnMagicWand = findViewById(R.id.btnMagicWandSurgical)
         progressBar = findViewById(R.id.progressBarSurgical)
+        btnPick = findViewById(R.id.btnPickSurgicalImage)
 
         findViewById<ImageButton>(R.id.btnCloseSurgical).setOnClickListener { finish() }
-        findViewById<Button>(R.id.btnPickSurgicalImage).setOnClickListener { pickImage.launch("image/*") }
+        
+        // زر تبديل الصورة
+        btnPick.setOnClickListener { pickImage.launch("image/*") }
 
+        // تفعيل الممحاة
         btnEraser.setOnClickListener {
             surgicalMaskView.isEraser = true
             surgicalMaskView.isMagicWand = false
@@ -52,6 +57,7 @@ class SurgicalLensActivity : AppCompatActivity() {
             btnMagicWand.setColorFilter(0xFFFFFFFF.toInt())
         }
 
+        // تفعيل العصا السحرية
         btnMagicWand.setOnClickListener {
             surgicalMaskView.isMagicWand = true
             surgicalMaskView.isEraser = false
@@ -59,6 +65,7 @@ class SurgicalLensActivity : AppCompatActivity() {
             btnEraser.setColorFilter(0xFFFFFFFF.toInt())
         }
 
+        // شريط التمرير
         seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
                 tvValue.text = progress.toString()
@@ -72,6 +79,14 @@ class SurgicalLensActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(sb: SeekBar?) {}
         })
 
+        // زر التطبيق (Apply) - يطبق القص فوراً لتراه أمامك
+        findViewById<Button>(R.id.btnApplySurgical).setOnClickListener {
+            if (surgicalMaskView.hasMask()) {
+                surgicalMaskView.applyClip()
+            }
+        }
+
+        // زر الحفظ - يحفظ النتيجة في معرض الهاتف
         findViewById<Button>(R.id.btnSaveSurgical).setOnClickListener {
             savePNG()
         }
@@ -81,8 +96,8 @@ class SurgicalLensActivity : AppCompatActivity() {
         try {
             val inputStream = contentResolver.openInputStream(uri)
             val bitmap = BitmapFactory.decodeStream(inputStream)
-            findViewById<Button>(R.id.btnPickSurgicalImage).visibility = View.GONE
-            surgicalMaskView.setImageBitmap(bitmap) // إرسال الصورة للمحرك
+            btnPick.visibility = View.GONE // إخفاء زر الاختيار بعد تحميل الصورة
+            surgicalMaskView.setImageBitmap(bitmap)
         } catch (e: IOException) { }
     }
 
@@ -95,7 +110,7 @@ class SurgicalLensActivity : AppCompatActivity() {
             }
             withContext(Dispatchers.Main) {
                 progressBar.visibility = View.GONE
-                finish()
+                Toast.makeText(this@SurgicalLensActivity, "تم الحفظ في معرض Monolith", Toast.LENGTH_SHORT).show()
             }
         }
     }
