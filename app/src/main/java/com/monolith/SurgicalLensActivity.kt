@@ -1,11 +1,14 @@
 package com.monolith
 
-import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
-import android.widget.*
+import android.widget.ImageButton
+import android.widget.ImageView
+import android.widget.SeekBar
+import android.widget.TextView
+import android.widget.Button
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import java.io.IOException
@@ -48,30 +51,29 @@ class SurgicalLensActivity : AppCompatActivity() {
             surgicalMaskView.redo()
         }
 
-        // 4. تفعيل الممحاة
+        // 4. تفعيل الممحاة (بدون أي رسائل مزعجة)
         btnEraser.setOnClickListener {
             surgicalMaskView.isEraser = !surgicalMaskView.isEraser
             btnEraser.setColorFilter(if (surgicalMaskView.isEraser) 0xFF26A69A.toInt() else 0xFFFFFFFF.toInt())
-            Toast.makeText(this, if (surgicalMaskView.isEraser) "وضع الممحاة" else "وضع الفرشاة", Toast.LENGTH_SHORT).show()
         }
 
         // 5. التحكم في حجم الفرشاة
         seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
                 tvValue.text = progress.toString()
-                surgicalMaskView.brushSize = progress.toFloat() * 2f // تكبير القيمة قليلاً لتكون مريحة
+                surgicalMaskView.brushSize = progress.toFloat() * 2f
             }
             override fun onStartTrackingTouch(sb: SeekBar?) {}
             override fun onStopTrackingTouch(sb: SeekBar?) {}
         })
 
-        // 6. أزرار التطبيق والحفظ (مؤقتاً مجرد رسالة حتى نبرمج القص)
+        // 6. أزرار التطبيق والحفظ (صامتة تماماً استعداداً للمرحلة القادمة)
         findViewById<Button>(R.id.btnApplySurgical).setOnClickListener {
-            Toast.makeText(this, "تم التحديد بنجاح! (القص قيد التطوير)", Toast.LENGTH_SHORT).show()
+            // سيتم برمجة منطق القص هنا لاحقاً
         }
 
         findViewById<Button>(R.id.btnSaveSurgical).setOnClickListener {
-            Toast.makeText(this, "الحفظ قيد التطوير", Toast.LENGTH_SHORT).show()
+            // سيتم برمجة منطق الحفظ هنا لاحقاً
         }
     }
 
@@ -82,7 +84,7 @@ class SurgicalLensActivity : AppCompatActivity() {
             ivImage.setImageBitmap(bitmap)
             findViewById<Button>(R.id.btnPickSurgicalImage).visibility = View.GONE
         } catch (e: IOException) {
-            Toast.makeText(this, "فشل تحميل الصورة", Toast.LENGTH_SHORT).show()
+            // التطبيق صامت تماماً، لا رسائل خطأ
         }
     }
 }
