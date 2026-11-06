@@ -6,8 +6,6 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.media.AudioManager
@@ -19,7 +17,6 @@ import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
-import android.view.animation.AccelerateInterpolator
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.SeekBar
@@ -27,9 +24,6 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import kotlin.math.abs
-import kotlin.math.hypot
-import android.animation.ValueAnimator
-import android.animation.AnimatorListenerAdapter
 
 class FloatingService : Service() {
 
@@ -39,10 +33,6 @@ class FloatingService : Service() {
     
     private lateinit var bubbleLayoutParams: WindowManager.LayoutParams
     private var hubLayoutParams: WindowManager.LayoutParams? = null 
-
-    // متغيرات الثقب الأسود
-    private var dissolveOverlay: ParticleDissolveView? = null
-    private var dissolveLayoutParams: WindowManager.LayoutParams? = null
 
     private var volumePanelView: View? = null
     private var resizePanelView: View? = null
@@ -54,9 +44,6 @@ class FloatingService : Service() {
 
     private var bubbleScale = 1.0f
     private lateinit var prefs: android.content.SharedPreferences
-    
-    // حالة الجاذبية
-    private var isVibrating = false
 
     override fun onCreate() {
         super.onCreate()
@@ -141,7 +128,6 @@ class FloatingService : Service() {
                         initialTouchX = event.rawX
                         initialTouchY = event.rawY
                         isDragging = false
-                        isVibrating = false
                         return true
                     }
                     MotionEvent.ACTION_MOVE -> {
@@ -154,25 +140,16 @@ class FloatingService : Service() {
                             windowManager.updateViewLayout(floatingBubbleView, bubbleLayoutParams)
                             updatePanelsPosition()
                             hideHub() 
-                            
-                            // نظام الجاذبية والاقتراب
-                            checkGravityField()
                         }
                         return true
                     }
                     MotionEvent.ACTION_UP -> {
+                        // العودة للسلوك الطبيعي: إذا لم يسحب، افتح القائمة
                         if (!isDragging) {
                             if (floatingHubView != null) {
                                 hideHub()
                             } else {
                                 showHub()
-                            }
-                        } else {
-                            // إذا تم إفلاتها قريبة جداً من الثقب، نسحبها قسرياً
-                            if (isOverBlackHole()) {
-                                triggerDissolve()
-                            } else {
-                                hideBlackHole()
                             }
                         }
                         return true
@@ -194,181 +171,6 @@ class FloatingService : Service() {
         }
     }
 
-    // ==========================================
-    // نظام الجاذبية والاقتراب
-    // ==========================================
-    
-    private fun checkGravityField() {
-        val screenHeight = resources.displayMetrics.heightPixels
-        val screenWidth = resources.displayMetrics.widthPixels
-        
-        val holeX = screenWidth / 2f
-        val holeY = screenHeight * 0.8f
-        val bubbleX = bubbleLayoutParams.x + (floatingBubbleView.width / 2f)
-        val bubbleY = bubbleLayoutParams.y + (floatingBubbleView.height / 2f)
-        
-        val distance = hypot(holeX - bubbleX, holeY - bubbleY)
-
-        // إذا اقتربت الفقاعة مسافة 600 بكسل من الثقب
-        if (distance < 600f) {
-            showBlackHole()
-            // اهتزاز خفيف عند دخول النطاق المغناطيسي
-            if (!isVibrating && distance < 400f) {
-                isVibrating = true
-                vibratePhone(30)
-            }
-        } else {
-            hideBlackHole()
-        }
-    }
-
-    private fun isOverBlackHole(): Boolean {
-        val screenHeight = resources.displayMetrics.heightPixels
-        val screenWidth = resources.displayMetrics.widthPixels
-        
-        val holeX = screenWidth / 2f
-        val holeY = screenHeight * 0.8f
-        val bubbleX = bubbleLayoutParams.x + (floatingBubbleView.width / 2f)
-        val bubbleY = bubbleLayoutParams.y + (floatingBubbleView.height / 2f)
-        
-        val distance = hypot(holeX - bubbleX, holeY - bubbleY)
-        return distance < 250f 
-    }
-
-    private fun showBlackHole() {
-        if (dissolveOverlay == null) {
-            dissolveOverlay = ParticleDissolveView(this)
-            dissolveOverlay?.setBackgroundColor(Color.TRANSPARENT)
-            
-            val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-            } else {
-                WindowManager.LayoutParams.TYPE_PHONE
-            }
-
-            dissolveLayoutParams = WindowManager.LayoutParams(
-                WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.MATCH_PARENT,
-                layoutFlag,
-                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-                PixelFormat.TRANSLUCENT
-            )
-            
-            windowManager.addView(dissolveOverlay, dissolveLayoutParams)
-            dissolveOverlay?.invalidate()
-        }
-    }
-
-    private fun hideBlackHole() {
-        dissolveOverlay?.let {
-            windowManager.removeView(it)
-            dissolveOverlay = null
-        }
-    }
-
-    // ==========================================
-    // الأنيميشن السحري (سحب الفقاعة ثم تفتيتها)
-    // ==========================================
-    private fun triggerDissolve() {
-        try {
-            hideHub()
-            vibratePhone(100) // اهتزاز قوي عند الابتلاع
-            
-            val screenHeight = resources.displayMetrics.heightPixels
-            val screenWidth = resources.displayMetrics.widthPixels
-            
-            val startX = bubbleLayoutParams.x
-            val startY = bubbleLayoutParams.y
-            
-            val targetX = (screenWidth / 2) - (floatingBubbleView.width / 2)
-            val targetY = (screenHeight * 0.8).toInt() - (floatingBubbleView.height / 2)
-
-            // 1. أنيميشن سحب الفقاعة نحو الثقب
-            val suckAnimator = ValueAnimator.ofFloat(0f, 1f)
-            suckAnimator.duration = 500 // نصف ثانية للسحب
-            suckAnimator.interpolator = AccelerateInterpolator(2f) // تسارع قوي كأنه جاذبية
-            
-            suckAnimator.addUpdateListener { animation ->
-                val progress = animation.animatedValue as Float
-                
-                bubbleLayoutParams.x = (startX + (targetX - startX) * progress).toInt()
-                bubbleLayoutParams.y = (startY + (targetY - startY) * progress).toInt()
-                
-                // تصغير الفقاعة أثناء السحب
-                val currentScale = bubbleScale * (1f - progress * 0.8f) 
-                floatingBubbleView.scaleX = currentScale
-                floatingBubbleView.scaleY = currentScale
-                
-                windowManager.updateViewLayout(floatingBubbleView, bubbleLayoutParams)
-            }
-            
-            suckAnimator.addListener(object : AnimatorListenerAdapter() {
-                override fun onAnimationEnd(animation: android.animation.Animator) {
-                    // 2. بمجرد وصول الفقاعة للثقب، نخفيها ونطلق التفتيت
-                    floatingBubbleView.visibility = View.INVISIBLE
-                    hideBlackHole()
-                    
-                    floatingBubbleView.scaleX = bubbleScale
-                    floatingBubbleView.scaleY = bubbleScale
-                    
-                    val originalBitmap = BitmapFactory.decodeResource(resources, R.drawable.ic_monolith_new)
-                    val scaledBitmap = Bitmap.createScaledBitmap(originalBitmap, floatingBubbleView.width, floatingBubbleView.height, true)
-                    
-                    val centerScreenX = screenWidth / 2f
-                    val centerScreenY = screenHeight * 0.8f
-
-                    dissolveOverlay = ParticleDissolveView(this@FloatingService)
-                    dissolveLayoutParams = WindowManager.LayoutParams(
-                        WindowManager.LayoutParams.MATCH_PARENT,
-                        WindowManager.LayoutParams.MATCH_PARENT,
-                        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                        WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-                        PixelFormat.TRANSLUCENT
-                    )
-                    
-                    windowManager.addView(dissolveOverlay, dissolveLayoutParams)
-                    
-                    dissolveOverlay?.post {
-                        dissolveOverlay?.startDissolve(scaledBitmap, targetX.toFloat(), targetY.toFloat(), centerScreenX, centerScreenY) {
-                            windowManager.removeView(dissolveOverlay)
-                            dissolveOverlay = null
-                            
-                            Toast.makeText(this@FloatingService, "تم الإخفاء في الثقب الأسود!", Toast.LENGTH_SHORT).show()
-                            
-                            floatingBubbleView.visibility = View.VISIBLE
-                            bubbleLayoutParams.x = 100
-                            bubbleLayoutParams.y = 300
-                            windowManager.updateViewLayout(floatingBubbleView, bubbleLayoutParams)
-                        }
-                    }
-                }
-            })
-            suckAnimator.start()
-            
-        } catch (e: Exception) {
-            e.printStackTrace()
-            floatingBubbleView.visibility = View.VISIBLE
-            floatingBubbleView.scaleX = bubbleScale
-            floatingBubbleView.scaleY = bubbleScale
-        }
-    }
-
-    private fun vibratePhone(duration: Long) {
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator.vibrate(android.os.VibrationEffect.createOneShot(duration, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
-            } else {
-                @Suppress("DEPRECATION")
-                vibrator.vibrate(duration)
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    // ==========================================
-    // القائمة العائمة (Hub) - نفس الكود السابق بدون تغيير
-    // ==========================================
     private fun showHub() {
         try {
             floatingHubView = LayoutInflater.from(this).inflate(R.layout.floating_hub, null)
@@ -612,6 +414,19 @@ class FloatingService : Service() {
         floatingHubView?.let { hubLayoutParams?.let { params -> params.y = bubbleLayoutParams.y - 120; windowManager.updateViewLayout(it, params) } }
     }
 
+    private fun vibratePhone(duration: Long) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator.vibrate(android.os.VibrationEffect.createOneShot(duration, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(duration)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -623,7 +438,6 @@ class FloatingService : Service() {
             volumePanelView?.let { windowManager.removeView(it) }
             resizePanelView?.let { windowManager.removeView(it) }
             streamSelectorView?.let { windowManager.removeView(it) }
-            dissolveOverlay?.let { windowManager.removeView(it) }
         } catch (e: Exception) { e.printStackTrace() }
     }
 }
