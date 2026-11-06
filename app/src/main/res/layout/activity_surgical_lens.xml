@@ -1,12 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#121212"
     android:layoutDirection="rtl"
     android:orientation="vertical">
 
-    <!-- الشريط العلوي (نفس تصميم أداة التشتت) -->
+    <!-- الشريط العلوي -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="56dp"
@@ -36,13 +37,21 @@
             android:background="?attr/selectableItemBackgroundBorderless"
             android:src="@drawable/ic_redo" />
 
-        <!-- زر الممحاة الجراحية -->
         <ImageButton
             android:id="@+id/btnEraserSurgical"
             android:layout_width="44dp"
             android:layout_height="44dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:src="@drawable/ic_eraser" />
+            
+        <!-- [إضافة] زر العصا السحرية -->
+        <ImageButton
+            android:id="@+id/btnMagicWandSurgical"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_view" 
+            app:tint="#FFFFFF" />
 
         <View
             android:layout_width="0dp"
@@ -74,20 +83,26 @@
         android:layout_height="0dp"
         android:layout_weight="1">
 
-        <!-- الصورة الأصلية -->
         <ImageView
             android:id="@+id/ivSurgicalImage"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:scaleType="fitCenter" />
 
-        <!-- طبقة الرسم الجراحي (التي سنكتب كودها في الخطوة القادمة) -->
         <com.monolith.SurgicalMaskView
             android:id="@+id/surgicalMaskView"
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
 
-        <!-- زر اختيار الصورة (يختفي بعد الاختيار) -->
+        <!-- [إضافة] مؤشر التحميل أثناء الحفظ -->
+        <ProgressBar
+            android:id="@+id/progressBarSurgical"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:visibility="gone"
+            android:indeterminateTint="#00E5FF" />
+
         <Button
             android:id="@+id/btnPickSurgicalImage"
             android:layout_width="wrap_content"
@@ -98,7 +113,7 @@
             android:textColor="#000000" />
     </FrameLayout>
 
-    <!-- اللوحة السفلية (نفس تصميم أداة التشتت) -->
+    <!-- اللوحة السفلية -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -141,7 +156,6 @@
                 android:textSize="12sp" />
         </LinearLayout>
 
-        <!-- مكان أيقونات الأدوات (سنضيفها لاحقاً) -->
         <LinearLayout
             android:id="@+id/surgicalToolsRow"
             android:layout_width="match_parent"
