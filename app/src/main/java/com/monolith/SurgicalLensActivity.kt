@@ -28,10 +28,11 @@ class SurgicalLensActivity : AppCompatActivity() {
     private lateinit var tvValue: TextView
     private lateinit var btnEraser: ImageButton
     private lateinit var btnMagicWand: ImageButton
-    private lateinit var btnAiCutout: ImageButton // [إضافة جديدة]
+    private lateinit var btnAiCutout: ImageButton
+    private lateinit var btnVault: ImageButton // [جديد]
     private lateinit var progressBar: ProgressBar
     private lateinit var btnPick: Button
-    private var currentBitmap: Bitmap? = null // [إضافة جديدة] لحفظ الصورة للذكاء الاصطناعي
+    private var currentBitmap: Bitmap? = null
 
     private val pickImage = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) loadImage(uri)
@@ -46,36 +47,45 @@ class SurgicalLensActivity : AppCompatActivity() {
         tvValue = findViewById(R.id.tvSurgicalValue)
         btnEraser = findViewById(R.id.btnEraserSurgical)
         btnMagicWand = findViewById(R.id.btnMagicWandSurgical)
-        btnAiCutout = findViewById(R.id.btnAiCutoutSurgical) // [إضافة جديدة]
+        btnAiCutout = findViewById(R.id.btnAiCutoutSurgical)
+        btnVault = findViewById(R.id.btnVaultSurgical) // [جديد]
         progressBar = findViewById(R.id.progressBarSurgical)
         btnPick = findViewById(R.id.btnPickSurgicalImage)
 
         findViewById<ImageButton>(R.id.btnCloseSurgical).setOnClickListener { finish() }
         
-        // زر تبديل الصورة
         btnPick.setOnClickListener { pickImage.launch("image/*") }
 
-        // تفعيل الممحاة
+        // الممحاة
         btnEraser.setOnClickListener {
             surgicalMaskView.isEraser = true
             surgicalMaskView.isMagicWand = false
             btnEraser.setColorFilter(0xFF26A69A.toInt())
             btnMagicWand.setColorFilter(0xFFFFFFFF.toInt())
-            btnAiCutout.setColorFilter(0xFFFFD700.toInt()) // [إعادة لون زر AI]
         }
 
-        // تفعيل العصا السحرية
+        // العصا السحرية
         btnMagicWand.setOnClickListener {
             surgicalMaskView.isMagicWand = true
             surgicalMaskView.isEraser = false
             btnMagicWand.setColorFilter(0xFF26A69A.toInt())
             btnEraser.setColorFilter(0xFFFFFFFF.toInt())
-            btnAiCutout.setColorFilter(0xFFFFD700.toInt()) // [إعادة لون زر AI]
         }
 
-        // [إضافة جديدة] تفعيل الذكاء الاصطناعي
+        // الذكاء الاصطناعي
         btnAiCutout.setOnClickListener {
             performAiCutout()
+        }
+
+        // [جديد] فتح الخزنة
+        btnVault.setOnClickListener {
+            val vaultDialog = StickerVaultDialog()
+            vaultDialog.onStickerSelected = { file ->
+                // هنا سنستقبل الشعار في الخطوة القادمة، حالياً نعرض تأكيد فقط
+                val stickerName = VaultManager.getStickerName(this, file.name)
+                Toast.makeText(this, "تم اختيار الشعار: $stickerName", Toast.LENGTH_SHORT).show()
+            }
+            vaultDialog.show(supportFragmentManager, "StickerVault")
         }
 
         // شريط التمرير
@@ -92,14 +102,14 @@ class SurgicalLensActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(sb: SeekBar?) {}
         })
 
-        // زر التطبيق (Apply) - يطبق القص فوراً لتراه أمامك
+        // زر التطبيق
         findViewById<Button>(R.id.btnApplySurgical).setOnClickListener {
             if (surgicalMaskView.hasMask()) {
                 surgicalMaskView.applyClip()
             }
         }
 
-        // زر الحفظ - يحفظ النتيجة في معرض الهاتف
+        // زر الحفظ
         findViewById<Button>(R.id.btnSaveSurgical).setOnClickListener {
             savePNG()
         }
@@ -109,13 +119,12 @@ class SurgicalLensActivity : AppCompatActivity() {
         try {
             val inputStream = contentResolver.openInputStream(uri)
             val bitmap = BitmapFactory.decodeStream(inputStream)
-            btnPick.visibility = View.GONE // إخفاء زر الاختيار بعد تحميل الصورة
-            currentBitmap = bitmap // [إضافة جديدة] حفظ الصورة
+            btnPick.visibility = View.GONE
+            currentBitmap = bitmap
             surgicalMaskView.setImageBitmap(bitmap)
         } catch (e: IOException) { }
     }
 
-    // [إضافة جديدة] دالة الذكاء الاصطناعي
     private fun performAiCutout() {
         val bitmap = currentBitmap ?: return
         progressBar.visibility = View.VISIBLE
@@ -143,13 +152,15 @@ class SurgicalLensActivity : AppCompatActivity() {
     private fun savePNG() {
         progressBar.visibility = View.VISIBLE
         lifecycleScope.launch(Dispatchers.Default) {
-            val finalBitmap = surgicalMaskView.exportPNG()
+            val finalBitmap = surgicalMaskView.exportPNG() ?: currentBitmap
             if (finalBitmap != null) {
                 writeToGallery(finalBitmap)
+                // [جديد] حفظ في الخزنة أيضاً
+                VaultManager.saveSticker(this@SurgicalLensActivity, finalBitmap, "شعار_${System.currentTimeMillis()}")
             }
             withContext(Dispatchers.Main) {
                 progressBar.visibility = View.GONE
-                Toast.makeText(this@SurgicalLensActivity, "تم الحفظ في معرض Monolith", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@SurgicalLensActivity, "تم الحفظ في المعرض والخزنة", Toast.LENGTH_SHORT).show()
             }
         }
     }
