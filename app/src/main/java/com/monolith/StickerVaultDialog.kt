@@ -4,14 +4,12 @@ import android.app.Dialog
 import android.content.Context
 import android.graphics.BitmapFactory
 import android.graphics.Color
-import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
+import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.view.Window
 import android.widget.*
-import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -23,9 +21,7 @@ class StickerVaultDialog : BottomSheetDialogFragment() {
 
     private lateinit var adapter: VaultAdapter
     private var isEditMode = false
-    private val selectedFiles = mutableListOf<File>()
     private val deletedFiles = mutableListOf<File>()
-    private val originalNames = mutableMapOf<File, String>()
     private val newNames = mutableMapOf<File, String>()
 
     var onStickerSelected: ((File) -> Unit)? = null
@@ -81,7 +77,7 @@ class StickerVaultDialog : BottomSheetDialogFragment() {
             adapter.notifyDataSetChanged()
         }
 
-        // زر التراجع (يلغي الحذف والتسمية)
+        // زر التراجع
         btnUndo.setOnClickListener {
             deletedFiles.clear()
             newNames.clear()
@@ -92,7 +88,7 @@ class StickerVaultDialog : BottomSheetDialogFragment() {
             adapter.updateData(VaultManager.getStickers(requireContext()))
         }
 
-        // زر تأكيد التعديلات (يحفظ ويبقى في الخزنة)
+        // زر تأكيد التعديلات
         btnConfirm.setOnClickListener {
             deletedFiles.forEach { VaultManager.deleteSticker(requireContext(), it) }
             newNames.forEach { (file, name) -> VaultManager.renameSticker(requireContext(), file.name, name) }
@@ -111,6 +107,19 @@ class StickerVaultDialog : BottomSheetDialogFragment() {
         btnClose.setOnClickListener { checkUnsavedAndDismiss() }
     }
 
+    // [إصلاح] اعتراض زر الرجوع في الهاتف بطريقة آمنة
+    override fun onStart() {
+        super.onStart()
+        dialog?.setOnKeyListener { _, keyCode, event ->
+            if (keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_UP) {
+                checkUnsavedAndDismiss()
+                true
+            } else {
+                false
+            }
+        }
+    }
+
     private fun checkUnsavedAndDismiss() {
         if (deletedFiles.isNotEmpty() || newNames.isNotEmpty()) {
             AlertDialog.Builder(requireContext())
@@ -126,16 +135,6 @@ class StickerVaultDialog : BottomSheetDialogFragment() {
         } else {
             dismiss()
         }
-    }
-
-    // اعتراض زر الرجوع في الهاتف
-    override fun onStart() {
-        super.onStart()
-        requireDialog().onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() {
-                checkUnsavedAndDismiss()
-            }
-        })
     }
 }
 
@@ -170,7 +169,6 @@ class VaultAdapter(
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VaultViewHolder {
-        // تصميم العنصر البرمجي (لتجنب إنشاء ملف XML إضافي)
         val layout = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             gravity = android.view.Gravity.CENTER
@@ -222,7 +220,6 @@ class VaultAdapter(
         layout.addView(actions)
         layout.addView(checkBox)
 
-        // نستخدم نفس الـ ID لأغراض الوصول (رغم أنها مضافة برمجياً)
         img.id = R.id.imgVaultItem
         tvName.id = R.id.tvVaultName
         btnDel.id = R.id.btnVaultDelete
