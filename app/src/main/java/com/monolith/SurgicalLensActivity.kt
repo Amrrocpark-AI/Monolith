@@ -3,6 +3,7 @@ package com.monolith
 import android.content.ContentValues
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -30,10 +31,15 @@ class SurgicalLensActivity : AppCompatActivity() {
     private lateinit var btnMagicWand: ImageButton
     private lateinit var btnAiCutout: ImageButton
     private lateinit var btnVault: ImageButton
-    private lateinit var btnProtection: ImageButton // [جديد] زر جدار الحماية
+    private lateinit var btnProtection: ImageButton
+    private lateinit var btnColorEngine: ImageButton // [جديد] زر محرك الألوان
     private lateinit var progressBar: ProgressBar
     private lateinit var btnPick: Button
     private var currentBitmap: Bitmap? = null
+
+    // ألوان الواجهة (سماوي وأبيض فقط، لا يوجد أخضر)
+    private val colorActive = Color.parseColor("#00D4FF") // سماوي
+    private val colorInactive = Color.parseColor("#FFFFFF") // أبيض
 
     private val pickImage = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) loadImage(uri)
@@ -50,61 +56,60 @@ class SurgicalLensActivity : AppCompatActivity() {
         btnMagicWand = findViewById(R.id.btnMagicWandSurgical)
         btnAiCutout = findViewById(R.id.btnAiCutoutSurgical)
         btnVault = findViewById(R.id.btnVaultSurgical)
-        btnProtection = findViewById(R.id.btnProtectionSurgical) // [جديد]
+        btnProtection = findViewById(R.id.btnProtectionSurgical)
+        btnColorEngine = findViewById(R.id.btnColorEngineSurgical) // [جديد]
         progressBar = findViewById(R.id.progressBarSurgical)
         btnPick = findViewById(R.id.btnPickSurgicalImage)
 
         findViewById<ImageButton>(R.id.btnCloseSurgical).setOnClickListener { finish() }
         btnPick.setOnClickListener { pickImage.launch("image/*") }
 
-        // [جديد] ربط أزرار التراجع والإعادة
-        findViewById<ImageButton>(R.id.btnUndoSurgical).setOnClickListener {
-            surgicalMaskView.undo()
-        }
-        findViewById<ImageButton>(R.id.btnRedoSurgical).setOnClickListener {
-            surgicalMaskView.redo()
-        }
+        findViewById<ImageButton>(R.id.btnUndoSurgical).setOnClickListener { surgicalMaskView.undo() }
+        findViewById<ImageButton>(R.id.btnRedoSurgical).setOnClickListener { surgicalMaskView.redo() }
 
-        // إعداد ألوان الأزرار (مفعلة / غير مفعلة)
+        // الممحاة
         btnEraser.setOnClickListener {
             surgicalMaskView.isEraser = true
             surgicalMaskView.isMagicWand = false
             surgicalMaskView.isProtectionMode = false
-            btnEraser.setColorFilter(0xFF26A69A.toInt())
-            btnMagicWand.setColorFilter(0xFFFFFFFF.toInt())
-            btnProtection.setColorFilter(0xFFFFFFFF.toInt())
+            btnEraser.setColorFilter(colorActive)
+            btnMagicWand.setColorFilter(colorInactive)
+            btnProtection.setColorFilter(colorInactive)
         }
 
+        // العصا السحرية
         btnMagicWand.setOnClickListener {
             surgicalMaskView.isMagicWand = true
             surgicalMaskView.isEraser = false
             surgicalMaskView.isProtectionMode = false
-            btnMagicWand.setColorFilter(0xFF26A69A.toInt())
-            btnEraser.setColorFilter(0xFFFFFFFF.toInt())
-            btnProtection.setColorFilter(0xFFFFFFFF.toInt())
+            btnMagicWand.setColorFilter(colorActive)
+            btnEraser.setColorFilter(colorInactive)
+            btnProtection.setColorFilter(colorInactive)
         }
 
-        // [جديد] تفعيل جدار الحماية
+        // جدار الحماية
         btnProtection.setOnClickListener {
             surgicalMaskView.isProtectionMode = !surgicalMaskView.isProtectionMode
             surgicalMaskView.isEraser = false
             surgicalMaskView.isMagicWand = false
             
-            if (surgicalMaskView.isProtectionMode) {
-                btnProtection.setColorFilter(0xFF00FF00.toInt()) // أخضر
-                btnEraser.setColorFilter(0xFFFFFFFF.toInt())
-                btnMagicWand.setColorFilter(0xFFFFFFFF.toInt())
-            } else {
-                btnProtection.setColorFilter(0xFFFFFFFF.toInt()) // أبيض
+            btnProtection.setColorFilter(if (surgicalMaskView.isProtectionMode) colorActive else colorInactive)
+            btnEraser.setColorFilter(colorInactive)
+            btnMagicWand.setColorFilter(colorInactive)
+        }
+
+        // [جديد] فتح نافذة الألوان
+        btnColorEngine.setOnClickListener {
+            val colorDialog = ColorEngineDialog()
+            colorDialog.onColorsSelected = { rules ->
+                // إرسال قواعد الألوان إلى المحرك
+                surgicalMaskView.setColorRules(rules)
             }
+            colorDialog.show(supportFragmentManager, "ColorEngine")
         }
 
-        // زر الذكاء الاصطناعي (إجراء - لا يبقى مفعل)
-        btnAiCutout.setOnClickListener {
-            performAiCutout()
-        }
+        btnAiCutout.setOnClickListener { performAiCutout() }
 
-        // زر المحفوظات (إجراء - يفتح النافذة)
         btnVault.setOnClickListener {
             val vaultDialog = StickerVaultDialog()
             vaultDialog.onStickerSelected = { file ->
