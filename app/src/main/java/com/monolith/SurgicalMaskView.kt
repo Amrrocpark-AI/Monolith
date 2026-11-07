@@ -2,14 +2,11 @@ package com.monolith
 
 import android.content.Context
 import android.graphics.*
-import android.os.Build
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.View
-import java.io.ByteArrayOutputStream
 import java.util.LinkedList
-import android.util.Base64
 import kotlin.math.sqrt
 
 data class ColorRule(val color: Int, val isActive: Boolean, val tolerance: Int)
@@ -31,7 +28,7 @@ class SurgicalMaskView @JvmOverloads constructor(
     
     private var currentPath: Path? = null
     
-    // [إصلاح] تم إزالة private لكي تتمكن الشاشة من الوصول إليها
+    // متغيرات العدسة (تم إزالة private لكي تعمل مع الشاشة)
     var isLoupeEnabled = true
     var isLoupePinned = false
     private var loupeRadius = 150f
@@ -39,10 +36,11 @@ class SurgicalMaskView @JvmOverloads constructor(
     private var loupeTouchX = 0f
     private var loupeTouchY = 0f
 
-    private var scaleMatrix = Matrix()
+    // متغيرات التكبير
     private var currentScale = 1f
     private var scaleDetector: ScaleGestureDetector
 
+    // متغيرات الشعار
     private var overlayBitmap: Bitmap? = null
     private var overlayX = 0f
     private var overlayY = 0f
@@ -51,8 +49,10 @@ class SurgicalMaskView @JvmOverloads constructor(
     private var lastTouchX = 0f
     private var lastTouchY = 0f
 
+    // متغيرات الألوان
     private var activeColorRules: List<ColorRule> = emptyList()
 
+    // نظام التراجع
     private data class HistoryState(
         val mask: Bitmap,
         val protection: Bitmap,
@@ -295,6 +295,11 @@ class SurgicalMaskView @JvmOverloads constructor(
         if (!isDrawingEnabled) return false
         scaleDetector.onTouchEvent(event)
 
+        // [حماية] منع الرسم إذا كان المستخدم يستخدم أكثر من إصبع (وضع التكبير)
+        if (scaleDetector.isInProgress || event.pointerCount > 1) {
+            return true
+        }
+
         val src = sourceBitmap ?: return false
         val rect = getImageRect()
 
@@ -529,13 +534,5 @@ class SurgicalMaskView @JvmOverloads constructor(
         }
         
         return result
-    }
-
-    // [إصلاح] إكمال الدالة التي كانت مقطوعة في كودك
-    fun getMaskAsBase64(): String {
-        val mask = maskBitmap ?: return ""
-        val outputStream = ByteArrayOutputStream()
-        mask.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
-        return Base64.encodeToString(outputStream.toByteArray(), Base64.DEFAULT)
     }
 }
