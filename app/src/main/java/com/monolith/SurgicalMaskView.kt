@@ -53,9 +53,12 @@ class SurgicalMaskView @JvmOverloads constructor(
     }
 
     fun hasMask(): Boolean {
-        // التحقق من وجود أي بكسل غير شفاف في القناع
-        val pixels = IntArray(maskBitmap?.width ?: 0 * maskBitmap?.height ?: 0)
-        maskBitmap?.getPixels(pixels, 0, maskBitmap!!.width, 0, 0, maskBitmap!!.width, maskBitmap!!.height)
+        // [تم إصلاح الخطأ هنا] فصل العرض والطول لضمان عدم وجود Int?
+        val mask = maskBitmap ?: return false
+        val w = mask.width
+        val h = mask.height
+        val pixels = IntArray(w * h)
+        mask.getPixels(pixels, 0, w, 0, 0, w, h)
         return pixels.any { it != Color.TRANSPARENT }
     }
 
