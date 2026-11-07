@@ -64,7 +64,7 @@ class ColorEngineDialog : BottomSheetDialogFragment() {
         val hexInput = EditText(requireContext()).apply {
             hint = "إضافة لون (#RRGGBB)"
             setTextColor(Color.WHITE)
-            hintTextColor = Color.GRAY
+            setHintTextColor(Color.GRAY)
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         }
         val btnAdd = Button(requireContext()).apply {
