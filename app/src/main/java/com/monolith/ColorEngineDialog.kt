@@ -2,7 +2,6 @@ package com.monolith
 
 import android.app.Dialog
 import android.graphics.Color
-import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -12,8 +11,7 @@ import androidx.appcompat.widget.SwitchCompat
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 
-// كلاس لتخزين إعدادات كل لون
-data class ColorRule(val color: Int, val isActive: Boolean, val tolerance: Int)
+// [تنبيه] تم حذف data class ColorRule من هنا لأنها موجودة في SurgicalMaskView.kt
 
 class ColorEngineDialog : BottomSheetDialogFragment() {
 
@@ -50,7 +48,7 @@ class ColorEngineDialog : BottomSheetDialogFragment() {
         }
 
         val title = TextView(requireContext()).apply {
-            text = "محرك الألوان"
+            text = "محرك الألوان الجراحي"
             setTextColor(Color.parseColor("#00D4FF"))
             textSize = 22f
             gravity = android.view.Gravity.CENTER
