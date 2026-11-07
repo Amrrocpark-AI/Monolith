@@ -31,6 +31,11 @@ class SurgicalMaskView @JvmOverloads constructor(
     private var currentScale = 1f
     private var scaleDetector: ScaleGestureDetector
 
+    private var panX = 0f
+    private var panY = 0f
+    private var lastFocusX = 0f
+    private var lastFocusY = 0f
+
     private var overlayBitmap: Bitmap? = null
     private var overlayX = 0f
     private var overlayY = 0f
@@ -53,6 +58,8 @@ class SurgicalMaskView @JvmOverloads constructor(
     private val maxHistory = 30
 
     var isDrawingEnabled = false
+    var isFrozen = false
+    var isMaskVisible = true
     var isEraser = false
     var isMagicWand = false
     var isProtectionMode = false
@@ -208,6 +215,7 @@ class SurgicalMaskView @JvmOverloads constructor(
         val protection = protectionBitmap ?: return
 
         canvas.save()
+        canvas.translate(panX, panY)
         canvas.scale(currentScale, currentScale, width / 2f, height / 2f)
 
         val rect = getImageRect()
@@ -219,15 +227,17 @@ class SurgicalMaskView @JvmOverloads constructor(
             overlayBitmap?.let { canvas.drawBitmap(it, overlayX, overlayY, null) }
         }
 
-        val redFilter = Paint().apply {
-            colorFilter = PorterDuffColorFilter(Color.argb(100, 255, 0, 0), PorterDuff.Mode.SRC_IN)
-        }
-        canvas.drawBitmap(mask, null, rect, redFilter)
+        if (isMaskVisible) {
+            val redFilter = Paint().apply {
+                colorFilter = PorterDuffColorFilter(Color.argb(100, 255, 0, 0), PorterDuff.Mode.SRC_IN)
+            }
+            canvas.drawBitmap(mask, null, rect, redFilter)
 
-        val magentaFilter = Paint().apply {
-            colorFilter = PorterDuffColorFilter(Color.argb(100, 255, 0, 255), PorterDuff.Mode.SRC_IN)
+            val magentaFilter = Paint().apply {
+                colorFilter = PorterDuffColorFilter(Color.argb(100, 255, 0, 255), PorterDuff.Mode.SRC_IN)
+            }
+            canvas.drawBitmap(protection, null, rect, magentaFilter)
         }
-        canvas.drawBitmap(protection, null, rect, magentaFilter)
 
         canvas.restore()
     }
@@ -245,17 +255,34 @@ class SurgicalMaskView @JvmOverloads constructor(
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (!isDrawingEnabled) return false
+        
         scaleDetector.onTouchEvent(event)
 
-        if (scaleDetector.isInProgress || event.pointerCount > 1) {
+        if (event.pointerCount >= 2) {
+            if (event.actionMasked == MotionEvent.ACTION_POINTER_DOWN) {
+                lastFocusX = (event.getX(0) + event.getX(1)) / 2f
+                lastFocusY = (event.getY(0) + event.getY(1)) / 2f
+            } else if (event.actionMasked == MotionEvent.ACTION_MOVE) {
+                val focusX = (event.getX(0) + event.getX(1)) / 2f
+                val focusY = (event.getY(0) + event.getY(1)) / 2f
+                panX += focusX - lastFocusX
+                panY += focusY - lastFocusY
+                lastFocusX = focusX
+                lastFocusY = focusY
+                invalidate()
+            }
+            return true
+        }
+
+        if (isFrozen) {
             return true
         }
 
         val src = sourceBitmap ?: return false
         val rect = getImageRect()
 
-        val touchX = (event.x - width / 2f) / currentScale + width / 2f
-        val touchY = (event.y - height / 2f) / currentScale + height / 2f
+        val touchX = (event.x - panX - width / 2f) / currentScale + width / 2f
+        val touchY = (event.y - panY - height / 2f) / currentScale + height / 2f
 
         onTouchUpdate?.invoke(touchX, touchY)
 
