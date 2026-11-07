@@ -9,7 +9,7 @@ import android.view.View
 import java.util.LinkedList
 import kotlin.math.*
 
-data class ColorRule(val color: Int, val isActive: Boolean, val tolerance: Int)
+data class ColorRule(val color: Int, val isActive: Boolean, val tolerance: Int, val isRecolor: Boolean = false, val targetColor: Int = Color.TRANSPARENT)
 
 class SurgicalMaskView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null
@@ -376,7 +376,7 @@ class SurgicalMaskView @JvmOverloads constructor(
                     isColorAssistMode -> canvasColorAssist
                     else -> canvasMask
                 }
-                
+
                 val targetPaint = when {
                     isProtectionMode -> protectionPaint
                     isColorAssistMode -> colorAssistPaint
@@ -397,7 +397,7 @@ class SurgicalMaskView @JvmOverloads constructor(
                     isColorAssistMode -> canvasColorAssist
                     else -> canvasMask
                 }
-                
+
                 val targetPaint = when {
                     isProtectionMode -> protectionPaint
                     isColorAssistMode -> colorAssistPaint
@@ -537,17 +537,26 @@ class SurgicalMaskView @JvmOverloads constructor(
             }
 
             var shouldErase = false
+            var recolorTo: Int? = null
             for (rule in activeColorRules) {
                 if (rule.isActive) {
                     val maxDeltaE = (rule.tolerance / 100f) * 100f
                     if (deltaE(pixel, rule.color) <= maxDeltaE) {
-                        shouldErase = true
+                        if (rule.isRecolor) {
+                            recolorTo = rule.targetColor
+                        } else {
+                            shouldErase = true
+                        }
                         break
                     }
                 }
             }
 
-            resultPixels[i] = if (shouldErase) Color.TRANSPARENT else pixel
+            resultPixels[i] = when {
+                recolorTo != null -> recolorTo
+                shouldErase -> Color.TRANSPARENT
+                else -> pixel
+            }
         }
 
         result.setPixels(resultPixels, 0, width, 0, 0, width, height)
