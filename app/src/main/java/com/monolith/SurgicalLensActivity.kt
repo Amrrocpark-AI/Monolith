@@ -55,32 +55,34 @@ class SurgicalLensActivity : AppCompatActivity() {
         findViewById<ImageButton>(R.id.btnCloseSurgical).setOnClickListener { finish() }
         btnPick.setOnClickListener { pickImage.launch("image/*") }
 
+        // إعداد ألوان الأزرار (مفعلة / غير مفعلة)
         btnEraser.setOnClickListener {
             surgicalMaskView.isEraser = true
             surgicalMaskView.isMagicWand = false
-            btnEraser.setColorFilter(0xFF26A69A.toInt())
-            btnMagicWand.setColorFilter(0xFFFFFFFF.toInt())
+            btnEraser.setColorFilter(0xFF26A69A.toInt()) // أخضر (مفعل)
+            btnMagicWand.setColorFilter(0xFFFFFFFF.toInt()) // أبيض (غير مفعل)
         }
 
         btnMagicWand.setOnClickListener {
             surgicalMaskView.isMagicWand = true
             surgicalMaskView.isEraser = false
-            btnMagicWand.setColorFilter(0xFF26A69A.toInt())
-            btnEraser.setColorFilter(0xFFFFFFFF.toInt())
+            btnMagicWand.setColorFilter(0xFF26A69A.toInt()) // أخضر (مفعل)
+            btnEraser.setColorFilter(0xFFFFFFFF.toInt()) // أبيض (غير مفعل)
         }
 
+        // زر الذكاء الاصطناعي (إجراء - لا يبقى مفعل)
         btnAiCutout.setOnClickListener {
             performAiCutout()
         }
 
-        // [تعديل] فتح الخزنة وإرسال الشعار للمحرك
+        // زر المحفوظات (إجراء - يفتح النافذة)
         btnVault.setOnClickListener {
             val vaultDialog = StickerVaultDialog()
             vaultDialog.onStickerSelected = { file ->
                 val bitmap = BitmapFactory.decodeFile(file.absolutePath)
                 if (bitmap != null) {
-                    surgicalMaskView.setOverlayBitmap(bitmap) // إرسال الشعار للمحرك
-                    Toast.makeText(this, "تمت إضافة الشعار. يمكنك سحبه بإصبعك.", Toast.LENGTH_SHORT).show()
+                    surgicalMaskView.setOverlayBitmap(bitmap)
+                    Toast.makeText(this, "تمت الإضافة. يمكنك سحبها بإصبعك.", Toast.LENGTH_SHORT).show()
                 }
             }
             vaultDialog.show(supportFragmentManager, "StickerVault")
@@ -150,7 +152,8 @@ class SurgicalLensActivity : AppCompatActivity() {
             val finalBitmap = surgicalMaskView.exportPNG() ?: currentBitmap
             if (finalBitmap != null) {
                 writeToGallery(finalBitmap)
-                VaultManager.saveSticker(this@SurgicalLensActivity, finalBitmap, "شعار_${System.currentTimeMillis()}")
+                // حفظ باسم PNG_ احترافي بدلاً من "شعار"
+                VaultManager.saveSticker(this@SurgicalLensActivity, finalBitmap, "PNG_${System.currentTimeMillis()}")
             }
             withContext(Dispatchers.Main) {
                 progressBar.visibility = View.GONE
