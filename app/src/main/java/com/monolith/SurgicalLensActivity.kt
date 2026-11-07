@@ -32,12 +32,14 @@ class SurgicalLensActivity : AppCompatActivity() {
     private lateinit var btnAiCutout: ImageButton
     private lateinit var btnVault: ImageButton
     private lateinit var btnProtection: ImageButton
-    private lateinit var btnColorEngine: ImageButton // [جديد] زر محرك الألوان
+    private lateinit var btnColorEngine: ImageButton
+    private lateinit var btnLoupe: ImageButton // [جديد] زر العدسة
+    private lateinit var btnLoupePin: ImageButton // [جديد] زر تثبيت العدسة
     private lateinit var progressBar: ProgressBar
     private lateinit var btnPick: Button
     private var currentBitmap: Bitmap? = null
 
-    // ألوان الواجهة (سماوي وأبيض فقط، لا يوجد أخضر)
+    // ألوان الواجهة (سماوي وأبيض فقط)
     private val colorActive = Color.parseColor("#00D4FF") // سماوي
     private val colorInactive = Color.parseColor("#FFFFFF") // أبيض
 
@@ -57,7 +59,12 @@ class SurgicalLensActivity : AppCompatActivity() {
         btnAiCutout = findViewById(R.id.btnAiCutoutSurgical)
         btnVault = findViewById(R.id.btnVaultSurgical)
         btnProtection = findViewById(R.id.btnProtectionSurgical)
-        btnColorEngine = findViewById(R.id.btnColorEngineSurgical) // [جديد]
+        btnColorEngine = findViewById(R.id.btnColorEngineSurgical)
+        
+        // [جديد] ربط أزرار العدسة
+        btnLoupe = findViewById(R.id.btnLoupeSurgical) 
+        btnLoupePin = findViewById(R.id.btnLoupePinSurgical)
+        
         progressBar = findViewById(R.id.progressBarSurgical)
         btnPick = findViewById(R.id.btnPickSurgicalImage)
 
@@ -98,14 +105,32 @@ class SurgicalLensActivity : AppCompatActivity() {
             btnMagicWand.setColorFilter(colorInactive)
         }
 
-        // [جديد] فتح نافذة الألوان
+        // فتح نافذة الألوان
         btnColorEngine.setOnClickListener {
             val colorDialog = ColorEngineDialog()
             colorDialog.onColorsSelected = { rules ->
-                // إرسال قواعد الألوان إلى المحرك
                 surgicalMaskView.setColorRules(rules)
             }
             colorDialog.show(supportFragmentManager, "ColorEngine")
+        }
+
+        // [جديد] تفعيل/إلغاء العدسة
+        btnLoupe.setOnClickListener {
+            surgicalMaskView.isLoupeEnabled = !surgicalMaskView.isLoupeEnabled
+            btnLoupe.setColorFilter(if (surgicalMaskView.isLoupeEnabled) colorActive else colorInactive)
+            // إذا أطفأنا العدسة، نلغي التثبيت
+            if (!surgicalMaskView.isLoupeEnabled) {
+                surgicalMaskView.isLoupePinned = false
+                btnLoupePin.setColorFilter(colorInactive)
+            }
+        }
+
+        // [جديد] تثبيت العدسة في الزاوية
+        btnLoupePin.setOnClickListener {
+            if (surgicalMaskView.isLoupeEnabled) {
+                surgicalMaskView.isLoupePinned = !surgicalMaskView.isLoupePinned
+                btnLoupePin.setColorFilter(if (surgicalMaskView.isLoupePinned) colorActive else colorInactive)
+            }
         }
 
         btnAiCutout.setOnClickListener { performAiCutout() }
