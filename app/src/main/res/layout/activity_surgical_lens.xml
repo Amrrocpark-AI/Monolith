@@ -89,7 +89,11 @@
                 <ImageButton android:id="@+id/btnAiCutoutSurgical" android:layout_width="48dp" android:layout_height="48dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_ai_cutout" app:tint="#FFFFFF" android:layout_marginEnd="8dp" />
                 <ImageButton android:id="@+id/btnVaultSurgical" android:layout_width="48dp" android:layout_height="48dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_vault" app:tint="#FFFFFF" android:layout_marginEnd="8dp" />
                 
-                <ImageButton android:id="@+id/btnLoupeSurgical" android:layout_width="48dp" android:layout_height="48dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_loupe" app:tint="#FFFFFF" />
+                <ImageButton android:id="@+id/btnLoupeSurgical" android:layout_width="48dp" android:layout_height="48dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_loupe" app:tint="#FFFFFF" android:layout_marginEnd="8dp" />
+                
+                <ImageButton android:id="@+id/btnFreezeSurgical" android:layout_width="48dp" android:layout_height="48dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_freeze" app:tint="#FFFFFF" android:layout_marginEnd="8dp" />
+                
+                <ImageButton android:id="@+id/btnMaskVisibilitySurgical" android:layout_width="48dp" android:layout_height="48dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_visibility" app:tint="#FFFFFF" />
                 
             </LinearLayout>
         </HorizontalScrollView>
