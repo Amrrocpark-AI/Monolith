@@ -25,6 +25,7 @@ import java.io.IOException
 class SurgicalLensActivity : AppCompatActivity() {
 
     private lateinit var surgicalMaskView: SurgicalMaskView
+    private lateinit var loupeView: LoupeView
     private lateinit var seekBar: SeekBar
     private lateinit var tvValue: TextView
     private lateinit var btnEraser: ImageButton
@@ -33,15 +34,13 @@ class SurgicalLensActivity : AppCompatActivity() {
     private lateinit var btnVault: ImageButton
     private lateinit var btnProtection: ImageButton
     private lateinit var btnColorEngine: ImageButton
-    private lateinit var btnLoupe: ImageButton // [جديد] زر العدسة
-    private lateinit var btnLoupePin: ImageButton // [جديد] زر تثبيت العدسة
+    private lateinit var btnLoupe: ImageButton
     private lateinit var progressBar: ProgressBar
     private lateinit var btnPick: Button
     private var currentBitmap: Bitmap? = null
 
-    // ألوان الواجهة (سماوي وأبيض فقط)
-    private val colorActive = Color.parseColor("#00D4FF") // سماوي
-    private val colorInactive = Color.parseColor("#FFFFFF") // أبيض
+    private val colorActive = Color.parseColor("#00D4FF")
+    private val colorInactive = Color.parseColor("#FFFFFF")
 
     private val pickImage = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) loadImage(uri)
@@ -52,6 +51,7 @@ class SurgicalLensActivity : AppCompatActivity() {
         setContentView(R.layout.activity_surgical_lens)
 
         surgicalMaskView = findViewById(R.id.surgicalMaskView)
+        loupeView = findViewById(R.id.loupeView)
         seekBar = findViewById(R.id.seekBarSurgical)
         tvValue = findViewById(R.id.tvSurgicalValue)
         btnEraser = findViewById(R.id.btnEraserSurgical)
@@ -60,11 +60,7 @@ class SurgicalLensActivity : AppCompatActivity() {
         btnVault = findViewById(R.id.btnVaultSurgical)
         btnProtection = findViewById(R.id.btnProtectionSurgical)
         btnColorEngine = findViewById(R.id.btnColorEngineSurgical)
-        
-        // [جديد] ربط أزرار العدسة
-        btnLoupe = findViewById(R.id.btnLoupeSurgical) 
-        btnLoupePin = findViewById(R.id.btnLoupePinSurgical)
-        
+        btnLoupe = findViewById(R.id.btnLoupeSurgical)
         progressBar = findViewById(R.id.progressBarSurgical)
         btnPick = findViewById(R.id.btnPickSurgicalImage)
 
@@ -74,7 +70,6 @@ class SurgicalLensActivity : AppCompatActivity() {
         findViewById<ImageButton>(R.id.btnUndoSurgical).setOnClickListener { surgicalMaskView.undo() }
         findViewById<ImageButton>(R.id.btnRedoSurgical).setOnClickListener { surgicalMaskView.redo() }
 
-        // الممحاة
         btnEraser.setOnClickListener {
             surgicalMaskView.isEraser = true
             surgicalMaskView.isMagicWand = false
@@ -84,7 +79,6 @@ class SurgicalLensActivity : AppCompatActivity() {
             btnProtection.setColorFilter(colorInactive)
         }
 
-        // العصا السحرية
         btnMagicWand.setOnClickListener {
             surgicalMaskView.isMagicWand = true
             surgicalMaskView.isEraser = false
@@ -94,18 +88,15 @@ class SurgicalLensActivity : AppCompatActivity() {
             btnProtection.setColorFilter(colorInactive)
         }
 
-        // جدار الحماية
         btnProtection.setOnClickListener {
             surgicalMaskView.isProtectionMode = !surgicalMaskView.isProtectionMode
             surgicalMaskView.isEraser = false
             surgicalMaskView.isMagicWand = false
-            
             btnProtection.setColorFilter(if (surgicalMaskView.isProtectionMode) colorActive else colorInactive)
             btnEraser.setColorFilter(colorInactive)
             btnMagicWand.setColorFilter(colorInactive)
         }
 
-        // فتح نافذة الألوان
         btnColorEngine.setOnClickListener {
             val colorDialog = ColorEngineDialog()
             colorDialog.onColorsSelected = { rules ->
@@ -114,23 +105,10 @@ class SurgicalLensActivity : AppCompatActivity() {
             colorDialog.show(supportFragmentManager, "ColorEngine")
         }
 
-        // [جديد] تفعيل/إلغاء العدسة
         btnLoupe.setOnClickListener {
-            surgicalMaskView.isLoupeEnabled = !surgicalMaskView.isLoupeEnabled
-            btnLoupe.setColorFilter(if (surgicalMaskView.isLoupeEnabled) colorActive else colorInactive)
-            // إذا أطفأنا العدسة، نلغي التثبيت
-            if (!surgicalMaskView.isLoupeEnabled) {
-                surgicalMaskView.isLoupePinned = false
-                btnLoupePin.setColorFilter(colorInactive)
-            }
-        }
-
-        // [جديد] تثبيت العدسة في الزاوية
-        btnLoupePin.setOnClickListener {
-            if (surgicalMaskView.isLoupeEnabled) {
-                surgicalMaskView.isLoupePinned = !surgicalMaskView.isLoupePinned
-                btnLoupePin.setColorFilter(if (surgicalMaskView.isLoupePinned) colorActive else colorInactive)
-            }
+            val isEnabled = !loupeView.isLoupeEnabled()
+            loupeView.setLoupeEnabled(isEnabled)
+            btnLoupe.setColorFilter(if (isEnabled) colorActive else colorInactive)
         }
 
         btnAiCutout.setOnClickListener { performAiCutout() }
@@ -141,7 +119,7 @@ class SurgicalLensActivity : AppCompatActivity() {
                 val bitmap = BitmapFactory.decodeFile(file.absolutePath)
                 if (bitmap != null) {
                     surgicalMaskView.setOverlayBitmap(bitmap)
-                    Toast.makeText(this, "تمت الإضافة. يمكنك سحبها بإصبعك.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "تمت الإضافة", Toast.LENGTH_SHORT).show()
                 }
             }
             vaultDialog.show(supportFragmentManager, "StickerVault")
@@ -152,6 +130,8 @@ class SurgicalLensActivity : AppCompatActivity() {
                 tvValue.text = progress.toString()
                 if (surgicalMaskView.isMagicWand) {
                     surgicalMaskView.tolerance = progress
+                } else if (loupeView.isLoupeEnabled()) {
+                    loupeView.loupeRadius = 80f + (progress * 2f)
                 } else {
                     surgicalMaskView.brushSize = progress.toFloat() * 2f
                 }
@@ -178,6 +158,7 @@ class SurgicalLensActivity : AppCompatActivity() {
             btnPick.visibility = View.GONE
             currentBitmap = bitmap
             surgicalMaskView.setImageBitmap(bitmap)
+            loupeView.setImage(bitmap, surgicalMaskView.getImageBounds())
         } catch (e: IOException) { }
     }
 
@@ -197,6 +178,7 @@ class SurgicalLensActivity : AppCompatActivity() {
                 if (foregroundBitmap != null) {
                     currentBitmap = foregroundBitmap
                     surgicalMaskView.setImageBitmap(foregroundBitmap)
+                    loupeView.setImage(foregroundBitmap, surgicalMaskView.getImageBounds())
                 }
                 progressBar.visibility = View.GONE
             }
@@ -215,14 +197,14 @@ class SurgicalLensActivity : AppCompatActivity() {
             }
             withContext(Dispatchers.Main) {
                 progressBar.visibility = View.GONE
-                Toast.makeText(this@SurgicalLensActivity, "تم الحفظ في المعرض والخزنة", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@SurgicalLensActivity, "تم الحفظ", Toast.LENGTH_SHORT).show()
             }
         }
     }
 
     private fun writeToGallery(bmp: Bitmap) {
         val values = ContentValues().apply {
-            put(MediaStore.Images.Media.DISPLAY_NAME, "Monolith_PNG_${System.currentTimeMillis()}.png")
+            put(MediaStore.Images.Media.DISPLAY_NAME, "Monolith_${System.currentTimeMillis()}.png")
             put(MediaStore.Images.Media.MIME_TYPE, "image/png")
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Monolith")
