@@ -2,8 +2,9 @@ package com.monolith
 
 import android.app.Dialog
 import android.content.Context
-import android.graphics.BitmapFactory
-import android.graphics.Color
+import android.graphics.*
+import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.LayoutInflater
@@ -107,7 +108,6 @@ class StickerVaultDialog : BottomSheetDialogFragment() {
         btnClose.setOnClickListener { checkUnsavedAndDismiss() }
     }
 
-    // [إصلاح] اعتراض زر الرجوع في الهاتف بطريقة آمنة
     override fun onStart() {
         super.onStart()
         dialog?.setOnKeyListener { _, keyCode, event ->
@@ -148,6 +148,19 @@ class VaultAdapter(
     private val onRename: (File, String) -> Unit
 ) : RecyclerView.Adapter<VaultAdapter.VaultViewHolder>() {
 
+    // دالة لصنع خلفية الشطرنج برمجياً
+    private fun createCheckerboardDrawable(size: Int = 32): Drawable {
+        val bitmap = Bitmap.createBitmap(size * 2, size * 2, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val paint = Paint()
+        paint.color = Color.parseColor("#CCCCCC")
+        canvas.drawRect(0f, 0f, size * 2f, size * 2f, paint)
+        paint.color = Color.WHITE
+        canvas.drawRect(0f, 0f, size.toFloat(), size.toFloat(), paint)
+        canvas.drawRect(size.toFloat(), size.toFloat(), size * 2f, size * 2f, paint)
+        return BitmapDrawable(context.resources, bitmap)
+    }
+
     fun updateData(newFiles: List<File>) {
         files = newFiles
         notifyDataSetChanged()
@@ -165,7 +178,6 @@ class VaultAdapter(
         val tvName: TextView = view.findViewById(R.id.tvVaultName)
         val btnDel: ImageButton = view.findViewById(R.id.btnVaultDelete)
         val btnRename: ImageButton = view.findViewById(R.id.btnVaultRename)
-        val checkBox: CheckBox = view.findViewById(R.id.cbVaultSelect)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VaultViewHolder {
@@ -182,7 +194,7 @@ class VaultAdapter(
         val img = ImageView(context).apply {
             layoutParams = LinearLayout.LayoutParams(200, 200)
             scaleType = ImageView.ScaleType.FIT_CENTER
-            setBackgroundColor(Color.parseColor("#333333"))
+            setBackground(createCheckerboardDrawable()) // استخدام خلفية الشطرنج
         }
         
         val tvName = TextView(context).apply {
@@ -194,18 +206,14 @@ class VaultAdapter(
         }
 
         val btnDel = ImageButton(context).apply {
-            setImageResource(android.R.drawable.ic_menu_delete)
+            setImageResource(R.drawable.ic_vault_delete) // أيقونة مخصصة
             setBackgroundColor(Color.TRANSPARENT)
             visibility = View.GONE
         }
         
         val btnRename = ImageButton(context).apply {
-            setImageResource(android.R.drawable.ic_menu_edit)
+            setImageResource(R.drawable.ic_vault_rename) // أيقونة مخصصة
             setBackgroundColor(Color.TRANSPARENT)
-            visibility = View.GONE
-        }
-
-        val checkBox = CheckBox(context).apply {
             visibility = View.GONE
         }
 
@@ -218,13 +226,11 @@ class VaultAdapter(
         actions.addView(btnDel)
         actions.addView(btnRename)
         layout.addView(actions)
-        layout.addView(checkBox)
 
         img.id = R.id.imgVaultItem
         tvName.id = R.id.tvVaultName
         btnDel.id = R.id.btnVaultDelete
         btnRename.id = R.id.btnVaultRename
-        checkBox.id = R.id.cbVaultSelect
 
         return VaultViewHolder(layout)
     }
@@ -233,7 +239,10 @@ class VaultAdapter(
         val file = files[position]
         val bitmap = BitmapFactory.decodeFile(file.absolutePath)
         holder.img.setImageBitmap(bitmap)
-        holder.tvName.text = VaultManager.getStickerName(context, file.name)
+        
+        // تنظيف الاسم من الصيغة
+        val rawName = VaultManager.getStickerName(context, file.name)
+        holder.tvName.text = rawName.replace(".png", "").replace("PNG_", "لوحة_")
 
         holder.btnDel.visibility = if (isEditMode) View.VISIBLE else View.GONE
         holder.btnRename.visibility = if (isEditMode) View.VISIBLE else View.GONE
@@ -243,7 +252,7 @@ class VaultAdapter(
             val input = EditText(context)
             input.setText(holder.tvName.text)
             AlertDialog.Builder(context)
-                .setTitle("اسم الشعار")
+                .setTitle("اسم المحفوظة")
                 .setView(input)
                 .setPositiveButton("حفظ") { _, _ ->
                     val newName = input.text.toString()
