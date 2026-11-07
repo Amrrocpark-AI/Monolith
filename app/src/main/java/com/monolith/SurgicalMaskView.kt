@@ -28,7 +28,7 @@ class SurgicalMaskView @JvmOverloads constructor(
     
     private var currentPath: Path? = null
     
-    // متغيرات العدسة (تم إزالة private لكي تعمل مع الشاشة)
+    // العدسة
     var isLoupeEnabled = true
     var isLoupePinned = false
     private var loupeRadius = 150f
@@ -36,11 +36,11 @@ class SurgicalMaskView @JvmOverloads constructor(
     private var loupeTouchX = 0f
     private var loupeTouchY = 0f
 
-    // متغيرات التكبير
+    // التكبير
     private var currentScale = 1f
     private var scaleDetector: ScaleGestureDetector
 
-    // متغيرات الشعار
+    // الشعار
     private var overlayBitmap: Bitmap? = null
     private var overlayX = 0f
     private var overlayY = 0f
@@ -49,7 +49,7 @@ class SurgicalMaskView @JvmOverloads constructor(
     private var lastTouchX = 0f
     private var lastTouchY = 0f
 
-    // متغيرات الألوان
+    // الألوان
     private var activeColorRules: List<ColorRule> = emptyList()
 
     // نظام التراجع
@@ -64,6 +64,7 @@ class SurgicalMaskView @JvmOverloads constructor(
     private val redoStack = ArrayList<HistoryState>()
     private val maxHistory = 30
 
+    // المتغيرات العامة
     var isDrawingEnabled = false
     var isEraser = false
     var isMagicWand = false
@@ -103,17 +104,6 @@ class SurgicalMaskView @JvmOverloads constructor(
                 return true
             }
         })
-    }
-
-    fun setLoupeEnabled(enabled: Boolean) {
-        isLoupeEnabled = enabled
-        isLoupePinned = false
-        invalidate()
-    }
-
-    fun toggleLoupePin() {
-        isLoupePinned = !isLoupePinned
-        invalidate()
     }
 
     fun setImageBitmap(bitmap: Bitmap) {
@@ -295,7 +285,6 @@ class SurgicalMaskView @JvmOverloads constructor(
         if (!isDrawingEnabled) return false
         scaleDetector.onTouchEvent(event)
 
-        // [حماية] منع الرسم إذا كان المستخدم يستخدم أكثر من إصبع (وضع التكبير)
         if (scaleDetector.isInProgress || event.pointerCount > 1) {
             return true
         }
