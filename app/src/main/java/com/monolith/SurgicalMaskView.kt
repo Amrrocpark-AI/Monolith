@@ -89,7 +89,8 @@ class SurgicalMaskView @JvmOverloads constructor(
         protectionPaint.color = Color.WHITE
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            magnifier = Magnifier.Builder(context)
+            // [إصلاح] تم تغيير context إلى this لأن الباني يتطلب View
+            magnifier = Magnifier.Builder(this)
                 .setInitialZoom(2.0f)
                 .setSize(300, 300)
                 .build()
