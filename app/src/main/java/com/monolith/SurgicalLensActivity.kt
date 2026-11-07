@@ -35,6 +35,8 @@ class SurgicalLensActivity : AppCompatActivity() {
     private lateinit var btnProtection: ImageButton
     private lateinit var btnColorEngine: ImageButton
     private lateinit var btnLoupe: ImageButton
+    private lateinit var btnFreeze: ImageButton
+    private lateinit var btnMaskVisibility: ImageButton
     private lateinit var progressBar: ProgressBar
     private lateinit var btnPick: Button
     private var currentBitmap: Bitmap? = null
@@ -61,6 +63,8 @@ class SurgicalLensActivity : AppCompatActivity() {
         btnProtection = findViewById(R.id.btnProtectionSurgical)
         btnColorEngine = findViewById(R.id.btnColorEngineSurgical)
         btnLoupe = findViewById(R.id.btnLoupeSurgical)
+        btnFreeze = findViewById(R.id.btnFreezeSurgical)
+        btnMaskVisibility = findViewById(R.id.btnMaskVisibilitySurgical)
         progressBar = findViewById(R.id.progressBarSurgical)
         btnPick = findViewById(R.id.btnPickSurgicalImage)
 
@@ -109,6 +113,16 @@ class SurgicalLensActivity : AppCompatActivity() {
             val isEnabled = !loupeView.isLoupeEnabled()
             loupeView.setLoupeEnabled(isEnabled)
             btnLoupe.setColorFilter(if (isEnabled) colorActive else colorInactive)
+        }
+
+        btnFreeze.setOnClickListener {
+            surgicalMaskView.isFrozen = !surgicalMaskView.isFrozen
+            btnFreeze.setColorFilter(if (surgicalMaskView.isFrozen) colorActive else colorInactive)
+        }
+
+        btnMaskVisibility.setOnClickListener {
+            surgicalMaskView.isMaskVisible = !surgicalMaskView.isMaskVisible
+            btnMaskVisibility.setColorFilter(if (surgicalMaskView.isMaskVisible) colorActive else colorInactive)
         }
 
         btnAiCutout.setOnClickListener { performAiCutout() }
