@@ -21,7 +21,7 @@
         <ImageButton android:id="@+id/btnEraserSurgical" android:layout_width="44dp" android:layout_height="44dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_eraser" />
         <ImageButton android:id="@+id/btnMagicWandSurgical" android:layout_width="44dp" android:layout_height="44dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@android:drawable/ic_menu_view" app:tint="#FFFFFF" />
 
-        <!-- [إضافة جديدة] زر الذكاء الاصطناعي -->
+        <!-- زر الذكاء الاصطناعي -->
         <ImageButton 
             android:id="@+id/btnAiCutoutSurgical" 
             android:layout_width="44dp" 
@@ -29,6 +29,15 @@
             android:background="?attr/selectableItemBackgroundBorderless" 
             android:src="@android:drawable/ic_menu_camera" 
             app:tint="#FFD700" />
+
+        <!-- [جديد] زر الخزنة -->
+        <ImageButton 
+            android:id="@+id/btnVaultSurgical" 
+            android:layout_width="44dp" 
+            android:layout_height="44dp" 
+            android:background="?attr/selectableItemBackgroundBorderless" 
+            android:src="@android:drawable/ic_menu_gallery" 
+            app:tint="#8A2BE2" />
 
         <View android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
 
@@ -41,7 +50,6 @@
         android:layout_height="0dp"
         android:layout_weight="1">
 
-        <!-- المحرك الوحيد الذي سيعرض الصورة ويرسم عليها -->
         <com.monolith.SurgicalMaskView
             android:id="@+id/surgicalMaskView"
             android:layout_width="match_parent"
