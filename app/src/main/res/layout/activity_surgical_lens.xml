@@ -23,13 +23,22 @@
         <!-- العصا السحرية -->
         <ImageButton android:id="@+id/btnMagicWandSurgical" android:layout_width="44dp" android:layout_height="44dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_magic_wand" app:tint="#FFFFFF" />
 
-        <!-- [جديد] زر جدار الحماية (Protection) -->
+        <!-- زر جدار الحماية (أيقونة مخصصة) -->
         <ImageButton 
             android:id="@+id/btnProtectionSurgical" 
             android:layout_width="44dp" 
             android:layout_height="44dp" 
             android:background="?attr/selectableItemBackgroundBorderless" 
-            android:src="@android:drawable/ic_lock_lock" 
+            android:src="@drawable/ic_monolith_lock" 
+            app:tint="#FFFFFF" />
+
+        <!-- [جديد] زر محرك الألوان -->
+        <ImageButton 
+            android:id="@+id/btnColorEngineSurgical" 
+            android:layout_width="44dp" 
+            android:layout_height="44dp" 
+            android:background="?attr/selectableItemBackgroundBorderless" 
+            android:src="@drawable/ic_color_engine" 
             app:tint="#FFFFFF" />
 
         <!-- زر الذكاء الاصطناعي -->
@@ -52,7 +61,7 @@
 
         <View android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
 
-        <Button android:id="@+id/btnApplySurgical" style="?android:attr/borderlessButtonStyle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minWidth="0dp" android:text="تطبيق" android:textColor="#26A69A" />
+        <Button android:id="@+id/btnApplySurgical" style="?android:attr/borderlessButtonStyle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minWidth="0dp" android:text="تطبيق" android:textColor="#00D4FF" />
         <Button android:id="@+id/btnSaveSurgical" style="?android:attr/borderlessButtonStyle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minWidth="0dp" android:text="حفظ" android:textColor="#00E5FF" />
     </LinearLayout>
 
