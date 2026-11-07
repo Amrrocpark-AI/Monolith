@@ -19,13 +19,25 @@ class SurgicalMaskView @JvmOverloads constructor(
     private val eraserPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private var currentPath: Path? = null
 
-    // [إضافة جديدة] متغيرات الشعار
+    // متغيرات الشعار
     private var overlayBitmap: Bitmap? = null
     private var overlayX = 0f
     private var overlayY = 0f
+    private var isOverlayVisible = true
     private var isDraggingOverlay = false
     private var lastTouchX = 0f
     private var lastTouchY = 0f
+
+    // [إضافة جديدة] نظام التراجع والإعادة الشامل
+    private data class HistoryState(
+        val mask: Bitmap,
+        val overlayX: Float,
+        val overlayY: Float,
+        val hasOverlay: Boolean
+    )
+    private val undoStack = ArrayList<HistoryState>()
+    private val redoStack = ArrayList<HistoryState>()
+    private val maxHistory = 30
 
     var isDrawingEnabled = false
     var isEraser = false
@@ -56,15 +68,21 @@ class SurgicalMaskView @JvmOverloads constructor(
         sourceBitmap = bitmap
         maskBitmap = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
         canvasMask.setBitmap(maskBitmap!!)
+        
+        undoStack.clear()
+        redoStack.clear()
+        saveHistoryState() // حفظ الحالة الأولى
+        
         isDrawingEnabled = true
         invalidate()
     }
 
-    // [إضافة جديدة] دالة استقبال الشعار
     fun setOverlayBitmap(bitmap: Bitmap) {
+        saveHistoryState() // حفظ الحالة قبل إضافة الشعار
         overlayBitmap = bitmap
         overlayX = (width - bitmap.width) / 2f
         overlayY = (height - bitmap.height) / 2f
+        isOverlayVisible = true
         invalidate()
     }
 
@@ -75,6 +93,53 @@ class SurgicalMaskView @JvmOverloads constructor(
         val pixels = IntArray(w * h)
         mask.getPixels(pixels, 0, w, 0, 0, w, h)
         return pixels.any { it != Color.TRANSPARENT }
+    }
+
+    fun undo() {
+        if (undoStack.size > 1) {
+            val currentState = undoStack.removeAt(undoStack.size - 1)
+            redoStack.add(currentState)
+            
+            val previousState = undoStack.last()
+            maskBitmap = previousState.mask.copy(Bitmap.Config.ARGB_8888, true)
+            canvasMask.setBitmap(maskBitmap!!)
+            
+            overlayX = previousState.overlayX
+            overlayY = previousState.overlayY
+            isOverlayVisible = previousState.hasOverlay
+            
+            invalidate()
+        }
+    }
+
+    fun redo() {
+        if (redoStack.isNotEmpty()) {
+            val nextState = redoStack.removeAt(redoStack.size - 1)
+            undoStack.add(nextState)
+            
+            maskBitmap = nextState.mask.copy(Bitmap.Config.ARGB_8888, true)
+            canvasMask.setBitmap(maskBitmap!!)
+            
+            overlayX = nextState.overlayX
+            overlayY = nextState.overlayY
+            isOverlayVisible = nextState.hasOverlay
+            
+            invalidate()
+        }
+    }
+
+    private fun saveHistoryState() {
+        val mask = maskBitmap ?: return
+        if (undoStack.size >= maxHistory) {
+            undoStack.removeAt(0)
+        }
+        undoStack.add(HistoryState(
+            mask = mask.copy(Bitmap.Config.ARGB_8888, true),
+            overlayX = overlayX,
+            overlayY = overlayY,
+            hasOverlay = isOverlayVisible
+        ))
+        redoStack.clear()
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -90,12 +155,14 @@ class SurgicalMaskView @JvmOverloads constructor(
         // 2. رسم الصورة الأصلية
         canvas.drawBitmap(src, null, rect, null)
 
-        // [إضافة جديدة] 2.5 رسم الشعار فوق الصورة
-        overlayBitmap?.let { overlay ->
-            canvas.drawBitmap(overlay, overlayX, overlayY, null)
+        // 3. رسم الشعار فوق الصورة
+        if (isOverlayVisible) {
+            overlayBitmap?.let { overlay ->
+                canvas.drawBitmap(overlay, overlayX, overlayY, null)
+            }
         }
 
-        // 3. رسم القناع (اللون الأحمر)
+        // 4. رسم القناع (اللون الأحمر)
         val displayMask = Bitmap.createBitmap(mask.width, mask.height, Bitmap.Config.ARGB_8888)
         val c = Canvas(displayMask)
         c.drawBitmap(mask, 0f, 0f, null)
@@ -120,19 +187,20 @@ class SurgicalMaskView @JvmOverloads constructor(
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (!isDrawingEnabled) return false
         
-        // [إضافة جديدة] التحقق أولاً إذا كان المستخدم يمسك الشعار ويسحبه
+        // التحقق أولاً إذا كان المستخدم يمسك الشعار ويسحبه
         val overlay = overlayBitmap
-        if (overlay != null) {
+        if (overlay != null && isOverlayVisible) {
             val isInside = event.x >= overlayX && event.x <= overlayX + overlay.width &&
                            event.y >= overlayY && event.y <= overlayY + overlay.height
 
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
                     if (isInside) {
+                        saveHistoryState() // حفظ الحالة قبل السحب
                         isDraggingOverlay = true
                         lastTouchX = event.x
                         lastTouchY = event.y
-                        return true // نوقف أي شيء آخر (مثل الفرشاة)
+                        return true 
                     }
                 }
                 MotionEvent.ACTION_MOVE -> {
@@ -154,7 +222,7 @@ class SurgicalMaskView @JvmOverloads constructor(
             }
         }
 
-        // --- من هنا يبدأ كودك الأصلي للرسم ---
+        // --- كود الرسم والعصا السحرية ---
         val src = sourceBitmap ?: return false
         val scaleX = src.width.toFloat() / width.toFloat()
         val scaleY = src.height.toFloat() / height.toFloat()
@@ -163,6 +231,8 @@ class SurgicalMaskView @JvmOverloads constructor(
 
         when (event.action) {
             MotionEvent.ACTION_DOWN -> {
+                saveHistoryState() // حفظ الحالة قبل الرسم
+                
                 if (isMagicWand) {
                     applyMagicWand(x.toInt(), y.toInt())
                     return true
@@ -231,6 +301,8 @@ class SurgicalMaskView @JvmOverloads constructor(
     fun applyClip() {
         val src = sourceBitmap ?: return
         val mask = maskBitmap ?: return
+        saveHistoryState() // حفظ الحالة قبل القص
+        
         val result = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(result)
         canvas.drawBitmap(src, 0f, 0f, null)
@@ -241,6 +313,8 @@ class SurgicalMaskView @JvmOverloads constructor(
         
         sourceBitmap = result
         maskBitmap?.eraseColor(Color.TRANSPARENT)
+        
+        saveHistoryState() // حفظ الحالة بعد القص
         invalidate()
     }
 
@@ -255,11 +329,12 @@ class SurgicalMaskView @JvmOverloads constructor(
         paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
         canvas.drawBitmap(mask, 0f, 0f, paint)
 
-        // [إضافة جديدة] دمج الشعار مع الصورة النهائية
-        overlayBitmap?.let { overlay ->
-            val scaleX = src.width.toFloat() / width.toFloat()
-            val scaleY = src.height.toFloat() / height.toFloat()
-            canvas.drawBitmap(overlay, overlayX * scaleX, overlayY * scaleY, null)
+        if (isOverlayVisible) {
+            overlayBitmap?.let { overlay ->
+                val scaleX = src.width.toFloat() / width.toFloat()
+                val scaleY = src.height.toFloat() / height.toFloat()
+                canvas.drawBitmap(overlay, overlayX * scaleX, overlayY * scaleY, null)
+            }
         }
         
         return result
