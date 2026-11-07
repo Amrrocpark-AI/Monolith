@@ -22,6 +22,9 @@ class SurgicalMaskView @JvmOverloads constructor(
     private val eraserPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val protectionPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     
+    // [تم الإصلاح] إضافة تعريف currentPath هنا
+    private var currentPath: Path? = null
+    
     // متغيرات الشعار
     private var overlayBitmap: Bitmap? = null
     private var overlayX = 0f
@@ -393,10 +396,6 @@ class SurgicalMaskView @JvmOverloads constructor(
         canvas.drawBitmap(mask, 0f, 0f, paint)
 
         // 2. إعادة رسم منطقة الحماية (التي لا يجب مسحها)
-        // نستخدم عملية عكسية لإبقاء البكسلات المحمية فقط
-        val protectionMask = Paint(Paint.ANTI_ALIAS_FLAG)
-        protectionMask.xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_OVER)
-        // إعادة رسم الصورة الأصلية في المناطق المحمية
         val tempProtection = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
         val tempCanvas = Canvas(tempProtection)
         tempCanvas.drawBitmap(src, 0f, 0f, null)
