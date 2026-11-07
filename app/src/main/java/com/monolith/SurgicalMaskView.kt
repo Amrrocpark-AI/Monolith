@@ -161,6 +161,15 @@ class SurgicalMaskView @JvmOverloads constructor(
         return pixels.any { it != Color.TRANSPARENT }
     }
 
+    private fun hasProtection(): Boolean {
+        val protection = protectionBitmap ?: return false
+        val w = protection.width
+        val h = protection.height
+        val pixels = IntArray(w * h)
+        protection.getPixels(pixels, 0, w, 0, 0, w, h)
+        return pixels.any { it != Color.TRANSPARENT }
+    }
+
     fun undo() {
         if (undoStack.size > 1) {
             val currentState = undoStack.removeAt(undoStack.size - 1)
@@ -575,9 +584,21 @@ class SurgicalMaskView @JvmOverloads constructor(
         val canvas = Canvas(result)
         canvas.drawBitmap(colorProcessedBitmap, 0f, 0f, null)
 
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-        paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
-        canvas.drawBitmap(mask, 0f, 0f, paint)
+        if (hasMask()) {
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+            paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
+            canvas.drawBitmap(mask, 0f, 0f, paint)
+        }
+
+        if (hasProtection()) {
+            val tempProtection = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
+            val tempCanvas = Canvas(tempProtection)
+            tempCanvas.drawBitmap(colorProcessedBitmap, 0f, 0f, null)
+            val pPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+            pPaint.xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
+            tempCanvas.drawBitmap(protection, 0f, 0f, pPaint)
+            canvas.drawBitmap(tempProtection, 0f, 0f, null)
+        }
 
         sourceBitmap = result
         maskBitmap?.eraseColor(Color.TRANSPARENT)
@@ -599,17 +620,21 @@ class SurgicalMaskView @JvmOverloads constructor(
         val canvas = Canvas(result)
         canvas.drawBitmap(colorProcessedBitmap, 0f, 0f, null)
 
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-        paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
-        canvas.drawBitmap(mask, 0f, 0f, paint)
+        if (hasMask()) {
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+            paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
+            canvas.drawBitmap(mask, 0f, 0f, paint)
+        }
 
-        val tempProtection = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
-        val tempCanvas = Canvas(tempProtection)
-        tempCanvas.drawBitmap(colorProcessedBitmap, 0f, 0f, null)
-        val pPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-        pPaint.xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
-        tempCanvas.drawBitmap(protection, 0f, 0f, pPaint)
-        canvas.drawBitmap(tempProtection, 0f, 0f, null)
+        if (hasProtection()) {
+            val tempProtection = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
+            val tempCanvas = Canvas(tempProtection)
+            tempCanvas.drawBitmap(colorProcessedBitmap, 0f, 0f, null)
+            val pPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+            pPaint.xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
+            tempCanvas.drawBitmap(protection, 0f, 0f, pPaint)
+            canvas.drawBitmap(tempProtection, 0f, 0f, null)
+        }
 
         if (isOverlayVisible) {
             overlayBitmap?.let { overlay ->
