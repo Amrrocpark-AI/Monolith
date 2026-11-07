@@ -21,8 +21,13 @@ class LoupeView @JvmOverloads constructor(
     
     private var loupeX = 200f
     private var loupeY = 200f
-    private val loupeRadius = 150f
-    private val loupeZoom = 3f
+    private var loupeZoom = 3f
+    
+    var loupeRadius = 150f
+        set(value) {
+            field = value.coerceIn(80f, 300f)
+            invalidate()
+        }
 
     private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
@@ -52,11 +57,6 @@ class LoupeView @JvmOverloads constructor(
         invalidate()
     }
 
-    fun togglePin() {
-        isEnabled = !isEnabled
-        invalidate()
-    }
-
     fun isLoupeEnabled(): Boolean = isEnabled
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
@@ -78,6 +78,10 @@ class LoupeView @JvmOverloads constructor(
                     if (isDragging) {
                         loupeX += event.x - lastTouchX
                         loupeY += event.y - lastTouchY
+                        
+                        loupeX = loupeX.coerceIn(loupeRadius, width - loupeRadius)
+                        loupeY = loupeY.coerceIn(loupeRadius, height - loupeRadius)
+                        
                         lastTouchX = event.x
                         lastTouchY = event.y
                         invalidate()
