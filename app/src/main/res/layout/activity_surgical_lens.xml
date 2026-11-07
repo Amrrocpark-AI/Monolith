@@ -86,6 +86,10 @@
                 <ImageButton android:id="@+id/btnMagicWandSurgical" android:layout_width="48dp" android:layout_height="48dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_magic_wand" app:tint="#FFFFFF" android:layout_marginEnd="8dp" />
                 <ImageButton android:id="@+id/btnProtectionSurgical" android:layout_width="48dp" android:layout_height="48dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_monolith_lock" app:tint="#FFFFFF" android:layout_marginEnd="8dp" />
                 <ImageButton android:id="@+id/btnColorEngineSurgical" android:layout_width="48dp" android:layout_height="48dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_color_engine" app:tint="#FFFFFF" android:layout_marginEnd="8dp" />
+                
+                <ImageButton android:id="@+id/btnColorAssistSurgical" android:layout_width="48dp" android:layout_height="48dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_color_assist" app:tint="#FFFFFF" android:layout_marginEnd="8dp" />
+                <ImageButton android:id="@+id/btnEyedropperSurgical" android:layout_width="48dp" android:layout_height="48dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_eyedropper" app:tint="#FFFFFF" android:layout_marginEnd="8dp" />
+                
                 <ImageButton android:id="@+id/btnAiCutoutSurgical" android:layout_width="48dp" android:layout_height="48dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_ai_cutout" app:tint="#FFFFFF" android:layout_marginEnd="8dp" />
                 <ImageButton android:id="@+id/btnVaultSurgical" android:layout_width="48dp" android:layout_height="48dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_vault" app:tint="#FFFFFF" android:layout_marginEnd="8dp" />
                 
