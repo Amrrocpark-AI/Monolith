@@ -34,6 +34,8 @@ class SurgicalLensActivity : AppCompatActivity() {
     private lateinit var btnVault: ImageButton
     private lateinit var btnProtection: ImageButton
     private lateinit var btnColorEngine: ImageButton
+    private lateinit var btnColorAssist: ImageButton
+    private lateinit var btnEyedropper: ImageButton
     private lateinit var btnLoupe: ImageButton
     private lateinit var btnFreeze: ImageButton
     private lateinit var btnMaskVisibility: ImageButton
@@ -62,6 +64,8 @@ class SurgicalLensActivity : AppCompatActivity() {
         btnVault = findViewById(R.id.btnVaultSurgical)
         btnProtection = findViewById(R.id.btnProtectionSurgical)
         btnColorEngine = findViewById(R.id.btnColorEngineSurgical)
+        btnColorAssist = findViewById(R.id.btnColorAssistSurgical)
+        btnEyedropper = findViewById(R.id.btnEyedropperSurgical)
         btnLoupe = findViewById(R.id.btnLoupeSurgical)
         btnFreeze = findViewById(R.id.btnFreezeSurgical)
         btnMaskVisibility = findViewById(R.id.btnMaskVisibilitySurgical)
@@ -78,27 +82,48 @@ class SurgicalLensActivity : AppCompatActivity() {
             surgicalMaskView.isEraser = true
             surgicalMaskView.isMagicWand = false
             surgicalMaskView.isProtectionMode = false
+            surgicalMaskView.isColorAssistMode = false
             btnEraser.setColorFilter(colorActive)
             btnMagicWand.setColorFilter(colorInactive)
             btnProtection.setColorFilter(colorInactive)
+            btnColorAssist.setColorFilter(colorInactive)
         }
 
         btnMagicWand.setOnClickListener {
             surgicalMaskView.isMagicWand = true
             surgicalMaskView.isEraser = false
             surgicalMaskView.isProtectionMode = false
+            surgicalMaskView.isColorAssistMode = false
             btnMagicWand.setColorFilter(colorActive)
             btnEraser.setColorFilter(colorInactive)
             btnProtection.setColorFilter(colorInactive)
+            btnColorAssist.setColorFilter(colorInactive)
         }
 
         btnProtection.setOnClickListener {
             surgicalMaskView.isProtectionMode = !surgicalMaskView.isProtectionMode
             surgicalMaskView.isEraser = false
             surgicalMaskView.isMagicWand = false
+            surgicalMaskView.isColorAssistMode = false
             btnProtection.setColorFilter(if (surgicalMaskView.isProtectionMode) colorActive else colorInactive)
             btnEraser.setColorFilter(colorInactive)
             btnMagicWand.setColorFilter(colorInactive)
+            btnColorAssist.setColorFilter(colorInactive)
+        }
+
+        btnColorAssist.setOnClickListener {
+            surgicalMaskView.isColorAssistMode = !surgicalMaskView.isColorAssistMode
+            surgicalMaskView.isEraser = false
+            surgicalMaskView.isMagicWand = false
+            surgicalMaskView.isProtectionMode = false
+            btnColorAssist.setColorFilter(if (surgicalMaskView.isColorAssistMode) colorActive else colorInactive)
+            btnEraser.setColorFilter(colorInactive)
+            btnMagicWand.setColorFilter(colorInactive)
+            btnProtection.setColorFilter(colorInactive)
+        }
+
+        btnEyedropper.setOnClickListener {
+            Toast.makeText(this, "ميزة القطارة قيد التطوير", Toast.LENGTH_SHORT).show()
         }
 
         btnColorEngine.setOnClickListener {
