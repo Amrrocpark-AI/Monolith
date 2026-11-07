@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item name="imgVaultItem" type="id" />
+    <item name="tvVaultName" type="id" />
+    <item name="btnVaultDelete" type="id" />
+    <item name="btnVaultRename" type="id" />
+    <item name="cbVaultSelect" type="id" />
+</resources>
