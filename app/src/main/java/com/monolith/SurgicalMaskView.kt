@@ -19,15 +19,18 @@ class SurgicalMaskView @JvmOverloads constructor(
     private var maskBitmap: Bitmap? = null
     private var protectionBitmap: Bitmap? = null
     private var colorAssistBitmap: Bitmap? = null
+    private var aiMaskBitmap: Bitmap? = null
 
     private val canvasMask = Canvas()
     private val canvasProtection = Canvas()
     private val canvasColorAssist = Canvas()
+    private val canvasAiMask = Canvas()
 
     private val maskPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val eraserPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val protectionPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val colorAssistPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val aiMaskPaint = Paint(Paint.ANTI_ALIAS_FLAG)
 
     private var currentPath: Path? = null
 
@@ -55,6 +58,7 @@ class SurgicalMaskView @JvmOverloads constructor(
         val mask: Bitmap,
         val protection: Bitmap,
         val colorAssist: Bitmap,
+        val aiMask: Bitmap?,
         val overlayX: Float,
         val overlayY: Float,
         val hasOverlay: Boolean
@@ -106,6 +110,9 @@ class SurgicalMaskView @JvmOverloads constructor(
         colorAssistPaint.strokeJoin = Paint.Join.ROUND
         colorAssistPaint.color = Color.WHITE
 
+        aiMaskPaint.style = Paint.Style.FILL
+        aiMaskPaint.color = Color.WHITE
+
         scaleDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
             override fun onScale(detector: ScaleGestureDetector): Boolean {
                 currentScale *= detector.scaleFactor
@@ -121,6 +128,7 @@ class SurgicalMaskView @JvmOverloads constructor(
         maskBitmap = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
         protectionBitmap = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
         colorAssistBitmap = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
+        aiMaskBitmap = null
 
         canvasMask.setBitmap(maskBitmap!!)
         canvasProtection.setBitmap(protectionBitmap!!)
@@ -131,6 +139,33 @@ class SurgicalMaskView @JvmOverloads constructor(
         saveHistoryState()
 
         isDrawingEnabled = true
+        invalidate()
+    }
+
+    fun setAiMask(foregroundBitmap: Bitmap) {
+        val w = sourceBitmap?.width ?: foregroundBitmap.width
+        val h = sourceBitmap?.height ?: foregroundBitmap.height
+        
+        aiMaskBitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        canvasAiMask.setBitmap(aiMaskBitmap!!)
+        
+        val srcPixels = IntArray(foregroundBitmap.width * foregroundBitmap.height)
+        foregroundBitmap.getPixels(srcPixels, 0, foregroundBitmap.width, 0, 0, foregroundBitmap.width, foregroundBitmap.height)
+        
+        val maskPixels = IntArray(w * h)
+        for (y in 0 until h) {
+            for (x in 0 until w) {
+                if (x < foregroundBitmap.width && y < foregroundBitmap.height) {
+                    val alpha = Color.alpha(srcPixels[y * foregroundBitmap.width + x])
+                    maskPixels[y * w + x] = if (alpha > 0) Color.WHITE else Color.TRANSPARENT
+                } else {
+                    maskPixels[y * w + x] = Color.TRANSPARENT
+                }
+            }
+        }
+        
+        aiMaskBitmap?.setPixels(maskPixels, 0, w, 0, 0, w, h)
+        saveHistoryState()
         invalidate()
     }
 
@@ -178,10 +213,15 @@ class SurgicalMaskView @JvmOverloads constructor(
             maskBitmap = previousState.mask.copy(Bitmap.Config.ARGB_8888, true)
             protectionBitmap = previousState.protection.copy(Bitmap.Config.ARGB_8888, true)
             colorAssistBitmap = previousState.colorAssist.copy(Bitmap.Config.ARGB_8888, true)
+            aiMaskBitmap = previousState.aiMask?.copy(Bitmap.Config.ARGB_8888, true)
 
             canvasMask.setBitmap(maskBitmap!!)
             canvasProtection.setBitmap(protectionBitmap!!)
             canvasColorAssist.setBitmap(colorAssistBitmap!!)
+            
+            if (aiMaskBitmap != null) {
+                canvasAiMask.setBitmap(aiMaskBitmap!!)
+            }
 
             overlayX = previousState.overlayX
             overlayY = previousState.overlayY
@@ -197,10 +237,15 @@ class SurgicalMaskView @JvmOverloads constructor(
             maskBitmap = nextState.mask.copy(Bitmap.Config.ARGB_8888, true)
             protectionBitmap = nextState.protection.copy(Bitmap.Config.ARGB_8888, true)
             colorAssistBitmap = nextState.colorAssist.copy(Bitmap.Config.ARGB_8888, true)
+            aiMaskBitmap = nextState.aiMask?.copy(Bitmap.Config.ARGB_8888, true)
 
             canvasMask.setBitmap(maskBitmap!!)
             canvasProtection.setBitmap(protectionBitmap!!)
             canvasColorAssist.setBitmap(colorAssistBitmap!!)
+            
+            if (aiMaskBitmap != null) {
+                canvasAiMask.setBitmap(aiMaskBitmap!!)
+            }
 
             overlayX = nextState.overlayX
             overlayY = nextState.overlayY
@@ -218,6 +263,7 @@ class SurgicalMaskView @JvmOverloads constructor(
             mask = mask.copy(Bitmap.Config.ARGB_8888, true),
             protection = protection.copy(Bitmap.Config.ARGB_8888, true),
             colorAssist = colorAssist.copy(Bitmap.Config.ARGB_8888, true),
+            aiMask = aiMaskBitmap?.copy(Bitmap.Config.ARGB_8888, true),
             overlayX = overlayX,
             overlayY = overlayY,
             hasOverlay = isOverlayVisible
@@ -279,6 +325,13 @@ class SurgicalMaskView @JvmOverloads constructor(
                 colorFilter = PorterDuffColorFilter(Color.argb(100, 0, 255, 255), PorterDuff.Mode.SRC_IN)
             }
             canvas.drawBitmap(colorAssist, null, rect, cyanFilter)
+
+            aiMaskBitmap?.let {
+                val darkFilter = Paint().apply {
+                    colorFilter = PorterDuffColorFilter(Color.argb(100, 0, 0, 0), PorterDuff.Mode.SRC_IN)
+                }
+                canvas.drawBitmap(it, null, rect, darkFilter)
+            }
         }
 
         canvas.restore()
@@ -600,10 +653,17 @@ class SurgicalMaskView @JvmOverloads constructor(
             canvas.drawBitmap(tempProtection, 0f, 0f, null)
         }
 
+        aiMaskBitmap?.let {
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+            paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
+            canvas.drawBitmap(it, 0f, 0f, paint)
+        }
+
         sourceBitmap = result
         maskBitmap?.eraseColor(Color.TRANSPARENT)
         protectionBitmap?.eraseColor(Color.TRANSPARENT)
         colorAssistBitmap?.eraseColor(Color.TRANSPARENT)
+        aiMaskBitmap = null
 
         saveHistoryState()
         invalidate()
@@ -634,6 +694,12 @@ class SurgicalMaskView @JvmOverloads constructor(
             pPaint.xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
             tempCanvas.drawBitmap(protection, 0f, 0f, pPaint)
             canvas.drawBitmap(tempProtection, 0f, 0f, null)
+        }
+
+        aiMaskBitmap?.let {
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+            paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
+            canvas.drawBitmap(it, 0f, 0f, paint)
         }
 
         if (isOverlayVisible) {
