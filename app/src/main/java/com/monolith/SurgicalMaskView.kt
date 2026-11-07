@@ -27,20 +27,10 @@ class SurgicalMaskView @JvmOverloads constructor(
     private val protectionPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     
     private var currentPath: Path? = null
-    
-    // العدسة
-    var isLoupeEnabled = true
-    var isLoupePinned = false
-    private var loupeRadius = 150f
-    private var loupeZoom = 3f
-    private var loupeTouchX = 0f
-    private var loupeTouchY = 0f
 
-    // التكبير
     private var currentScale = 1f
     private var scaleDetector: ScaleGestureDetector
 
-    // الشعار
     private var overlayBitmap: Bitmap? = null
     private var overlayX = 0f
     private var overlayY = 0f
@@ -49,10 +39,8 @@ class SurgicalMaskView @JvmOverloads constructor(
     private var lastTouchX = 0f
     private var lastTouchY = 0f
 
-    // الألوان
     private var activeColorRules: List<ColorRule> = emptyList()
 
-    // نظام التراجع
     private data class HistoryState(
         val mask: Bitmap,
         val protection: Bitmap,
@@ -64,12 +52,14 @@ class SurgicalMaskView @JvmOverloads constructor(
     private val redoStack = ArrayList<HistoryState>()
     private val maxHistory = 30
 
-    // المتغيرات العامة
     var isDrawingEnabled = false
     var isEraser = false
     var isMagicWand = false
     var isProtectionMode = false
     var tolerance = 30 
+
+    var onTouchUpdate: ((Float, Float) -> Unit)? = null
+    var onTouchEnd: (() -> Unit)? = null
 
     var brushSize = 50f
         set(value) {
@@ -120,6 +110,10 @@ class SurgicalMaskView @JvmOverloads constructor(
         
         isDrawingEnabled = true
         invalidate()
+    }
+
+    fun getImageBounds(): RectF {
+        return getImageRect()
     }
 
     fun setColorRules(rules: List<ColorRule>) {
@@ -236,38 +230,6 @@ class SurgicalMaskView @JvmOverloads constructor(
         canvas.drawBitmap(protection, null, rect, magentaFilter)
 
         canvas.restore()
-
-        if (isLoupeEnabled && (isLoupePinned || loupeTouchX != 0f || loupeTouchY != 0f)) {
-            val cx = if (isLoupePinned) width - loupeRadius - 20f else loupeTouchX
-            val cy = if (isLoupePinned) height - loupeRadius - 20f else loupeTouchY - 150f
-
-            val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                style = Paint.Style.STROKE
-                color = Color.WHITE
-                strokeWidth = 6f
-            }
-            canvas.drawCircle(cx, cy, loupeRadius, borderPaint)
-
-            val clipPath = Path()
-            clipPath.addCircle(cx, cy, loupeRadius, Path.Direction.CW)
-            canvas.save()
-            canvas.clipPath(clipPath)
-
-            canvas.translate(cx, cy)
-            canvas.scale(loupeZoom, loupeZoom)
-            canvas.translate(-loupeTouchX, -loupeTouchY)
-            
-            canvas.drawBitmap(src, null, rect, null)
-
-            canvas.restore()
-
-            val crossPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = Color.parseColor("#00D4FF")
-                strokeWidth = 2f
-            }
-            canvas.drawLine(cx - 15f, cy, cx + 15f, cy, crossPaint)
-            canvas.drawLine(cx, cy - 15f, cx, cy + 15f, crossPaint)
-        }
     }
 
     private fun drawCheckerboard(canvas: Canvas, rect: RectF) {
@@ -295,8 +257,7 @@ class SurgicalMaskView @JvmOverloads constructor(
         val touchX = (event.x - width / 2f) / currentScale + width / 2f
         val touchY = (event.y - height / 2f) / currentScale + height / 2f
 
-        loupeTouchX = touchX
-        loupeTouchY = touchY
+        onTouchUpdate?.invoke(touchX, touchY)
 
         if (!rect.contains(touchX, touchY)) return false
 
@@ -367,10 +328,7 @@ class SurgicalMaskView @JvmOverloads constructor(
             }
             MotionEvent.ACTION_UP -> {
                 currentPath = null
-                if (!isLoupePinned) {
-                    loupeTouchX = 0f
-                    loupeTouchY = 0f
-                }
+                onTouchEnd?.invoke()
             }
         }
         invalidate()
