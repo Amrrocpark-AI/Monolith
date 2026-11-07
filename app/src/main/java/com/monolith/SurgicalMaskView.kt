@@ -5,14 +5,13 @@ import android.graphics.*
 import android.os.Build
 import android.util.AttributeSet
 import android.view.MotionEvent
+import android.view.ScaleGestureDetector
 import android.view.View
-import android.widget.Magnifier
 import java.io.ByteArrayOutputStream
 import java.util.LinkedList
 import android.util.Base64
 import kotlin.math.sqrt
 
-// [جديد] كلاس لتخزين قواعد الألوان (يوضع هنا لتجنب مشاكل الاستيراد)
 data class ColorRule(val color: Int, val isActive: Boolean, val tolerance: Int)
 
 class SurgicalMaskView @JvmOverloads constructor(
@@ -31,8 +30,20 @@ class SurgicalMaskView @JvmOverloads constructor(
     private val protectionPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     
     private var currentPath: Path? = null
-    private var magnifier: Magnifier? = null
     
+    // [جديد] متغيرات العدسة المخصصة
+    private var isLoupeEnabled = true
+    private var isLoupePinned = false
+    private var loupeRadius = 150f
+    private var loupeZoom = 3f
+    private var loupeTouchX = 0f
+    private var loupeTouchY = 0f
+
+    // [جديد] متغيرات التكبير العادي (Pinch-to-Zoom)
+    private var scaleMatrix = Matrix()
+    private var currentScale = 1f
+    private var scaleDetector: ScaleGestureDetector
+
     // متغيرات الشعار
     private var overlayBitmap: Bitmap? = null
     private var overlayX = 0f
@@ -42,7 +53,6 @@ class SurgicalMaskView @JvmOverloads constructor(
     private var lastTouchX = 0f
     private var lastTouchY = 0f
 
-    // [جديد] متغيرات محرك الألوان
     private var activeColorRules: List<ColorRule> = emptyList()
 
     // نظام التراجع
@@ -88,13 +98,27 @@ class SurgicalMaskView @JvmOverloads constructor(
         protectionPaint.strokeJoin = Paint.Join.ROUND
         protectionPaint.color = Color.WHITE
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            // [إصلاح] تم تغيير context إلى this لأن الباني يتطلب View
-            magnifier = Magnifier.Builder(this)
-                .setInitialZoom(2.0f)
-                .setSize(300, 300)
-                .build()
-        }
+        // إعداد مستشعر التكبير (Pinch-to-Zoom)
+        scaleDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            override fun onScale(detector: ScaleGestureDetector): Boolean {
+                currentScale *= detector.scaleFactor
+                currentScale = currentScale.coerceIn(1f, 5f) // نطاق التكبير من 1x إلى 5x
+                invalidate()
+                return true
+            }
+        })
+    }
+
+    // دوال التحكم في العدسة من الـ Activity
+    fun setLoupeEnabled(enabled: Boolean) {
+        isLoupeEnabled = enabled
+        isLoupePinned = false
+        invalidate()
+    }
+
+    fun toggleLoupePin() {
+        isLoupePinned = !isLoupePinned
+        invalidate()
     }
 
     fun setImageBitmap(bitmap: Bitmap) {
@@ -113,7 +137,6 @@ class SurgicalMaskView @JvmOverloads constructor(
         invalidate()
     }
 
-    // [جديد] دالة استقبال قواعد الألوان من النافذة
     fun setColorRules(rules: List<ColorRule>) {
         activeColorRules = rules
         invalidate()
@@ -141,18 +164,14 @@ class SurgicalMaskView @JvmOverloads constructor(
         if (undoStack.size > 1) {
             val currentState = undoStack.removeAt(undoStack.size - 1)
             redoStack.add(currentState)
-            
             val previousState = undoStack.last()
             maskBitmap = previousState.mask.copy(Bitmap.Config.ARGB_8888, true)
             protectionBitmap = previousState.protection.copy(Bitmap.Config.ARGB_8888, true)
-            
             canvasMask.setBitmap(maskBitmap!!)
             canvasProtection.setBitmap(protectionBitmap!!)
-            
             overlayX = previousState.overlayX
             overlayY = previousState.overlayY
             isOverlayVisible = previousState.hasOverlay
-            
             invalidate()
         }
     }
@@ -161,17 +180,13 @@ class SurgicalMaskView @JvmOverloads constructor(
         if (redoStack.isNotEmpty()) {
             val nextState = redoStack.removeAt(redoStack.size - 1)
             undoStack.add(nextState)
-            
             maskBitmap = nextState.mask.copy(Bitmap.Config.ARGB_8888, true)
             protectionBitmap = nextState.protection.copy(Bitmap.Config.ARGB_8888, true)
-            
             canvasMask.setBitmap(maskBitmap!!)
             canvasProtection.setBitmap(protectionBitmap!!)
-            
             overlayX = nextState.overlayX
             overlayY = nextState.overlayY
             isOverlayVisible = nextState.hasOverlay
-            
             invalidate()
         }
     }
@@ -179,9 +194,7 @@ class SurgicalMaskView @JvmOverloads constructor(
     private fun saveHistoryState() {
         val mask = maskBitmap ?: return
         val protection = protectionBitmap ?: return
-        if (undoStack.size >= maxHistory) {
-            undoStack.removeAt(0)
-        }
+        if (undoStack.size >= maxHistory) undoStack.removeAt(0)
         undoStack.add(HistoryState(
             mask = mask.copy(Bitmap.Config.ARGB_8888, true),
             protection = protection.copy(Bitmap.Config.ARGB_8888, true),
@@ -215,6 +228,10 @@ class SurgicalMaskView @JvmOverloads constructor(
         val mask = maskBitmap ?: return
         val protection = protectionBitmap ?: return
 
+        canvas.save()
+        // تطبيق التكبير (Pinch-to-Zoom) على الرسم بأكمله
+        canvas.scale(currentScale, currentScale, width / 2f, height / 2f)
+
         val rect = getImageRect()
 
         drawCheckerboard(canvas, rect)
@@ -224,17 +241,55 @@ class SurgicalMaskView @JvmOverloads constructor(
             overlayBitmap?.let { canvas.drawBitmap(it, overlayX, overlayY, null) }
         }
 
-        // رسم القناع (اللون الأحمر)
         val redFilter = Paint().apply {
             colorFilter = PorterDuffColorFilter(Color.argb(100, 255, 0, 0), PorterDuff.Mode.SRC_IN)
         }
         canvas.drawBitmap(mask, null, rect, redFilter)
 
-        // [تعديل] رسم طبقة الحماية (اللون البنفسجي/الماجنتا بدلاً من الأخضر)
         val magentaFilter = Paint().apply {
             colorFilter = PorterDuffColorFilter(Color.argb(100, 255, 0, 255), PorterDuff.Mode.SRC_IN)
         }
         canvas.drawBitmap(protection, null, rect, magentaFilter)
+
+        canvas.restore()
+
+        // [جديد] رسم العدسة المخصصة (فقط الصورة الأصلية)
+        if (isLoupeEnabled && (isLoupePinned || loupeTouchX != 0f || loupeTouchY != 0f)) {
+            val cx = if (isLoupePinned) width - loupeRadius - 20f else loupeTouchX
+            val cy = if (isLoupePinned) height - loupeRadius - 20f else loupeTouchY - 150f // ترفع العدسة فوق الإصبع
+
+            // 1. رسم خلفية العدسة (إطار أبيض)
+            val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.STROKE
+                color = Color.WHITE
+                strokeWidth = 6f
+            }
+            canvas.drawCircle(cx, cy, loupeRadius, borderPaint)
+
+            // 2. قص العدسة على شكل دائرة
+            val clipPath = Path()
+            clipPath.addCircle(cx, cy, loupeRadius, Path.Direction.CW)
+            canvas.save()
+            canvas.clipPath(clipPath)
+
+            // 3. رسم الصورة الأصلية مكبرة داخل العدسة (بدون أي طلاء)
+            canvas.translate(cx, cy)
+            canvas.scale(loupeZoom, loupeZoom)
+            canvas.translate(-loupeTouchX, -loupeTouchY)
+            
+            // نرسم الصورة الأصلية فقط
+            canvas.drawBitmap(src, null, rect, null)
+
+            canvas.restore()
+
+            // 4. رسم خط تقاطع (Crosshair) في منتصف العدسة
+            val crossPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.parseColor("#00D4FF")
+                strokeWidth = 2f
+            }
+            canvas.drawLine(cx - 15f, cy, cx + 15f, cy, crossPaint)
+            canvas.drawLine(cx, cy - 15f, cx, cy + 15f, crossPaint)
+        }
     }
 
     private fun drawCheckerboard(canvas: Canvas, rect: RectF) {
@@ -250,44 +305,46 @@ class SurgicalMaskView @JvmOverloads constructor(
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (!isDrawingEnabled) return false
-        
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> magnifier?.show(event.x, event.y)
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> magnifier?.dismiss()
-            }
-        }
+        scaleDetector.onTouchEvent(event) // تفعيل التكبير بإصبعين
 
         val src = sourceBitmap ?: return false
         val rect = getImageRect()
-        if (!rect.contains(event.x, event.y)) return false
+
+        // تحويل إحداثيات اللمس بناءً على التكبير
+        val touchX = (event.x - width / 2f) / currentScale + width / 2f
+        val touchY = (event.y - height / 2f) / currentScale + height / 2f
+
+        loupeTouchX = touchX
+        loupeTouchY = touchY
+
+        if (!rect.contains(touchX, touchY)) return false
 
         val scaleX = src.width.toFloat() / rect.width()
         val scaleY = src.height.toFloat() / rect.height()
-        val x = (event.x - rect.left) * scaleX
-        val y = (event.y - rect.top) * scaleY
+        val x = (touchX - rect.left) * scaleX
+        val y = (touchY - rect.top) * scaleY
 
         val overlay = overlayBitmap
         if (overlay != null && isOverlayVisible) {
-            val isInside = event.x >= overlayX && event.x <= overlayX + overlay.width &&
-                           event.y >= overlayY && event.y <= overlayY + overlay.height
+            val isInside = touchX >= overlayX && touchX <= overlayX + overlay.width &&
+                           touchY >= overlayY && touchY <= overlayY + overlay.height
 
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
                     if (isInside) {
                         saveHistoryState()
                         isDraggingOverlay = true
-                        lastTouchX = event.x
-                        lastTouchY = event.y
+                        lastTouchX = touchX
+                        lastTouchY = touchY
                         return true 
                     }
                 }
                 MotionEvent.ACTION_MOVE -> {
                     if (isDraggingOverlay) {
-                        overlayX += event.x - lastTouchX
-                        overlayY += event.y - lastTouchY
-                        lastTouchX = event.x
-                        lastTouchY = event.y
+                        overlayX += touchX - lastTouchX
+                        overlayY += touchY - lastTouchY
+                        lastTouchX = touchX
+                        lastTouchY = touchY
                         invalidate()
                         return true
                     }
@@ -327,7 +384,13 @@ class SurgicalMaskView @JvmOverloads constructor(
                 currentPath = Path()
                 currentPath?.moveTo(x, y)
             }
-            MotionEvent.ACTION_UP -> currentPath = null
+            MotionEvent.ACTION_UP -> {
+                currentPath = null
+                if (!isLoupePinned) {
+                    loupeTouchX = 0f
+                    loupeTouchY = 0f
+                }
+            }
         }
         invalidate()
         return true
@@ -368,7 +431,6 @@ class SurgicalMaskView @JvmOverloads constructor(
         return sqrt(((r1 - r2) * (r1 - r2) + (g1 - g2) * (g1 - g2) + (b1 - b2) * (b1 - b2)).toDouble()).toInt()
     }
 
-    // [جديد] محرك مسح الألوان الجراحي
     private fun applyColorRulesToBitmap(src: Bitmap): Bitmap {
         if (activeColorRules.isEmpty() || activeColorRules.none { it.isActive }) return src
 
@@ -386,7 +448,7 @@ class SurgicalMaskView @JvmOverloads constructor(
         val protPixels = IntArray(width * height)
         protectionBitmap?.getPixels(protPixels, 0, width, 0, 0, width, height)
 
-        val maskHasPixels = hasMask() // هل رسم المستخدم أي شيء؟
+        val maskHasPixels = hasMask()
 
         for (i in 0 until width * height) {
             val pixel = srcPixels[i]
@@ -395,19 +457,16 @@ class SurgicalMaskView @JvmOverloads constructor(
                 continue
             }
 
-            // 1. التحقق من جدار الحماية (إذا كان محمياً، لا تلمسه)
             if (Color.alpha(protPixels[i]) > 0) {
                 resultPixels[i] = pixel
                 continue
             }
 
-            // 2. التحقق من الرسم اليدوي (إذا رسم المستخدم، امسح فقط داخل رسمه)
             if (maskHasPixels && Color.alpha(maskPixels[i]) == 0) {
                 resultPixels[i] = pixel
                 continue
             }
 
-            // 3. التحقق من الألوان المحددة
             var shouldErase = false
             for (rule in activeColorRules) {
                 if (rule.isActive) {
@@ -432,14 +491,12 @@ class SurgicalMaskView @JvmOverloads constructor(
         val protection = protectionBitmap ?: return
         saveHistoryState()
         
-        // 1. تطبيق الألوان أولاً
         val colorProcessedBitmap = applyColorRulesToBitmap(src)
         
         val result = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(result)
         canvas.drawBitmap(colorProcessedBitmap, 0f, 0f, null)
         
-        // 2. تطبيق القناع اليدوي (الأحمر)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
         canvas.drawBitmap(mask, 0f, 0f, paint)
@@ -457,19 +514,16 @@ class SurgicalMaskView @JvmOverloads constructor(
         val mask = maskBitmap ?: return null
         val protection = protectionBitmap ?: return null
         
-        // 1. تطبيق الألوان
         val colorProcessedBitmap = applyColorRulesToBitmap(src)
 
         val result = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(result)
         canvas.drawBitmap(colorProcessedBitmap, 0f, 0f, null)
         
-        // 2. تطبيق القناع اليدوي
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
         canvas.drawBitmap(mask, 0f, 0f, paint)
 
-        // 3. إعادة رسم منطقة الحماية (لأننا قد نكون مسحناها باللون)
         val tempProtection = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
         val tempCanvas = Canvas(tempProtection)
         tempCanvas.drawBitmap(colorProcessedBitmap, 0f, 0f, null)
@@ -478,7 +532,6 @@ class SurgicalMaskView @JvmOverloads constructor(
         tempCanvas.drawBitmap(protection, 0f, 0f, pPaint)
         canvas.drawBitmap(tempProtection, 0f, 0f, null)
 
-        // 4. رسم الشعار
         if (isOverlayVisible) {
             overlayBitmap?.let { overlay ->
                 val rect = getImageRect()
