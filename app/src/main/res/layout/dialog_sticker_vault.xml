@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#121212"
+    android:layoutDirection="rtl"
+    android:orientation="vertical">
+
+    <!-- الشريط العلوي -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="8dp"
+        android:background="#1E1E1E">
+
+        <ImageButton
+            android:id="@+id/btnVaultClose"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_close" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="خزنة مونوليث"
+            android:textColor="#00D4FF"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:gravity="center" />
+
+        <ImageButton
+            android:id="@+id/btnVaultEditMode"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_edit"
+            app:tint="#FFFFFF" />
+    </LinearLayout>
+
+    <!-- شبكة الصور -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rvVault"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:padding="8dp"
+        android:clipToPadding="false" />
+
+    <!-- شريط الإجراءات السفلي (يظهر فقط في وضع التعديل) -->
+    <LinearLayout
+        android:id="@+id/layoutVaultActions"
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:background="#1E1E1E"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <Button
+            android:id="@+id/btnVaultUndo"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:text="تراجع"
+            android:textColor="#FF0000"
+            android:background="?attr/selectableItemBackground" />
+
+        <Button
+            android:id="@+id/btnVaultConfirm"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:text="تأكيد التعديلات"
+            android:textColor="#00FF00"
+            android:background="?attr/selectableItemBackground" />
+    </LinearLayout>
+</LinearLayout>
