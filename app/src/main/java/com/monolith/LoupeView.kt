@@ -5,6 +5,7 @@ import android.graphics.*
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
+import kotlin.math.sqrt
 
 class LoupeView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null
@@ -14,9 +15,12 @@ class LoupeView @JvmOverloads constructor(
     private var imageRect: RectF = RectF()
     
     private var isEnabled = false
-    private var isPinned = false
-    private var touchX = 0f
-    private var touchY = 0f
+    private var isDragging = false
+    private var lastTouchX = 0f
+    private var lastTouchY = 0f
+    
+    private var loupeX = 200f
+    private var loupeY = 200f
     private val loupeRadius = 150f
     private val loupeZoom = 3f
 
@@ -34,12 +38,7 @@ class LoupeView @JvmOverloads constructor(
     private val clipPath = Path()
 
     init {
-        isClickable = false
-        isFocusable = false
-    }
-
-    override fun onTouchEvent(event: MotionEvent): Boolean {
-        return false
+        isClickable = true
     }
 
     fun setImage(bitmap: Bitmap?, rect: RectF) {
@@ -50,57 +49,71 @@ class LoupeView @JvmOverloads constructor(
 
     fun setLoupeEnabled(enabled: Boolean) {
         isEnabled = enabled
-        if (!enabled) isPinned = false
         invalidate()
     }
 
     fun togglePin() {
-        isPinned = !isPinned
+        isEnabled = !isEnabled
         invalidate()
     }
 
-    fun updateTouch(x: Float, y: Float) {
-        if (isPinned) return
-        touchX = x
-        touchY = y
-        invalidate()
-    }
-
-    fun hide() {
-        if (!isPinned) {
-            touchX = 0f
-            touchY = 0f
-            invalidate()
-        }
-    }
-
-    fun isLoupePinned(): Boolean = isPinned
     fun isLoupeEnabled(): Boolean = isEnabled
+
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (!isEnabled) return false
+
+        val dx = event.x - loupeX
+        val dy = event.y - loupeY
+        val distance = sqrt((dx * dx + dy * dy).toDouble())
+
+        if (distance <= loupeRadius) {
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    isDragging = true
+                    lastTouchX = event.x
+                    lastTouchY = event.y
+                    return true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    if (isDragging) {
+                        loupeX += event.x - lastTouchX
+                        loupeY += event.y - lastTouchY
+                        lastTouchX = event.x
+                        lastTouchY = event.y
+                        invalidate()
+                        return true
+                    }
+                }
+                MotionEvent.ACTION_UP -> {
+                    isDragging = false
+                    return true
+                }
+            }
+        }
+        return false
+    }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         val bitmap = sourceBitmap ?: return
-        if (!isEnabled || (touchX == 0f && touchY == 0f && !isPinned)) return
+        if (!isEnabled) return
 
-        val cx = if (isPinned) width - loupeRadius - 20f else touchX
-        val cy = if (isPinned) height - loupeRadius - 20f else touchY - 150f
-
-        canvas.drawCircle(cx, cy, loupeRadius, borderPaint)
+        canvas.drawCircle(loupeX, loupeY, loupeRadius, borderPaint)
 
         clipPath.reset()
-        clipPath.addCircle(cx, cy, loupeRadius, Path.Direction.CW)
+        clipPath.addCircle(loupeX, loupeY, loupeRadius, Path.Direction.CW)
         canvas.save()
         canvas.clipPath(clipPath)
 
-        canvas.translate(cx, cy)
+        canvas.translate(loupeX, loupeY)
         canvas.scale(loupeZoom, loupeZoom)
-        canvas.translate(-touchX, -touchY)
+        canvas.translate(-loupeX, -loupeY)
 
         canvas.drawBitmap(bitmap, null, imageRect, null)
 
         canvas.restore()
 
-        canvas.drawLine(cx - 15f, cy, cx + 15f, cy, crossPaint)
-        canvas.drawLine(cx, cy - 15f, cx, cy + 15f, crossPaint)
+        canvas.drawLine(loupeX - 15f, loupeY, loupeX + 15f, loupeY, crossPaint)
+        canvas.drawLine(loupeX, loupeY - 15f, loupeX, loupeY + 15f, crossPaint)
     }
 }
