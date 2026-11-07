@@ -19,25 +19,27 @@
         <ImageButton android:id="@+id/btnUndoSurgical" android:layout_width="44dp" android:layout_height="44dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_undo" />
         <ImageButton android:id="@+id/btnRedoSurgical" android:layout_width="44dp" android:layout_height="44dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_redo" />
         <ImageButton android:id="@+id/btnEraserSurgical" android:layout_width="44dp" android:layout_height="44dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_eraser" />
-        <ImageButton android:id="@+id/btnMagicWandSurgical" android:layout_width="44dp" android:layout_height="44dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@android:drawable/ic_menu_view" app:tint="#FFFFFF" />
+        
+        <!-- العصا السحرية (تعديل لونها للأبيض) -->
+        <ImageButton android:id="@+id/btnMagicWandSurgical" android:layout_width="44dp" android:layout_height="44dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_magic_wand" app:tint="#FFFFFF" />
 
-        <!-- زر الذكاء الاصطناعي -->
+        <!-- زر الذكاء الاصطناعي (أيقونة جديدة ولون أبيض) -->
         <ImageButton 
             android:id="@+id/btnAiCutoutSurgical" 
             android:layout_width="44dp" 
             android:layout_height="44dp" 
             android:background="?attr/selectableItemBackgroundBorderless" 
-            android:src="@android:drawable/ic_menu_camera" 
-            app:tint="#FFD700" />
+            android:src="@drawable/ic_ai_cutout" 
+            app:tint="#FFFFFF" />
 
-        <!-- [جديد] زر الخزنة -->
+        <!-- زر المحفوظات (أيقونة جديدة ولون أبيض) -->
         <ImageButton 
             android:id="@+id/btnVaultSurgical" 
             android:layout_width="44dp" 
             android:layout_height="44dp" 
             android:background="?attr/selectableItemBackgroundBorderless" 
-            android:src="@android:drawable/ic_menu_gallery" 
-            app:tint="#8A2BE2" />
+            android:src="@drawable/ic_vault" 
+            app:tint="#FFFFFF" />
 
         <View android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
 
