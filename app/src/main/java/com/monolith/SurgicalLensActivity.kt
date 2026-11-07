@@ -180,9 +180,7 @@ class SurgicalLensActivity : AppCompatActivity() {
         })
 
         findViewById<Button>(R.id.btnApplySurgical).setOnClickListener {
-            if (surgicalMaskView.hasMask()) {
-                surgicalMaskView.applyClip()
-            }
+            surgicalMaskView.applyClip()
         }
 
         findViewById<Button>(R.id.btnSaveSurgical).setOnClickListener {
@@ -204,7 +202,7 @@ class SurgicalLensActivity : AppCompatActivity() {
     private fun performAiCutout() {
         val bitmap = currentBitmap ?: return
         progressBar.visibility = View.VISIBLE
-        
+
         val image = InputImage.fromBitmap(bitmap, 0)
         val options = SubjectSegmenterOptions.Builder()
             .enableForegroundBitmap()
@@ -215,9 +213,7 @@ class SurgicalLensActivity : AppCompatActivity() {
             .addOnSuccessListener { result ->
                 val foregroundBitmap = result.foregroundBitmap
                 if (foregroundBitmap != null) {
-                    currentBitmap = foregroundBitmap
-                    surgicalMaskView.setImageBitmap(foregroundBitmap)
-                    loupeView.setImage(foregroundBitmap, surgicalMaskView.getImageBounds())
+                    surgicalMaskView.setAiMask(foregroundBitmap)
                 }
                 progressBar.visibility = View.GONE
             }
