@@ -31,20 +31,18 @@ class SurgicalMaskView @JvmOverloads constructor(
     
     private var currentPath: Path? = null
     
-    // [جديد] متغيرات العدسة المخصصة
-    private var isLoupeEnabled = true
-    private var isLoupePinned = false
+    // [إصلاح] تم إزالة private لكي تتمكن الشاشة من الوصول إليها
+    var isLoupeEnabled = true
+    var isLoupePinned = false
     private var loupeRadius = 150f
     private var loupeZoom = 3f
     private var loupeTouchX = 0f
     private var loupeTouchY = 0f
 
-    // [جديد] متغيرات التكبير العادي (Pinch-to-Zoom)
     private var scaleMatrix = Matrix()
     private var currentScale = 1f
     private var scaleDetector: ScaleGestureDetector
 
-    // متغيرات الشعار
     private var overlayBitmap: Bitmap? = null
     private var overlayX = 0f
     private var overlayY = 0f
@@ -55,7 +53,6 @@ class SurgicalMaskView @JvmOverloads constructor(
 
     private var activeColorRules: List<ColorRule> = emptyList()
 
-    // نظام التراجع
     private data class HistoryState(
         val mask: Bitmap,
         val protection: Bitmap,
@@ -98,18 +95,16 @@ class SurgicalMaskView @JvmOverloads constructor(
         protectionPaint.strokeJoin = Paint.Join.ROUND
         protectionPaint.color = Color.WHITE
 
-        // إعداد مستشعر التكبير (Pinch-to-Zoom)
         scaleDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
             override fun onScale(detector: ScaleGestureDetector): Boolean {
                 currentScale *= detector.scaleFactor
-                currentScale = currentScale.coerceIn(1f, 5f) // نطاق التكبير من 1x إلى 5x
+                currentScale = currentScale.coerceIn(1f, 5f)
                 invalidate()
                 return true
             }
         })
     }
 
-    // دوال التحكم في العدسة من الـ Activity
     fun setLoupeEnabled(enabled: Boolean) {
         isLoupeEnabled = enabled
         isLoupePinned = false
@@ -229,7 +224,6 @@ class SurgicalMaskView @JvmOverloads constructor(
         val protection = protectionBitmap ?: return
 
         canvas.save()
-        // تطبيق التكبير (Pinch-to-Zoom) على الرسم بأكمله
         canvas.scale(currentScale, currentScale, width / 2f, height / 2f)
 
         val rect = getImageRect()
@@ -253,12 +247,10 @@ class SurgicalMaskView @JvmOverloads constructor(
 
         canvas.restore()
 
-        // [جديد] رسم العدسة المخصصة (فقط الصورة الأصلية)
         if (isLoupeEnabled && (isLoupePinned || loupeTouchX != 0f || loupeTouchY != 0f)) {
             val cx = if (isLoupePinned) width - loupeRadius - 20f else loupeTouchX
-            val cy = if (isLoupePinned) height - loupeRadius - 20f else loupeTouchY - 150f // ترفع العدسة فوق الإصبع
+            val cy = if (isLoupePinned) height - loupeRadius - 20f else loupeTouchY - 150f
 
-            // 1. رسم خلفية العدسة (إطار أبيض)
             val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 style = Paint.Style.STROKE
                 color = Color.WHITE
@@ -266,23 +258,19 @@ class SurgicalMaskView @JvmOverloads constructor(
             }
             canvas.drawCircle(cx, cy, loupeRadius, borderPaint)
 
-            // 2. قص العدسة على شكل دائرة
             val clipPath = Path()
             clipPath.addCircle(cx, cy, loupeRadius, Path.Direction.CW)
             canvas.save()
             canvas.clipPath(clipPath)
 
-            // 3. رسم الصورة الأصلية مكبرة داخل العدسة (بدون أي طلاء)
             canvas.translate(cx, cy)
             canvas.scale(loupeZoom, loupeZoom)
             canvas.translate(-loupeTouchX, -loupeTouchY)
             
-            // نرسم الصورة الأصلية فقط
             canvas.drawBitmap(src, null, rect, null)
 
             canvas.restore()
 
-            // 4. رسم خط تقاطع (Crosshair) في منتصف العدسة
             val crossPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = Color.parseColor("#00D4FF")
                 strokeWidth = 2f
@@ -305,12 +293,11 @@ class SurgicalMaskView @JvmOverloads constructor(
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (!isDrawingEnabled) return false
-        scaleDetector.onTouchEvent(event) // تفعيل التكبير بإصبعين
+        scaleDetector.onTouchEvent(event)
 
         val src = sourceBitmap ?: return false
         val rect = getImageRect()
 
-        // تحويل إحداثيات اللمس بناءً على التكبير
         val touchX = (event.x - width / 2f) / currentScale + width / 2f
         val touchY = (event.y - height / 2f) / currentScale + height / 2f
 
@@ -544,6 +531,7 @@ class SurgicalMaskView @JvmOverloads constructor(
         return result
     }
 
+    // [إصلاح] إكمال الدالة التي كانت مقطوعة في كودك
     fun getMaskAsBase64(): String {
         val mask = maskBitmap ?: return ""
         val outputStream = ByteArrayOutputStream()
