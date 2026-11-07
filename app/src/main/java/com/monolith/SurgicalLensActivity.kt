@@ -30,6 +30,7 @@ class SurgicalLensActivity : AppCompatActivity() {
     private lateinit var btnMagicWand: ImageButton
     private lateinit var btnAiCutout: ImageButton
     private lateinit var btnVault: ImageButton
+    private lateinit var btnProtection: ImageButton // [جديد] زر جدار الحماية
     private lateinit var progressBar: ProgressBar
     private lateinit var btnPick: Button
     private var currentBitmap: Bitmap? = null
@@ -49,25 +50,53 @@ class SurgicalLensActivity : AppCompatActivity() {
         btnMagicWand = findViewById(R.id.btnMagicWandSurgical)
         btnAiCutout = findViewById(R.id.btnAiCutoutSurgical)
         btnVault = findViewById(R.id.btnVaultSurgical)
+        btnProtection = findViewById(R.id.btnProtectionSurgical) // [جديد]
         progressBar = findViewById(R.id.progressBarSurgical)
         btnPick = findViewById(R.id.btnPickSurgicalImage)
 
         findViewById<ImageButton>(R.id.btnCloseSurgical).setOnClickListener { finish() }
         btnPick.setOnClickListener { pickImage.launch("image/*") }
 
+        // [جديد] ربط أزرار التراجع والإعادة
+        findViewById<ImageButton>(R.id.btnUndoSurgical).setOnClickListener {
+            surgicalMaskView.undo()
+        }
+        findViewById<ImageButton>(R.id.btnRedoSurgical).setOnClickListener {
+            surgicalMaskView.redo()
+        }
+
         // إعداد ألوان الأزرار (مفعلة / غير مفعلة)
         btnEraser.setOnClickListener {
             surgicalMaskView.isEraser = true
             surgicalMaskView.isMagicWand = false
-            btnEraser.setColorFilter(0xFF26A69A.toInt()) // أخضر (مفعل)
-            btnMagicWand.setColorFilter(0xFFFFFFFF.toInt()) // أبيض (غير مفعل)
+            surgicalMaskView.isProtectionMode = false
+            btnEraser.setColorFilter(0xFF26A69A.toInt())
+            btnMagicWand.setColorFilter(0xFFFFFFFF.toInt())
+            btnProtection.setColorFilter(0xFFFFFFFF.toInt())
         }
 
         btnMagicWand.setOnClickListener {
             surgicalMaskView.isMagicWand = true
             surgicalMaskView.isEraser = false
-            btnMagicWand.setColorFilter(0xFF26A69A.toInt()) // أخضر (مفعل)
-            btnEraser.setColorFilter(0xFFFFFFFF.toInt()) // أبيض (غير مفعل)
+            surgicalMaskView.isProtectionMode = false
+            btnMagicWand.setColorFilter(0xFF26A69A.toInt())
+            btnEraser.setColorFilter(0xFFFFFFFF.toInt())
+            btnProtection.setColorFilter(0xFFFFFFFF.toInt())
+        }
+
+        // [جديد] تفعيل جدار الحماية
+        btnProtection.setOnClickListener {
+            surgicalMaskView.isProtectionMode = !surgicalMaskView.isProtectionMode
+            surgicalMaskView.isEraser = false
+            surgicalMaskView.isMagicWand = false
+            
+            if (surgicalMaskView.isProtectionMode) {
+                btnProtection.setColorFilter(0xFF00FF00.toInt()) // أخضر
+                btnEraser.setColorFilter(0xFFFFFFFF.toInt())
+                btnMagicWand.setColorFilter(0xFFFFFFFF.toInt())
+            } else {
+                btnProtection.setColorFilter(0xFFFFFFFF.toInt()) // أبيض
+            }
         }
 
         // زر الذكاء الاصطناعي (إجراء - لا يبقى مفعل)
@@ -152,7 +181,6 @@ class SurgicalLensActivity : AppCompatActivity() {
             val finalBitmap = surgicalMaskView.exportPNG() ?: currentBitmap
             if (finalBitmap != null) {
                 writeToGallery(finalBitmap)
-                // حفظ باسم PNG_ احترافي بدلاً من "شعار"
                 VaultManager.saveSticker(this@SurgicalLensActivity, finalBitmap, "PNG_${System.currentTimeMillis()}")
             }
             withContext(Dispatchers.Main) {
