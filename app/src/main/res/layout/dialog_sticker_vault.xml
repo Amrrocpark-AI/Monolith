@@ -1,104 +1,292 @@
-<?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="#F3F4F6"
-    android:layoutDirection="rtl">
+package com.monolith
 
-    <LinearLayout
-        android:id="@+id/topBarVault"
-        android:layout_width="match_parent"
-        android:layout_height="56dp"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingHorizontal="8dp"
-        app:layout_constraintTop_toTopOf="parent">
+import android.app.Dialog
+import android.content.Context
+import android.content.Intent
+import android.graphics.*
+import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.Drawable
+import android.net.Uri
+import android.os.Bundle
+import android.view.KeyEvent
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.widget.*
+import androidx.appcompat.app.AlertDialog
+import androidx.core.content.FileProvider
+import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+import java.io.File
 
-        <ImageButton
-            android:id="@+id/btnVaultClose"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@drawable/ic_close"
-            app:tint="#333333" />
+class StickerVaultDialog : BottomSheetDialogFragment() {
 
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="المحفوظات"
-            android:textColor="#333333"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:gravity="center" />
+    private lateinit var adapter: VaultAdapter
+    private var isEditMode = false
+    private val deletedFiles = mutableListOf<File>()
+    private val newNames = mutableMapOf<File, String>()
 
-        <ImageButton
-            android:id="@+id/btnVaultEditMode"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@drawable/ic_vault_edit"
-            app:tint="#333333" />
-    </LinearLayout>
+    var onStickerSelected: ((File) -> Unit)? = null
 
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/rvVault"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:padding="8dp"
-        android:paddingBottom="90dp"
-        android:clipToPadding="false"
-        app:layout_constraintTop_toBottomOf="@id/topBarVault"
-        app:layout_constraintBottom_toBottomOf="parent" />
+    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+        val dialog = super.onCreateDialog(savedInstanceState) as BottomSheetDialog
+        dialog.setOnShowListener {
+            val bottomSheet = dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
+            bottomSheet?.layoutParams?.height = ViewGroup.LayoutParams.MATCH_PARENT
+        }
+        return dialog
+    }
 
-    <!-- الشريط السفلي العائم -->
-    <LinearLayout
-        android:id="@+id/layoutVaultActions"
-        android:layout_width="wrap_content"
-        android:layout_height="64dp"
-        android:layout_marginBottom="24dp"
-        android:background="@drawable/vault_floating_bar_bg"
-        android:elevation="8dp"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingHorizontal="16dp"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent">
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
+        return inflater.inflate(R.layout.dialog_sticker_vault, container, false)
+    }
 
-        <!-- زر الحفظ (علامة صح) -->
-        <ImageButton
-            android:id="@+id/btnVaultConfirm"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@drawable/ic_vault_confirm" />
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
 
-        <Space
-            android:layout_width="20dp"
-            android:layout_height="wrap_content" />
+        val rvVault = view.findViewById<RecyclerView>(R.id.rvVault)
+        val btnEdit = view.findViewById<ImageButton>(R.id.btnVaultEditMode)
+        val btnClose = view.findViewById<ImageButton>(R.id.btnVaultClose)
+        val layoutActions = view.findViewById<LinearLayout>(R.id.layoutVaultActions)
+        val btnUndo = view.findViewById<ImageButton>(R.id.btnVaultUndo)
+        val btnConfirm = view.findViewById<ImageButton>(R.id.btnVaultConfirm)
+        val btnShare = view.findViewById<ImageButton>(R.id.btnVaultShare)
 
-        <!-- زر المشاركة الدائري -->
-        <ImageButton
-            android:id="@+id/btnVaultShare"
-            android:layout_width="56dp"
-            android:layout_height="56dp"
-            android:background="@drawable/vault_share_bg"
-            android:elevation="4dp"
-            android:src="@drawable/ic_vault_share" />
+        adapter = VaultAdapter(requireContext(), VaultManager.getStickers(requireContext()), isEditMode,
+            onSelect = { file ->
+                if (!isEditMode) {
+                    onStickerSelected?.invoke(file)
+                    dismiss()
+                }
+            },
+            onDelete = { file ->
+                deletedFiles.add(file)
+                adapter.removeItem(file)
+            },
+            onRename = { file, name ->
+                newNames[file] = name
+            },
+            onSelectionChanged = {
+                // يمكن استخدامها لتحديث الحالة إذا لزم الأمر
+            }
+        )
 
-        <Space
-            android:layout_width="20dp"
-            android:layout_height="wrap_content" />
+        rvVault.layoutManager = GridLayoutManager(requireContext(), 3)
+        rvVault.adapter = adapter
 
-        <!-- زر التراجع -->
-        <ImageButton
-            android:id="@+id/btnVaultUndo"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_menu_revert"
-            app:tint="#FFFFFF" />
-    </LinearLayout>
-</androidx.constraintlayout.widget.ConstraintLayout>
+        btnEdit.setOnClickListener {
+            isEditMode = !isEditMode
+            layoutActions.visibility = if (isEditMode) View.VISIBLE else View.GONE
+            btnEdit.setColorFilter(if (isEditMode) Color.parseColor("#00D4FF") else Color.WHITE)
+            adapter.isEditMode = isEditMode
+            adapter.notifyDataSetChanged()
+        }
+
+        btnUndo.setOnClickListener {
+            deletedFiles.clear()
+            newNames.clear()
+            isEditMode = false
+            layoutActions.visibility = View.GONE
+            btnEdit.setColorFilter(Color.WHITE)
+            adapter.isEditMode = false
+            adapter.updateData(VaultManager.getStickers(requireContext()))
+        }
+
+        btnConfirm.setOnClickListener {
+            deletedFiles.forEach { VaultManager.deleteSticker(requireContext(), it) }
+            newNames.forEach { (file, name) -> VaultManager.renameSticker(requireContext(), file.name, name) }
+            
+            deletedFiles.clear()
+            newNames.clear()
+            isEditMode = false
+            layoutActions.visibility = View.GONE
+            btnEdit.setColorFilter(Color.WHITE)
+            adapter.isEditMode = false
+            adapter.updateData(VaultManager.getStickers(requireContext()))
+            Toast.makeText(requireContext(), "تم حفظ التعديلات", Toast.LENGTH_SHORT).show()
+        }
+
+        btnShare.setOnClickListener {
+            shareSelectedImages()
+        }
+
+        btnClose.setOnClickListener { checkUnsavedAndDismiss() }
+    }
+
+    private fun shareSelectedImages() {
+        val selectedFiles = adapter.getSelectedFiles()
+        if (selectedFiles.isEmpty()) {
+            Toast.makeText(requireContext(), "الرجاء تحديد صور للمشاركة", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val uris = ArrayList<Uri>()
+        for (file in selectedFiles) {
+            try {
+                val uri = FileProvider.getUriForFile(requireContext(), "com.monolith.fileprovider", file)
+                uris.add(uri)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        if (uris.isEmpty()) return
+
+        val shareIntent = if (uris.size == 1) {
+            Intent(Intent.ACTION_SEND).apply {
+                type = "image/png"
+                putExtra(Intent.EXTRA_STREAM, uris[0])
+            }
+        } else {
+            Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+                type = "image/png"
+                putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+            }
+        }
+        
+        shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        startActivity(Intent.createChooser(shareIntent, "مشاركة الصور عبر"))
+    }
+
+    override fun onStart() {
+        super.onStart()
+        dialog?.setOnKeyListener { _, keyCode, event ->
+            if (keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_UP) {
+                checkUnsavedAndDismiss()
+                true
+            } else {
+                false
+            }
+        }
+    }
+
+    private fun checkUnsavedAndDismiss() {
+        if (deletedFiles.isNotEmpty() || newNames.isNotEmpty()) {
+            AlertDialog.Builder(requireContext())
+                .setTitle("تعديلات غير محفوظة")
+                .setMessage("هل تريد حفظ التعديلات قبل الخروج؟")
+                .setPositiveButton("حفظ وخروج") { _, _ ->
+                    deletedFiles.forEach { VaultManager.deleteSticker(requireContext(), it) }
+                    newNames.forEach { (file, name) -> VaultManager.renameSticker(requireContext(), file.name, name) }
+                    dismiss()
+                }
+                .setNegativeButton("خروج بدون حفظ") { _, _ -> dismiss() }
+                .show()
+        } else {
+            dismiss()
+        }
+    }
+}
+
+class VaultAdapter(
+    private val context: Context,
+    private var files: List<File>,
+    var isEditMode: Boolean,
+    private val onSelect: (File) -> Unit,
+    private val onDelete: (File) -> Unit,
+    private val onRename: (File, String) -> Unit,
+    private val onSelectionChanged: () -> Unit
+) : RecyclerView.Adapter<VaultAdapter.VaultViewHolder>() {
+
+    private val selectedFiles = mutableSetOf<File>()
+
+    private fun createCheckerboardDrawable(size: Int = 32): Drawable {
+        val bitmap = Bitmap.createBitmap(size * 2, size * 2, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val paint = Paint()
+        paint.color = Color.parseColor("#CCCCCC")
+        canvas.drawRect(0f, 0f, size * 2f, size * 2f, paint)
+        paint.color = Color.WHITE
+        canvas.drawRect(0f, 0f, size.toFloat(), size.toFloat(), paint)
+        canvas.drawRect(size.toFloat(), size.toFloat(), size * 2f, size * 2f, paint)
+        return BitmapDrawable(context.resources, bitmap)
+    }
+
+    fun updateData(newFiles: List<File>) {
+        files = newFiles
+        selectedFiles.clear()
+        notifyDataSetChanged()
+    }
+
+    fun removeItem(file: File) {
+        val newList = files.toMutableList()
+        newList.remove(file)
+        files = newList
+        selectedFiles.remove(file)
+        notifyDataSetChanged()
+    }
+
+    fun getSelectedFiles(): List<File> = selectedFiles.toList()
+
+    inner class VaultViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+        val img: ImageView = view.findViewById(R.id.imgVaultItem)
+        val tvName: TextView = view.findViewById(R.id.tvVaultName)
+        val btnDel: ImageButton = view.findViewById(R.id.btnVaultDelete)
+        val btnRename: ImageButton = view.findViewById(R.id.btnVaultRename)
+        val imgCheckmark: ImageView = view.findViewById(R.id.imgCheckmark)
+    }
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VaultViewHolder {
+        val view = LayoutInflater.from(context).inflate(R.layout.item_vault_image, parent, false)
+        return VaultViewHolder(view)
+    }
+
+    override fun onBindViewHolder(holder: VaultViewHolder, position: Int) {
+        val file = files[position]
+        val bitmap = BitmapFactory.decodeFile(file.absolutePath)
+        
+        holder.img.setImageBitmap(bitmap)
+        holder.img.setBackground(createCheckerboardDrawable())
+        
+        val rawName = VaultManager.getStickerName(context, file.name)
+        holder.tvName.text = rawName
+
+        // إظهار/إخفاء أزرار التعديل والحذف
+        holder.btnDel.visibility = if (isEditMode) View.VISIBLE else View.GONE
+        holder.btnRename.visibility = if (isEditMode) View.VISIBLE else View.GONE
+        
+        // منطق التحديد (Checkmark) - تم التعديل هنا حرفياً كما طلبت
+        if (selectedFiles.contains(file)) {
+            holder.imgCheckmark.setImageResource(R.drawable.ic_vault_check_circle)
+        } else {
+            holder.imgCheckmark.setImageResource(R.drawable.ic_vault_check_unselected)
+        }
+        
+        holder.imgCheckmark.visibility = View.VISIBLE
+
+        holder.imgCheckmark.setOnClickListener {
+            if (selectedFiles.contains(file)) {
+                selectedFiles.remove(file)
+            } else {
+                selectedFiles.add(file)
+            }
+            notifyItemChanged(position)
+            onSelectionChanged()
+        }
+
+        holder.btnDel.setOnClickListener { onDelete(file) }
+        
+        holder.btnRename.setOnClickListener {
+            val input = EditText(context)
+            input.setText(holder.tvName.text)
+            AlertDialog.Builder(context)
+                .setTitle("اسم المحفوظة")
+                .setView(input)
+                .setPositiveButton("حفظ") { _, _ ->
+                    val newName = input.text.toString()
+                    holder.tvName.text = newName
+                    onRename(file, newName)
+                }
+                .setNegativeButton("إلغاء", null)
+                .show()
+        }
+
+        holder.itemView.setOnClickListener {
+            if (!isEditMode) onSelect(file)
+        }
+    }
+
+    override fun getItemCount() = files.size
+}
