@@ -6,7 +6,6 @@
     android:background="#F3F4F6"
     android:layoutDirection="rtl">
 
-    <!-- الشريط العلوي -->
     <LinearLayout
         android:id="@+id/topBarVault"
         android:layout_width="match_parent"
@@ -43,7 +42,6 @@
             app:tint="#333333" />
     </LinearLayout>
 
-    <!-- شبكة الصور (مع مساحة سفلية للشريط العائم) -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rvVault"
         android:layout_width="match_parent"
@@ -54,7 +52,7 @@
         app:layout_constraintTop_toBottomOf="@id/topBarVault"
         app:layout_constraintBottom_toBottomOf="parent" />
 
-    <!-- الشريط السفلي العائم (Floating Pill) -->
+    <!-- الشريط السفلي العائم -->
     <LinearLayout
         android:id="@+id/layoutVaultActions"
         android:layout_width="wrap_content"
@@ -69,31 +67,29 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent">
 
-        <!-- زر حفظ التعديلات -->
+        <!-- زر الحفظ (علامة صح) -->
         <ImageButton
             android:id="@+id/btnVaultConfirm"
             android:layout_width="48dp"
             android:layout_height="48dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_menu_save"
-            app:tint="#00FF00" />
+            android:src="@drawable/ic_vault_confirm" />
 
         <Space
-            android:layout_width="24dp"
+            android:layout_width="20dp"
             android:layout_height="wrap_content" />
 
-        <!-- زر المشاركة الجديد -->
+        <!-- زر المشاركة الدائري -->
         <ImageButton
             android:id="@+id/btnVaultShare"
             android:layout_width="56dp"
             android:layout_height="56dp"
             android:background="@drawable/vault_share_bg"
             android:elevation="4dp"
-            android:src="@android:drawable/ic_menu_share"
-            app:tint="#FFFFFF" />
+            android:src="@drawable/ic_vault_share" />
 
         <Space
-            android:layout_width="24dp"
+            android:layout_width="20dp"
             android:layout_height="wrap_content" />
 
         <!-- زر التراجع -->
@@ -105,5 +101,4 @@
             android:src="@android:drawable/ic_menu_revert"
             app:tint="#FFFFFF" />
     </LinearLayout>
-
 </androidx.constraintlayout.widget.ConstraintLayout>
