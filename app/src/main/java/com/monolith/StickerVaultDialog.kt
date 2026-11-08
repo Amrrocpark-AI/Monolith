@@ -49,10 +49,6 @@ class StickerVaultDialog : BottomSheetDialogFragment() {
         val rvVault = view.findViewById<RecyclerView>(R.id.rvVault)
         val btnEdit = view.findViewById<ImageButton>(R.id.btnVaultEditMode)
         val btnClose = view.findViewById<ImageButton>(R.id.btnVaultClose)
-        val layoutActions = view.findViewById<LinearLayout>(R.id.layoutVaultActions)
-        val btnUndo = view.findViewById<ImageButton>(R.id.btnVaultUndo)
-        val btnConfirm = view.findViewById<ImageButton>(R.id.btnVaultConfirm)
-        val btnShare = view.findViewById<ImageButton>(R.id.btnVaultShare)
 
         adapter = VaultAdapter(requireContext(), VaultManager.getStickers(requireContext()), isEditMode,
             onSelect = { file ->
@@ -78,76 +74,12 @@ class StickerVaultDialog : BottomSheetDialogFragment() {
 
         btnEdit.setOnClickListener {
             isEditMode = !isEditMode
-            layoutActions.visibility = if (isEditMode) View.VISIBLE else View.GONE
             btnEdit.setColorFilter(if (isEditMode) Color.parseColor("#00D4FF") else Color.WHITE)
             adapter.isEditMode = isEditMode
             adapter.notifyDataSetChanged()
         }
 
-        btnUndo.setOnClickListener {
-            deletedFiles.clear()
-            newNames.clear()
-            isEditMode = false
-            layoutActions.visibility = View.GONE
-            btnEdit.setColorFilter(Color.WHITE)
-            adapter.isEditMode = false
-            adapter.updateData(VaultManager.getStickers(requireContext()))
-        }
-
-        btnConfirm.setOnClickListener {
-            deletedFiles.forEach { VaultManager.deleteSticker(requireContext(), it) }
-            newNames.forEach { (file, name) -> VaultManager.renameSticker(requireContext(), file.name, name) }
-            
-            deletedFiles.clear()
-            newNames.clear()
-            isEditMode = false
-            layoutActions.visibility = View.GONE
-            btnEdit.setColorFilter(Color.WHITE)
-            adapter.isEditMode = false
-            adapter.updateData(VaultManager.getStickers(requireContext()))
-            Toast.makeText(requireContext(), "تم حفظ التعديلات", Toast.LENGTH_SHORT).show()
-        }
-
-        btnShare.setOnClickListener {
-            shareSelectedImages()
-        }
-
         btnClose.setOnClickListener { checkUnsavedAndDismiss() }
-    }
-
-    private fun shareSelectedImages() {
-        val selectedFiles = adapter.getSelectedFiles()
-        if (selectedFiles.isEmpty()) {
-            Toast.makeText(requireContext(), "الرجاء تحديد صور للمشاركة", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val uris = ArrayList<Uri>()
-        for (file in selectedFiles) {
-            try {
-                val uri = FileProvider.getUriForFile(requireContext(), "com.monolith.fileprovider", file)
-                uris.add(uri)
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
-
-        if (uris.isEmpty()) return
-
-        val shareIntent = if (uris.size == 1) {
-            Intent(Intent.ACTION_SEND).apply {
-                type = "image/png"
-                putExtra(Intent.EXTRA_STREAM, uris[0])
-            }
-        } else {
-            Intent(Intent.ACTION_SEND_MULTIPLE).apply {
-                type = "image/png"
-                putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
-            }
-        }
-        
-        shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        startActivity(Intent.createChooser(shareIntent, "مشاركة الصور عبر"))
     }
 
     override fun onStart() {
