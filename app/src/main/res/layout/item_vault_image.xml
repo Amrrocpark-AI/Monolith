@@ -22,7 +22,6 @@
             app:layout_constraintDimensionRatio="1:1"
             app:layout_constraintTop_toTopOf="parent" />
 
-        <!-- علامة التحديد الدائرية -->
         <ImageView
             android:id="@+id/imgCheckmark"
             android:layout_width="28dp"
@@ -46,7 +45,6 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/imgVaultItem" />
 
-        <!-- أزرار القلم والسلة -->
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -61,8 +59,7 @@
                 android:layout_width="32dp"
                 android:layout_height="32dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@drawable/ic_vault_rename"
-                app:tint="#00D4FF" />
+                android:src="@drawable/ic_vault_rename" />
 
             <ImageButton
                 android:id="@+id/btnVaultDelete"
@@ -70,8 +67,7 @@
                 android:layout_height="32dp"
                 android:layout_marginStart="8dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@drawable/ic_vault_delete"
-                app:tint="#FF0000" />
+                android:src="@drawable/ic_vault_delete" />
         </LinearLayout>
 
     </androidx.constraintlayout.widget.ConstraintLayout>
