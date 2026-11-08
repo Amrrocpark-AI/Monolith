@@ -11,11 +11,12 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
     
-    # هذا السطر سيحل مشكلة الصلاحيات إذا كان الملف موجوداً
-    - name: Grant execute permission for gradlew
-      run: chmod +x ./gradlew || true
+    # هذا السطر هو الحل: تثبيت إصدار Gradle 8.5 المتوافق مع مشروعك القديم
+    - name: Setup Gradle 8.5
+      uses: gradle/actions/setup-gradle@v3
+      with:
+        gradle-version: 8.5
 
-    # هذا السطر سيحل مشكلة 504 لأنه سيستخدم Gradle المثبت مسبقاً في السيرفر
     - name: Build with Gradle
       run: gradle clean assembleDebug
 
