@@ -10,10 +10,15 @@ jobs:
       with:
         java-version: '17'
         distribution: 'temurin'
+    
+    # هذا السطر سيحل مشكلة الصلاحيات إذا كان الملف موجوداً
     - name: Grant execute permission for gradlew
-      run: chmod +x ./gradlew
-    - name: Clean and Build with Gradle
-      run: ./gradlew clean assembleDebug
+      run: chmod +x ./gradlew || true
+
+    # هذا السطر سيحل مشكلة 504 لأنه سيستخدم Gradle المثبت مسبقاً في السيرفر
+    - name: Build with Gradle
+      run: gradle clean assembleDebug
+
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
