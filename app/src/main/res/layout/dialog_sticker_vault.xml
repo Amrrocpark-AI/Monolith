@@ -3,7 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#121212"
+    android:background="#F3F4F6"
     android:layoutDirection="rtl">
 
     <LinearLayout
@@ -16,30 +16,30 @@
         app:layout_constraintTop_toTopOf="parent">
 
         <ImageButton
-            android:id="@+id/btnVaultClose"
+            android:id="@+id/btnVaultEditMode"
             android:layout_width="44dp"
             android:layout_height="44dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@drawable/ic_close_custom"
-            app:tint="#A0A0A0" />
+            android:src="@drawable/ic_vault_edit"
+            app:tint="#D81B60" />
 
         <TextView
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="المحفوظات"
-            android:textColor="#FFFFFF"
+            android:textColor="#333333"
             android:textSize="18sp"
             android:textStyle="bold"
             android:gravity="center" />
 
         <ImageButton
-            android:id="@+id/btnVaultEditMode"
+            android:id="@+id/btnVaultClose"
             android:layout_width="44dp"
             android:layout_height="44dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@drawable/ic_vault_edit"
-            app:tint="#A0A0A0" />
+            android:src="@drawable/ic_close_custom"
+            app:tint="#333333" />
     </LinearLayout>
 
     <androidx.recyclerview.widget.RecyclerView
@@ -54,73 +54,73 @@
 
     <LinearLayout
         android:id="@+id/layoutVaultActions"
-        android:layout_width="wrap_content"
-        android:layout_height="72dp"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
         android:layout_marginBottom="24dp"
-        android:background="@drawable/vault_floating_bar_bg"
-        android:elevation="8dp"
-        android:gravity="center_vertical"
+        android:gravity="center_horizontal"
         android:orientation="horizontal"
-        android:paddingHorizontal="24dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent">
 
         <LinearLayout
             android:layout_width="wrap_content"
-            android:layout_height="match_parent"
+            android:layout_height="wrap_content"
             android:gravity="center"
             android:orientation="vertical">
             <ImageButton
-                android:id="@+id/btnVaultUndo"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@android:drawable/ic_menu_revert"
-                app:tint="#A0A0A0" />
+                android:id="@+id/btnVaultConfirm"
+                android:layout_width="60dp"
+                android:layout_height="60dp"
+                android:background="@drawable/bg_circle_dark"
+                android:src="@drawable/ic_vault_confirm"
+                app:tint="#4CAF50" />
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="تراجع"
-                android:textColor="#A0A0A0"
-                android:textSize="10sp"/>
+                android:layout_marginTop="4dp"
+                android:text="حفظ التعديلات"
+                android:textColor="#333333"
+                android:textSize="12sp"/>
         </LinearLayout>
 
         <Space
-            android:layout_width="32dp"
+            android:layout_width="24dp"
             android:layout_height="wrap_content" />
 
         <ImageButton
             android:id="@+id/btnVaultShare"
             android:layout_width="56dp"
             android:layout_height="56dp"
+            android:layout_marginBottom="16dp"
             android:background="@drawable/vault_share_bg"
-            android:elevation="4dp"
+            android:elevation="8dp"
             android:src="@drawable/ic_vault_share"
-            app:tint="#000000" />
+            app:tint="#333333" />
 
         <Space
-            android:layout_width="32dp"
+            android:layout_width="24dp"
             android:layout_height="wrap_content" />
 
         <LinearLayout
             android:layout_width="wrap_content"
-            android:layout_height="match_parent"
+            android:layout_height="wrap_content"
             android:gravity="center"
             android:orientation="vertical">
             <ImageButton
-                android:id="@+id/btnVaultConfirm"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@drawable/ic_vault_confirm"
-                app:tint="#4CAF50" />
+                android:id="@+id/btnVaultUndo"
+                android:layout_width="60dp"
+                android:layout_height="60dp"
+                android:background="@drawable/bg_circle_dark"
+                android:src="@android:drawable/ic_menu_revert"
+                app:tint="#FFFFFF" />
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="حفظ"
-                android:textColor="#A0A0A0"
-                android:textSize="10sp"/>
+                android:layout_marginTop="4dp"
+                android:text="تراجع"
+                android:textColor="#333333"
+                android:textSize="12sp"/>
         </LinearLayout>
     </LinearLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>
