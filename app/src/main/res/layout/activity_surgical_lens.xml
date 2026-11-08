@@ -82,6 +82,16 @@
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
 
+                <!-- زر أداة اليد الجديد -->
+                <ImageButton 
+                    android:id="@+id/btnHandSurgical" 
+                    android:layout_width="48dp" 
+                    android:layout_height="48dp" 
+                    android:background="?attr/selectableItemBackgroundBorderless" 
+                    android:src="@drawable/ic_hand" 
+                    app:tint="#FFFFFF" 
+                    android:layout_marginEnd="8dp" />
+
                 <ImageButton android:id="@+id/btnEraserSurgical" android:layout_width="48dp" android:layout_height="48dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_eraser" android:layout_marginEnd="8dp" />
                 <ImageButton android:id="@+id/btnMagicWandSurgical" android:layout_width="48dp" android:layout_height="48dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_magic_wand" app:tint="#FFFFFF" android:layout_marginEnd="8dp" />
                 <ImageButton android:id="@+id/btnProtectionSurgical" android:layout_width="48dp" android:layout_height="48dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_monolith_lock" app:tint="#FFFFFF" android:layout_marginEnd="8dp" />
