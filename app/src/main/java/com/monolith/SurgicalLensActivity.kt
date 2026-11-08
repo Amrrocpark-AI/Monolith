@@ -39,6 +39,7 @@ class SurgicalLensActivity : AppCompatActivity() {
     private lateinit var btnLoupe: ImageButton
     private lateinit var btnFreeze: ImageButton
     private lateinit var btnMaskVisibility: ImageButton
+    private lateinit var btnHand: ImageButton
     private lateinit var progressBar: ProgressBar
     private lateinit var btnPick: Button
     private var currentBitmap: Bitmap? = null
@@ -69,6 +70,7 @@ class SurgicalLensActivity : AppCompatActivity() {
         btnLoupe = findViewById(R.id.btnLoupeSurgical)
         btnFreeze = findViewById(R.id.btnFreezeSurgical)
         btnMaskVisibility = findViewById(R.id.btnMaskVisibilitySurgical)
+        btnHand = findViewById(R.id.btnHandSurgical)
         progressBar = findViewById(R.id.progressBarSurgical)
         btnPick = findViewById(R.id.btnPickSurgicalImage)
 
@@ -78,45 +80,75 @@ class SurgicalLensActivity : AppCompatActivity() {
         findViewById<ImageButton>(R.id.btnUndoSurgical).setOnClickListener { surgicalMaskView.undo() }
         findViewById<ImageButton>(R.id.btnRedoSurgical).setOnClickListener { surgicalMaskView.redo() }
 
+        // تفعيل وضع اليد افتراضياً
+        surgicalMaskView.isNavigationMode = true
+        btnHand.setColorFilter(colorActive)
+
+        btnHand.setOnClickListener {
+            surgicalMaskView.isNavigationMode = true
+            surgicalMaskView.isEraser = false
+            surgicalMaskView.isMagicWand = false
+            surgicalMaskView.isProtectionMode = false
+            surgicalMaskView.isColorAssistMode = false
+            
+            btnHand.setColorFilter(colorActive)
+            btnEraser.setColorFilter(colorInactive)
+            btnMagicWand.setColorFilter(colorInactive)
+            btnProtection.setColorFilter(colorInactive)
+            btnColorAssist.setColorFilter(colorInactive)
+        }
+
         btnEraser.setOnClickListener {
+            surgicalMaskView.isNavigationMode = false
             surgicalMaskView.isEraser = true
             surgicalMaskView.isMagicWand = false
             surgicalMaskView.isProtectionMode = false
             surgicalMaskView.isColorAssistMode = false
+            
             btnEraser.setColorFilter(colorActive)
+            btnHand.setColorFilter(colorInactive)
             btnMagicWand.setColorFilter(colorInactive)
             btnProtection.setColorFilter(colorInactive)
             btnColorAssist.setColorFilter(colorInactive)
         }
 
         btnMagicWand.setOnClickListener {
+            surgicalMaskView.isNavigationMode = false
             surgicalMaskView.isMagicWand = true
             surgicalMaskView.isEraser = false
             surgicalMaskView.isProtectionMode = false
             surgicalMaskView.isColorAssistMode = false
+            
             btnMagicWand.setColorFilter(colorActive)
+            btnHand.setColorFilter(colorInactive)
             btnEraser.setColorFilter(colorInactive)
             btnProtection.setColorFilter(colorInactive)
             btnColorAssist.setColorFilter(colorInactive)
         }
 
         btnProtection.setOnClickListener {
+            surgicalMaskView.isNavigationMode = false
             surgicalMaskView.isProtectionMode = !surgicalMaskView.isProtectionMode
             surgicalMaskView.isEraser = false
             surgicalMaskView.isMagicWand = false
             surgicalMaskView.isColorAssistMode = false
+            
             btnProtection.setColorFilter(if (surgicalMaskView.isProtectionMode) colorActive else colorInactive)
+            btnHand.setColorFilter(colorInactive)
             btnEraser.setColorFilter(colorInactive)
             btnMagicWand.setColorFilter(colorInactive)
             btnColorAssist.setColorFilter(colorInactive)
         }
 
         btnColorAssist.setOnClickListener {
+            surgicalMaskView.isNavigationMode = false
             surgicalMaskView.isColorAssistMode = !surgicalMaskView.isColorAssistMode
             surgicalMaskView.isEraser = false
             surgicalMaskView.isMagicWand = false
             surgicalMaskView.isProtectionMode = false
+            
             btnColorAssist.setColorFilter(if (surgicalMaskView.isColorAssistMode) colorActive else colorInactive)
+            btnHand.setColorFilter(colorInactive)
             btnEraser.setColorFilter(colorInactive)
             btnMagicWand.setColorFilter(colorInactive)
             btnProtection.setColorFilter(colorInactive)
@@ -127,6 +159,13 @@ class SurgicalLensActivity : AppCompatActivity() {
         }
 
         btnColorEngine.setOnClickListener {
+            surgicalMaskView.isNavigationMode = true
+            btnHand.setColorFilter(colorActive)
+            btnEraser.setColorFilter(colorInactive)
+            btnMagicWand.setColorFilter(colorInactive)
+            btnProtection.setColorFilter(colorInactive)
+            btnColorAssist.setColorFilter(colorInactive)
+
             val colorDialog = ColorEngineDialog()
             colorDialog.onColorsSelected = { rules ->
                 surgicalMaskView.setColorRules(rules)
@@ -150,7 +189,16 @@ class SurgicalLensActivity : AppCompatActivity() {
             btnMaskVisibility.setColorFilter(if (surgicalMaskView.isMaskVisible) colorActive else colorInactive)
         }
 
-        btnAiCutout.setOnClickListener { performAiCutout() }
+        btnAiCutout.setOnClickListener {
+            surgicalMaskView.isNavigationMode = true
+            btnHand.setColorFilter(colorActive)
+            btnEraser.setColorFilter(colorInactive)
+            btnMagicWand.setColorFilter(colorInactive)
+            btnProtection.setColorFilter(colorInactive)
+            btnColorAssist.setColorFilter(colorInactive)
+            
+            performAiCutout() 
+        }
 
         btnVault.setOnClickListener {
             val vaultDialog = StickerVaultDialog()
