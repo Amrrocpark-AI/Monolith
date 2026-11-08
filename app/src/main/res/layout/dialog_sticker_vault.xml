@@ -72,16 +72,16 @@
             android:gravity="center"
             android:orientation="vertical">
             <ImageButton
-                android:id="@+id/btnVaultConfirm"
+                android:id="@+id/btnVaultUndo"
                 android:layout_width="40dp"
                 android:layout_height="40dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@drawable/ic_vault_confirm"
-                app:tint="#4CAF50" />
+                android:src="@android:drawable/ic_menu_revert"
+                app:tint="#A0A0A0" />
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="حفظ"
+                android:text="تراجع"
                 android:textColor="#A0A0A0"
                 android:textSize="10sp"/>
         </LinearLayout>
@@ -109,16 +109,16 @@
             android:gravity="center"
             android:orientation="vertical">
             <ImageButton
-                android:id="@+id/btnVaultUndo"
+                android:id="@+id/btnVaultConfirm"
                 android:layout_width="40dp"
                 android:layout_height="40dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@android:drawable/ic_menu_revert"
-                app:tint="#A0A0A0" />
+                android:src="@drawable/ic_vault_confirm"
+                app:tint="#4CAF50" />
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="تراجع"
+                android:text="حفظ"
                 android:textColor="#A0A0A0"
                 android:textSize="10sp"/>
         </LinearLayout>
