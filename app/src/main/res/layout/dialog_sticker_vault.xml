@@ -1,34 +1,35 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#121212"
-    android:layoutDirection="rtl"
-    android:orientation="vertical">
+    android:background="#F3F4F6"
+    android:layoutDirection="rtl">
 
     <!-- الشريط العلوي -->
     <LinearLayout
+        android:id="@+id/topBarVault"
         android:layout_width="match_parent"
         android:layout_height="56dp"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingHorizontal="8dp"
-        android:background="#1E1E1E">
+        app:layout_constraintTop_toTopOf="parent">
 
         <ImageButton
             android:id="@+id/btnVaultClose"
             android:layout_width="44dp"
             android:layout_height="44dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@drawable/ic_close" />
+            android:src="@drawable/ic_close"
+            app:tint="#333333" />
 
         <TextView
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="المحفوظات"
-            android:textColor="#00D4FF"
+            android:textColor="#333333"
             android:textSize="18sp"
             android:textStyle="bold"
             android:gravity="center" />
@@ -39,43 +40,70 @@
             android:layout_height="44dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:src="@drawable/ic_vault_edit"
-            app:tint="#FFFFFF" />
+            app:tint="#333333" />
     </LinearLayout>
 
-    <!-- شبكة الصور -->
+    <!-- شبكة الصور (مع مساحة سفلية للشريط العائم) -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rvVault"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
         android:padding="8dp"
-        android:clipToPadding="false" />
+        android:paddingBottom="90dp"
+        android:clipToPadding="false"
+        app:layout_constraintTop_toBottomOf="@id/topBarVault"
+        app:layout_constraintBottom_toBottomOf="parent" />
 
-    <!-- شريط الإجراءات السفلي (يظهر فقط في وضع التعديل) -->
+    <!-- الشريط السفلي العائم (Floating Pill) -->
     <LinearLayout
         android:id="@+id/layoutVaultActions"
-        android:layout_width="match_parent"
-        android:layout_height="60dp"
-        android:background="#1E1E1E"
+        android:layout_width="wrap_content"
+        android:layout_height="64dp"
+        android:layout_marginBottom="24dp"
+        android:background="@drawable/vault_floating_bar_bg"
+        android:elevation="8dp"
+        android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:visibility="gone">
+        android:paddingHorizontal="16dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
 
-        <Button
-            android:id="@+id/btnVaultUndo"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:text="تراجع"
-            android:textColor="#FF0000"
-            android:background="?attr/selectableItemBackground" />
-
-        <Button
+        <!-- زر حفظ التعديلات -->
+        <ImageButton
             android:id="@+id/btnVaultConfirm"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:text="تأكيد التعديلات"
-            android:textColor="#00FF00"
-            android:background="?attr/selectableItemBackground" />
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_save"
+            app:tint="#00FF00" />
+
+        <Space
+            android:layout_width="24dp"
+            android:layout_height="wrap_content" />
+
+        <!-- زر المشاركة الجديد -->
+        <ImageButton
+            android:id="@+id/btnVaultShare"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:background="@drawable/vault_share_bg"
+            android:elevation="4dp"
+            android:src="@android:drawable/ic_menu_share"
+            app:tint="#FFFFFF" />
+
+        <Space
+            android:layout_width="24dp"
+            android:layout_height="wrap_content" />
+
+        <!-- زر التراجع -->
+        <ImageButton
+            android:id="@+id/btnVaultUndo"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_revert"
+            app:tint="#FFFFFF" />
     </LinearLayout>
-</LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>
