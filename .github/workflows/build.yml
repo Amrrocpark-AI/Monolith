@@ -11,13 +11,14 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
     
-    # هذا السطر هو الحل: تثبيت إصدار Gradle 8.5 المتوافق مع مشروعك القديم
-    - name: Setup Gradle 8.5
+    # 1. تثبيت إصدار Gradle متوافق مع مشروعك (بدلاً من الاعتماد على gradlew المفقود)
+    - name: Setup Gradle 7.6
       uses: gradle/actions/setup-gradle@v3
       with:
-        gradle-version: 8.5
+        gradle-version: 7.6
 
-    - name: Build with Gradle
+    # 2. أمر البناء (استخدمنا gradle بدلاً من ./gradlew)
+    - name: Clean and Build with Gradle
       run: gradle clean assembleDebug
 
     - name: Upload APK
