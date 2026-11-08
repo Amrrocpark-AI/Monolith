@@ -46,12 +46,10 @@ class SurgicalMaskView @JvmOverloads constructor(
     private var panY = 0f
     private var lastFocusX = 0f
     private var lastFocusY = 0f
-    
-    private var isMultiTouchActive = false
+
+    private var wasPinching = false
     private var isZoomingWithOneFinger = false
     private var lastZoomY = 0f
-    private val handler = Handler(Looper.getMainLooper())
-    private var longPressRunnable: Runnable? = null
 
     private var overlayBitmap: Bitmap? = null
     private var overlayX = 0f
@@ -78,7 +76,7 @@ class SurgicalMaskView @JvmOverloads constructor(
 
     var isDrawingEnabled = false
     var isFrozen = false
-    var isHandMode = false
+    var isNavigationMode = true
     var isMaskVisible = true
     var isEraser = false
     var isMagicWand = false
@@ -135,16 +133,6 @@ class SurgicalMaskView @JvmOverloads constructor(
                 isZoomingWithOneFinger = true
                 lastZoomY = e.y
                 return true
-            }
-            override fun onLongPress(e: MotionEvent) {
-                if (!isMultiTouchActive && !isHandMode) {
-                    if (undoStack.size > 1) {
-                        val prev = undoStack.last()
-                        maskBitmap = prev.mask.copy(Bitmap.Config.ARGB_8888, true)
-                        canvasMask.setBitmap(maskBitmap!!)
-                        invalidate()
-                    }
-                }
             }
         })
     }
@@ -416,11 +404,10 @@ class SurgicalMaskView @JvmOverloads constructor(
 
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                isMultiTouchActive = isHandMode || isZoomingWithOneFinger
                 lastFocusX = event.x
                 lastFocusY = event.y
 
-                if (!isMultiTouchActive) {
+                if (!isNavigationMode && !wasPinching) {
                     saveHistoryState()
                     val src = sourceBitmap ?: return false
                     val rect = getImageRect()
@@ -435,24 +422,22 @@ class SurgicalMaskView @JvmOverloads constructor(
                         val scaleY = src.height.toFloat() / rect.height()
                         val x = (touchX - rect.left) * scaleX
                         val y = (touchY - rect.top) * scaleY
-                        
-                        currentPath = Path()
-                        currentPath?.moveTo(x, y)
+                        currentPath = Path().apply { moveTo(x, y) }
                     }
                 }
             }
 
             MotionEvent.ACTION_POINTER_DOWN -> {
-                isMultiTouchActive = true
+                wasPinching = true
                 currentPath = null
-                
-                if (undoStack.size > 1) {
-                    val prev = undoStack.last()
+
+                if (undoStack.size > 1 && undoStack.size > 1) {
+                    val prev = undoStack[undoStack.size - 2]
                     maskBitmap = prev.mask.copy(Bitmap.Config.ARGB_8888, true)
                     canvasMask.setBitmap(maskBitmap!!)
                     invalidate()
                 }
-                
+
                 if (event.pointerCount >= 2) {
                     lastFocusX = (event.getX(0) + event.getX(1)) / 2f
                     lastFocusY = (event.getY(0) + event.getY(1)) / 2f
@@ -460,7 +445,7 @@ class SurgicalMaskView @JvmOverloads constructor(
             }
 
             MotionEvent.ACTION_MOVE -> {
-                if (isMultiTouchActive || event.pointerCount >= 2) {
+                if (event.pointerCount >= 2 || wasPinching) {
                     var focusX = 0f
                     var focusY = 0f
                     if (event.pointerCount >= 2) {
@@ -470,15 +455,12 @@ class SurgicalMaskView @JvmOverloads constructor(
                         focusX = event.getX(0)
                         focusY = event.getY(0)
                     }
-                    
+
                     if (isZoomingWithOneFinger && !isFrozen) {
                         val dy = event.y - lastZoomY
                         currentScale += dy * 0.005f
                         currentScale = currentScale.coerceIn(0.5f, 10f)
                         lastZoomY = event.y
-                        applyClamping()
-                        invalidate()
-                        return true
                     }
 
                     panX += focusX - lastFocusX
@@ -487,9 +469,7 @@ class SurgicalMaskView @JvmOverloads constructor(
                     lastFocusY = focusY
                     applyClamping()
                     invalidate()
-                } else {
-                    if (isMagicWand) return true
-                    
+                } else if (currentPath != null && !isFrozen && !isMagicWand) {
                     val src = sourceBitmap ?: return false
                     val rect = getImageRect()
                     matrix.invert(inverseMatrix)
@@ -497,7 +477,7 @@ class SurgicalMaskView @JvmOverloads constructor(
                     inverseMatrix.mapPoints(touchPoints)
                     val touchX = touchPoints[0]
                     val touchY = touchPoints[1]
-                    
+
                     onTouchUpdate?.invoke(touchX, touchY)
 
                     if (!rect.contains(touchX, touchY)) return false
@@ -520,12 +500,7 @@ class SurgicalMaskView @JvmOverloads constructor(
                         else -> maskPaint
                     }
 
-                    if (currentPath == null) {
-                        currentPath = Path()
-                        currentPath?.moveTo(x, y)
-                    } else {
-                        currentPath?.lineTo(x, y)
-                    }
+                    currentPath?.lineTo(x, y)
                     targetPaint.strokeWidth = brushSize * scaleX
                     targetCanvas.drawPath(currentPath!!, targetPaint)
                     invalidate()
@@ -541,7 +516,7 @@ class SurgicalMaskView @JvmOverloads constructor(
             }
 
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                isMultiTouchActive = false
+                wasPinching = false
                 isZoomingWithOneFinger = false
                 currentPath = null
                 onTouchEnd?.invoke()
