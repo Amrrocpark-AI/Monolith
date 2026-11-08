@@ -249,9 +249,9 @@ class VaultAdapter(
         
         // منطق التحديد (Checkmark)
         if (selectedFiles.contains(file)) {
-            holder.imgCheckmark.setImageResource(android.R.drawable.checkbox_on_background)
+            holder.imgCheckmark.setImageResource(R.drawable.ic_vault_check_circle)
         } else {
-            holder.imgCheckmark.setImageResource(android.R.drawable.checkbox_off_background)
+            holder.imgCheckmark.setImageResource(R.drawable.ic_vault_check_unselected)
         }
         
         holder.imgCheckmark.visibility = View.VISIBLE
