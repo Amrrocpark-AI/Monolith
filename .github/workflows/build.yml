@@ -10,17 +10,12 @@ jobs:
       with:
         java-version: '17'
         distribution: 'temurin'
-    
-    # 1. تثبيت إصدار Gradle متوافق مع مشروعك (بدلاً من الاعتماد على gradlew المفقود)
     - name: Setup Gradle 7.6
       uses: gradle/actions/setup-gradle@v3
       with:
         gradle-version: 7.6
-
-    # 2. أمر البناء (استخدمنا gradle بدلاً من ./gradlew)
     - name: Clean and Build with Gradle
       run: gradle clean assembleDebug
-
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
