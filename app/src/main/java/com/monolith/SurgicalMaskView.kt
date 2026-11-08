@@ -2,7 +2,10 @@ package com.monolith
 
 import android.content.Context
 import android.graphics.*
+import android.os.Handler
+import android.os.Looper
 import android.util.AttributeSet
+import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.View
@@ -30,19 +33,25 @@ class SurgicalMaskView @JvmOverloads constructor(
     private val eraserPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val protectionPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val colorAssistPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val aiMaskPaint = Paint(Paint.ANTI_ALIAS_FLAG)
 
     private var currentPath: Path? = null
 
     private val matrix = Matrix()
     private val inverseMatrix = Matrix()
     private var currentScale = 1f
-    private var scaleDetector: ScaleGestureDetector
+    private val scaleDetector: ScaleGestureDetector
+    private val gestureDetector: GestureDetector
 
     private var panX = 0f
     private var panY = 0f
     private var lastFocusX = 0f
     private var lastFocusY = 0f
+    
+    private var isMultiTouchActive = false
+    private var isZoomingWithOneFinger = false
+    private var lastZoomY = 0f
+    private val handler = Handler(Looper.getMainLooper())
+    private var longPressRunnable: Runnable? = null
 
     private var overlayBitmap: Bitmap? = null
     private var overlayX = 0f
@@ -69,6 +78,7 @@ class SurgicalMaskView @JvmOverloads constructor(
 
     var isDrawingEnabled = false
     var isFrozen = false
+    var isHandMode = false
     var isMaskVisible = true
     var isEraser = false
     var isMagicWand = false
@@ -110,15 +120,31 @@ class SurgicalMaskView @JvmOverloads constructor(
         colorAssistPaint.strokeJoin = Paint.Join.ROUND
         colorAssistPaint.color = Color.WHITE
 
-        aiMaskPaint.style = Paint.Style.FILL
-        aiMaskPaint.color = Color.WHITE
-
         scaleDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
             override fun onScale(detector: ScaleGestureDetector): Boolean {
                 currentScale *= detector.scaleFactor
-                currentScale = currentScale.coerceIn(1f, 5f)
+                currentScale = currentScale.coerceIn(0.5f, 10f)
+                applyClamping()
                 invalidate()
                 return true
+            }
+        })
+
+        gestureDetector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onDoubleTap(e: MotionEvent): Boolean {
+                isZoomingWithOneFinger = true
+                lastZoomY = e.y
+                return true
+            }
+            override fun onLongPress(e: MotionEvent) {
+                if (!isMultiTouchActive && !isHandMode) {
+                    if (undoStack.size > 1) {
+                        val prev = undoStack.last()
+                        maskBitmap = prev.mask.copy(Bitmap.Config.ARGB_8888, true)
+                        canvasMask.setBitmap(maskBitmap!!)
+                        invalidate()
+                    }
+                }
             }
         })
     }
@@ -145,13 +171,13 @@ class SurgicalMaskView @JvmOverloads constructor(
     fun setAiMask(foregroundBitmap: Bitmap) {
         val w = sourceBitmap?.width ?: foregroundBitmap.width
         val h = sourceBitmap?.height ?: foregroundBitmap.height
-        
+
         aiMaskBitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         canvasAiMask.setBitmap(aiMaskBitmap!!)
-        
+
         val srcPixels = IntArray(foregroundBitmap.width * foregroundBitmap.height)
         foregroundBitmap.getPixels(srcPixels, 0, foregroundBitmap.width, 0, 0, foregroundBitmap.width, foregroundBitmap.height)
-        
+
         val maskPixels = IntArray(w * h)
         for (y in 0 until h) {
             for (x in 0 until w) {
@@ -163,7 +189,7 @@ class SurgicalMaskView @JvmOverloads constructor(
                 }
             }
         }
-        
+
         aiMaskBitmap?.setPixels(maskPixels, 0, w, 0, 0, w, h)
         saveHistoryState()
         invalidate()
@@ -218,7 +244,7 @@ class SurgicalMaskView @JvmOverloads constructor(
             canvasMask.setBitmap(maskBitmap!!)
             canvasProtection.setBitmap(protectionBitmap!!)
             canvasColorAssist.setBitmap(colorAssistBitmap!!)
-            
+
             if (aiMaskBitmap != null) {
                 canvasAiMask.setBitmap(aiMaskBitmap!!)
             }
@@ -242,7 +268,7 @@ class SurgicalMaskView @JvmOverloads constructor(
             canvasMask.setBitmap(maskBitmap!!)
             canvasProtection.setBitmap(protectionBitmap!!)
             canvasColorAssist.setBitmap(colorAssistBitmap!!)
-            
+
             if (aiMaskBitmap != null) {
                 canvasAiMask.setBitmap(aiMaskBitmap!!)
             }
@@ -286,6 +312,40 @@ class SurgicalMaskView @JvmOverloads constructor(
             rect.set((width - w) / 2f, 0f, (width + w) / 2f, h)
         }
         return rect
+    }
+
+    private fun applyClamping() {
+        val src = sourceBitmap ?: return
+        val imgRect = getImageRect()
+
+        matrix.reset()
+        matrix.postTranslate(panX, panY)
+        matrix.postScale(currentScale, currentScale, width / 2f, height / 2f)
+
+        val mapped = RectF(imgRect)
+        matrix.mapRect(mapped)
+
+        var dx = 0f
+        var dy = 0f
+
+        if (mapped.width() > width) {
+            if (mapped.left > 0) dx = -mapped.left
+            if (mapped.right < width) dx = width - mapped.right
+        } else {
+            dx = (width - mapped.width()) / 2f - mapped.left
+        }
+
+        if (mapped.height() > height) {
+            if (mapped.top > 0) dy = -mapped.top
+            if (mapped.bottom < height) dy = height - mapped.bottom
+        } else {
+            dy = (height - mapped.height()) / 2f - mapped.top
+        }
+
+        if (dx != 0f || dy != 0f) {
+            panX += dx
+            panY += dy
+        }
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -352,133 +412,141 @@ class SurgicalMaskView @JvmOverloads constructor(
         if (!isDrawingEnabled) return false
 
         scaleDetector.onTouchEvent(event)
+        gestureDetector.onTouchEvent(event)
 
-        if (event.pointerCount >= 2) {
-            if (event.actionMasked == MotionEvent.ACTION_POINTER_DOWN) {
-                lastFocusX = (event.getX(0) + event.getX(1)) / 2f
-                lastFocusY = (event.getY(0) + event.getY(1)) / 2f
-            } else if (event.actionMasked == MotionEvent.ACTION_MOVE) {
-                val focusX = (event.getX(0) + event.getX(1)) / 2f
-                val focusY = (event.getY(0) + event.getY(1)) / 2f
-                panX += focusX - lastFocusX
-                panY += focusY - lastFocusY
-                lastFocusX = focusX
-                lastFocusY = focusY
-                invalidate()
-            }
-            return true
-        }
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                isMultiTouchActive = isHandMode || isZoomingWithOneFinger
+                lastFocusX = event.x
+                lastFocusY = event.y
 
-        if (isFrozen) {
-            return true
-        }
+                if (!isMultiTouchActive) {
+                    saveHistoryState()
+                    val src = sourceBitmap ?: return false
+                    val rect = getImageRect()
+                    matrix.invert(inverseMatrix)
+                    val touchPoints = floatArrayOf(event.x, event.y)
+                    inverseMatrix.mapPoints(touchPoints)
+                    val touchX = touchPoints[0]
+                    val touchY = touchPoints[1]
 
-        val src = sourceBitmap ?: return false
-        val rect = getImageRect()
-
-        matrix.invert(inverseMatrix)
-        val touchPoints = floatArrayOf(event.x, event.y)
-        inverseMatrix.mapPoints(touchPoints)
-        val touchX = touchPoints[0]
-        val touchY = touchPoints[1]
-
-        onTouchUpdate?.invoke(touchX, touchY)
-
-        if (!rect.contains(touchX, touchY)) return false
-
-        val scaleX = src.width.toFloat() / rect.width()
-        val scaleY = src.height.toFloat() / rect.height()
-        val x = (touchX - rect.left) * scaleX
-        val y = (touchY - rect.top) * scaleY
-
-        val overlay = overlayBitmap
-        if (overlay != null && isOverlayVisible) {
-            val isInside = touchX >= overlayX && touchX <= overlayX + overlay.width &&
-                           touchY >= overlayY && touchY <= overlayY + overlay.height
-
-            when (event.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    if (isInside) {
-                        saveHistoryState()
-                        isDraggingOverlay = true
-                        lastTouchX = touchX
-                        lastTouchY = touchY
-                        return true
+                    if (rect.contains(touchX, touchY)) {
+                        val scaleX = src.width.toFloat() / rect.width()
+                        val scaleY = src.height.toFloat() / rect.height()
+                        val x = (touchX - rect.left) * scaleX
+                        val y = (touchY - rect.top) * scaleY
+                        
+                        currentPath = Path()
+                        currentPath?.moveTo(x, y)
                     }
                 }
-                MotionEvent.ACTION_MOVE -> {
-                    if (isDraggingOverlay) {
-                        overlayX += touchX - lastTouchX
-                        overlayY += touchY - lastTouchY
-                        lastTouchX = touchX
-                        lastTouchY = touchY
+            }
+
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                isMultiTouchActive = true
+                currentPath = null
+                
+                if (undoStack.size > 1) {
+                    val prev = undoStack.last()
+                    maskBitmap = prev.mask.copy(Bitmap.Config.ARGB_8888, true)
+                    canvasMask.setBitmap(maskBitmap!!)
+                    invalidate()
+                }
+                
+                if (event.pointerCount >= 2) {
+                    lastFocusX = (event.getX(0) + event.getX(1)) / 2f
+                    lastFocusY = (event.getY(0) + event.getY(1)) / 2f
+                }
+            }
+
+            MotionEvent.ACTION_MOVE -> {
+                if (isMultiTouchActive || event.pointerCount >= 2) {
+                    var focusX = 0f
+                    var focusY = 0f
+                    if (event.pointerCount >= 2) {
+                        focusX = (event.getX(0) + event.getX(1)) / 2f
+                        focusY = (event.getY(0) + event.getY(1)) / 2f
+                    } else if (event.pointerCount == 1) {
+                        focusX = event.getX(0)
+                        focusY = event.getY(0)
+                    }
+                    
+                    if (isZoomingWithOneFinger && !isFrozen) {
+                        val dy = event.y - lastZoomY
+                        currentScale += dy * 0.005f
+                        currentScale = currentScale.coerceIn(0.5f, 10f)
+                        lastZoomY = event.y
+                        applyClamping()
                         invalidate()
                         return true
                     }
-                }
-                MotionEvent.ACTION_UP -> {
-                    if (isDraggingOverlay) {
-                        isDraggingOverlay = false
-                        return true
+
+                    panX += focusX - lastFocusX
+                    panY += focusY - lastFocusY
+                    lastFocusX = focusX
+                    lastFocusY = focusY
+                    applyClamping()
+                    invalidate()
+                } else {
+                    if (isMagicWand) return true
+                    
+                    val src = sourceBitmap ?: return false
+                    val rect = getImageRect()
+                    matrix.invert(inverseMatrix)
+                    val touchPoints = floatArrayOf(event.x, event.y)
+                    inverseMatrix.mapPoints(touchPoints)
+                    val touchX = touchPoints[0]
+                    val touchY = touchPoints[1]
+                    
+                    onTouchUpdate?.invoke(touchX, touchY)
+
+                    if (!rect.contains(touchX, touchY)) return false
+
+                    val scaleX = src.width.toFloat() / rect.width()
+                    val scaleY = src.height.toFloat() / rect.height()
+                    val x = (touchX - rect.left) * scaleX
+                    val y = (touchY - rect.top) * scaleY
+
+                    val targetCanvas = when {
+                        isProtectionMode -> canvasProtection
+                        isColorAssistMode -> canvasColorAssist
+                        else -> canvasMask
                     }
+
+                    val targetPaint = when {
+                        isProtectionMode -> protectionPaint
+                        isColorAssistMode -> colorAssistPaint
+                        isEraser -> eraserPaint
+                        else -> maskPaint
+                    }
+
+                    if (currentPath == null) {
+                        currentPath = Path()
+                        currentPath?.moveTo(x, y)
+                    } else {
+                        currentPath?.lineTo(x, y)
+                    }
+                    targetPaint.strokeWidth = brushSize * scaleX
+                    targetCanvas.drawPath(currentPath!!, targetPaint)
+                    invalidate()
                 }
             }
-        }
 
-        when (event.action) {
-            MotionEvent.ACTION_DOWN -> {
-                saveHistoryState()
-                if (isMagicWand) {
-                    applyMagicWand(x.toInt(), y.toInt())
-                    return true
+            MotionEvent.ACTION_POINTER_UP -> {
+                if (event.pointerCount == 2) {
+                    val remainingIndex = if (event.actionIndex == 0) 1 else 0
+                    lastFocusX = event.getX(remainingIndex)
+                    lastFocusY = event.getY(remainingIndex)
                 }
-
-                val targetCanvas = when {
-                    isProtectionMode -> canvasProtection
-                    isColorAssistMode -> canvasColorAssist
-                    else -> canvasMask
-                }
-
-                val targetPaint = when {
-                    isProtectionMode -> protectionPaint
-                    isColorAssistMode -> colorAssistPaint
-                    isEraser -> eraserPaint
-                    else -> maskPaint
-                }
-
-                currentPath = Path()
-                currentPath?.moveTo(x, y)
-                targetPaint.strokeWidth = brushSize * scaleX
-                targetCanvas.drawPoint(x, y, targetPaint)
             }
-            MotionEvent.ACTION_MOVE -> {
-                if (isMagicWand) return true
 
-                val targetCanvas = when {
-                    isProtectionMode -> canvasProtection
-                    isColorAssistMode -> canvasColorAssist
-                    else -> canvasMask
-                }
-
-                val targetPaint = when {
-                    isProtectionMode -> protectionPaint
-                    isColorAssistMode -> colorAssistPaint
-                    isEraser -> eraserPaint
-                    else -> maskPaint
-                }
-
-                currentPath?.lineTo(x, y)
-                targetPaint.strokeWidth = brushSize * scaleX
-                targetCanvas.drawPath(currentPath!!, targetPaint)
-                currentPath = Path()
-                currentPath?.moveTo(x, y)
-            }
-            MotionEvent.ACTION_UP -> {
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                isMultiTouchActive = false
+                isZoomingWithOneFinger = false
                 currentPath = null
                 onTouchEnd?.invoke()
             }
         }
-        invalidate()
         return true
     }
 
