@@ -2,7 +2,6 @@ package com.monolith
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
@@ -18,22 +17,55 @@ object VaultManager {
         return File(getVaultDir(context), "names.json")
     }
 
-    // حفظ صورة جديدة في الخزنة
-    fun saveSticker(context: Context, bitmap: Bitmap, name: String): File {
+    private fun getNextSequence(context: Context): Int {
+        val namesFile = getNamesFile(context)
+        var maxSeq = 0
+        val regex = "PNG_([0-9]+)".toRegex()
+
+        if (namesFile.exists()) {
+            try {
+                val json = JSONObject(namesFile.readText())
+                val keys = json.keys()
+                while (keys.hasNext()) {
+                    val key = keys.next()
+                    val name = json.optString(key, "")
+                    val match = regex.find(name)
+                    if (match != null) {
+                        val num = match.groupValues[1].toIntOrNull() ?: 0
+                        if (num > maxSeq) maxSeq = num
+                    }
+                }
+            } catch (e: Exception) {}
+        }
+
+        getVaultDir(context).listFiles()?.forEach { file ->
+            val match = regex.find(file.nameWithoutExtension)
+            if (match != null) {
+                val num = match.groupValues[1].toIntOrNull() ?: 0
+                if (num > maxSeq) maxSeq = num
+            }
+        }
+
+        return maxSeq + 1
+    }
+
+    fun saveSticker(context: Context, bitmap: Bitmap, ignoredName: String = ""): File {
+        val sequence = getNextSequence(context)
+        val displayName = "PNG_$sequence"
+        
         val file = File(getVaultDir(context), "sticker_${System.currentTimeMillis()}.png")
         FileOutputStream(file).use { out ->
             bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
         }
-        renameSticker(context, file.name, name)
+        
+        renameSticker(context, file.name, displayName)
         return file
     }
 
-    // جلب كل الصور
     fun getStickers(context: Context): List<File> {
         return getVaultDir(context).listFiles { file -> file.extension == "png" }?.toList() ?: emptyList()
     }
 
-    // جلب الاسم المخصص لصورة
     fun getStickerName(context: Context, fileName: String): String {
         val namesFile = getNamesFile(context)
         if (!namesFile.exists()) return fileName
@@ -45,7 +77,6 @@ object VaultManager {
         }
     }
 
-    // إعادة تسمية صورة
     fun renameSticker(context: Context, fileName: String, newName: String) {
         val namesFile = getNamesFile(context)
         val json = if (namesFile.exists()) {
@@ -56,7 +87,6 @@ object VaultManager {
         namesFile.writeText(json.toString())
     }
 
-    // حذف صورة
     fun deleteSticker(context: Context, file: File) {
         if (file.exists()) file.delete()
         val namesFile = getNamesFile(context)
