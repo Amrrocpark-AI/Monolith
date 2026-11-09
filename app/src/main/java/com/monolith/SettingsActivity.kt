@@ -62,6 +62,8 @@ class SettingsActivity : AppCompatActivity() {
         val providerSpinner = findViewById<Spinner>(R.id.providerSpinner)
         val etApiKey = findViewById<EditText>(R.id.etApiKey)
         val btnTestAndSave = findViewById<Button>(R.id.btnTestAndSave)
+        val etCustomBaseUrl = findViewById<EditText>(R.id.etCustomBaseUrl)
+        val btnFetchModels = findViewById<Button>(R.id.btnFetchModels)
 
         val providers = arrayOf("Groq (سريع ومجاني)", "OpenAI (مدفوع)", "Custom (محلي)")
         providerSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, providers)
@@ -69,22 +71,51 @@ class SettingsActivity : AppCompatActivity() {
         val savedKey = securePrefs.getString("api_key", "")
         if (!savedKey.isNullOrEmpty()) etApiKey.setText(savedKey)
 
+        val savedBaseUrl = securePrefs.getString("custom_base_url", "")
+        if (!savedBaseUrl.isNullOrEmpty()) etCustomBaseUrl.setText(savedBaseUrl)
+
+        providerSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                if (position == 2) {
+                    etCustomBaseUrl.visibility = View.VISIBLE
+                    btnFetchModels.visibility = View.VISIBLE
+                } else {
+                    etCustomBaseUrl.visibility = View.GONE
+                    btnFetchModels.visibility = View.VISIBLE
+                }
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+
         btnTestAndSave.setOnClickListener {
             val apiKey = etApiKey.text.toString().trim()
             if (apiKey.isEmpty()) {
                 Toast.makeText(this, "الرجاء إدخال المفتاح أولاً", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
+
+            val baseUrl = when (providerSpinner.selectedItemPosition) {
+                0 -> "https://api.groq.com/openai/"
+                1 -> "https://api.openai.com/"
+                2 -> etCustomBaseUrl.text.toString().trim()
+                else -> "https://api.groq.com/openai/"
+            }
+
+            if (baseUrl.isEmpty()) {
+                Toast.makeText(this, "الرجاء إدخال رابط الخادم المخصص", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
             btnTestAndSave.isEnabled = false
             btnTestAndSave.text = "جاري الفحص..."
             btnTestAndSave.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#666666"))
 
             lifecycleScope.launch {
-                val isSuccess = testApiKey(apiKey)
+                val isSuccess = testApiKey(baseUrl, apiKey)
                 withContext(Dispatchers.Main) {
                     val dynamicShape = GradientDrawable().apply { cornerRadius = 50f }
                     if (isSuccess) {
-                        securePrefs.edit().putString("api_key", apiKey).apply()
+                        securePrefs.edit().putString("api_key", apiKey).putString("custom_base_url", baseUrl).apply()
                         btnTestAndSave.text = "تم الاتصال بنجاح"
                         dynamicShape.setColor(Color.parseColor("#00FF00"))
                         btnTestAndSave.background = dynamicShape
@@ -104,6 +135,32 @@ class SettingsActivity : AppCompatActivity() {
                         btnTestAndSave.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#00D4FF"))
                         btnTestAndSave.setTextColor(Color.BLACK)
                     }, 3000)
+                }
+            }
+        }
+
+        btnFetchModels.setOnClickListener {
+            val baseUrl = when (providerSpinner.selectedItemPosition) {
+                0 -> "https://api.groq.com/openai/"
+                1 -> "https://api.openai.com/"
+                2 -> etCustomBaseUrl.text.toString().trim()
+                else -> "https://api.groq.com/openai/"
+            }
+            val apiKey = etApiKey.text.toString().trim()
+
+            if (baseUrl.isEmpty() || apiKey.isEmpty()) {
+                Toast.makeText(this, "يرجى إدخال المفتاح والرابط أولاً", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            lifecycleScope.launch {
+                val models = fetchModels(baseUrl, apiKey)
+                withContext(Dispatchers.Main) {
+                    if (models.isNotEmpty()) {
+                        showModelsBottomSheet(models)
+                    } else {
+                        Toast.makeText(this@SettingsActivity, "فشل جلب النماذج", Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
         }
@@ -291,13 +348,58 @@ class SettingsActivity : AppCompatActivity() {
         Toast.makeText(this, "تم إيقاف الفقاعة العائمة", Toast.LENGTH_SHORT).show()
     }
 
-    private suspend fun testApiKey(apiKey: String): Boolean {
+    private suspend fun testApiKey(baseUrl: String, apiKey: String): Boolean {
         return withContext(Dispatchers.IO) {
             try {
+                val url = if (baseUrl.endsWith("/")) "${baseUrl}v1/models" else "$baseUrl/v1/models"
                 OkHttpClient.Builder().build().newCall(
-                    Request.Builder().url("https://api.groq.com/openai/v1/models").addHeader("Authorization", "Bearer $apiKey").build()
+                    Request.Builder().url(url).addHeader("Authorization", "Bearer $apiKey").build()
                 ).execute().isSuccessful
             } catch (e: Exception) { false }
         }
+    }
+
+    private suspend fun fetchModels(baseUrl: String, apiKey: String): List<String> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val url = if (baseUrl.endsWith("/")) "${baseUrl}v1/models" else "$baseUrl/v1/models"
+                val client = OkHttpClient.Builder().build()
+                val request = Request.Builder().url(url).addHeader("Authorization", "Bearer $apiKey").build()
+                val response = client.newCall(request).execute()
+                if (response.isSuccessful) {
+                    val body = response.body?.string() ?: return@withContext emptyList()
+                    val json = org.json.JSONObject(body)
+                    val data = json.optJSONArray("data")
+                    val models = mutableListOf<String>()
+                    if (data != null) {
+                        for (i in 0 until data.length()) {
+                            val model = data.getJSONObject(i)
+                            val id = model.optString("id")
+                            if (id.isNotEmpty()) models.add(id)
+                        }
+                    }
+                    models
+                } else {
+                    emptyList()
+                }
+            } catch (e: Exception) {
+                emptyList()
+            }
+        }
+    }
+
+    private fun showModelsBottomSheet(models: List<String>) {
+        val bottomSheetDialog = com.google.android.material.bottomsheet.BottomSheetDialog(this)
+        val view = layoutInflater.inflate(android.R.layout.list_content, null)
+        val listView = view.findViewById<android.widget.ListView>(android.R.id.list)
+        listView.adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, models)
+        listView.setOnItemClickListener { _, _, position, _ ->
+            val selectedModel = models[position]
+            securePrefs.edit().putString("selected_model", selectedModel).apply()
+            Toast.makeText(this, "تم حفظ النموذج: $selectedModel", Toast.LENGTH_SHORT).show()
+            bottomSheetDialog.dismiss()
+        }
+        bottomSheetDialog.setContentView(view)
+        bottomSheetDialog.show()
     }
 }
