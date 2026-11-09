@@ -712,4 +712,28 @@ class FileManagerActivity : AppCompatActivity() {
             btnExtract.setOnClickListener {
                 val password = etPassword.text.toString()
                 if (password.isEmpty()) { tvError.text = "أدخل كلمة المرور"; tvError.visibility = View.VISIBLE; return@setOnClickListener }
-                tvError.visibility = View.GONE; btnExtract.isEnabled = false; btnExtract.text = "جاري
+                tvError.visibility = View.GONE
+                btnExtract.isEnabled = false
+                btnExtract.text = "جاري الفك..."
+
+                lifecycleScope.launch {
+                    val success = withContext(Dispatchers.IO) {
+                        try {
+                            val dest = File(zipFile.parentFile, zipFile.nameWithoutExtension)
+                            if (!dest.exists()) dest.mkdirs()
+                            val zip = ZipFile(zipFile)
+                            if (password.isNotEmpty()) zip.setPassword(password.toCharArray())
+                            zip.extractAll(dest.absolutePath)
+                            true
+                        } catch (e: Exception) { false }
+                    }
+                    if (success) {
+                        dialog.dismiss()
+                        Toast.makeText(this@FileManagerActivity, "تم الفك!", Toast.LENGTH_SHORT).show()
+                        loadDataForCurrentMode()
+                    } else {
+                        tvError.text = "كلمة مرور خاطئة"
+                        tvError.visibility = View.VISIBLE
+                        tilPassword.boxStrokeColor = android.graphics.Color.RED
+                        shakeView(tilPassword)
+                        btnExt
