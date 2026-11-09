@@ -58,14 +58,15 @@ class ImageAdapter(
             try {
                 Glide.with(itemView.context)
                     .load(uri)
-                    .override(200, 200) // <--- التعديل 1: تحميل صورة مصغرة 200x200
+                    .override(300, 300)
                     .placeholder(android.R.drawable.ic_menu_gallery)
                     .error(android.R.drawable.ic_menu_report_image)
-                    .diskCacheStrategy(DiskCacheStrategy.RESOURCE) // <--- التعديل 2: تخزين المصغرات فقط
+                    .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                     .centerCrop()
                     .into(ivGalleryImage)
             } catch (e: Exception) {
                 e.printStackTrace()
+                ivGalleryImage.setImageResource(android.R.drawable.ic_menu_gallery)
             }
 
             cbSelectImage.visibility = if (isSelectionMode) View.VISIBLE else View.GONE
