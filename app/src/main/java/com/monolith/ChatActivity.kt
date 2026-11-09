@@ -125,6 +125,23 @@ class ChatActivity : AppCompatActivity() {
         imagePreviewContainer = findViewById(R.id.imagePreviewContainer)
         previewListContainer = findViewById(R.id.previewListContainer)
 
+        val rootLayout = findViewById<LinearLayout>(R.id.rootLayout)
+        val btnPinnedBox = Button(this).apply {
+            text = "📌 المثبتة"
+            setBackgroundColor(Color.parseColor("#2A2A2A"))
+            setTextColor(Color.WHITE)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                setMargins(dpToPx(8), dpToPx(8), dpToPx(8), dpToPx(8))
+            }
+            setOnClickListener {
+                showPinnedMessagesBottomSheet()
+            }
+        }
+        rootLayout.addView(btnPinnedBox, 0)
+
         btnSend.isEnabled = false
         btnSend.alpha = 0.5f
 
@@ -413,6 +430,38 @@ class ChatActivity : AppCompatActivity() {
 
     private fun applyColorBackground(sharedPreferences: android.content.SharedPreferences, rootLayout: LinearLayout) {
         rootLayout.setBackgroundColor(Color.parseColor(sharedPreferences.getString("AppBackground", "#0A0A0A") ?: "#0A0A0A"))
+    }
+
+    private fun showPinnedMessagesBottomSheet() {
+        lifecycleScope.launch {
+            val pinnedMessages = messageDao.getPinnedMessages(currentConversationId)
+            withContext(Dispatchers.Main) {
+                if (pinnedMessages.isEmpty()) {
+                    Toast.makeText(this@ChatActivity, "لا توجد رسائل مثبتة", Toast.LENGTH_SHORT).show()
+                    return@withContext
+                }
+                val bottomSheetDialog = BottomSheetDialog(this@ChatActivity)
+                val view = layoutInflater.inflate(android.R.layout.list_content, null)
+                val listView = view.findViewById<ListView>(android.R.id.list)
+                val displayList = pinnedMessages.map { it.content }
+                listView.adapter = ArrayAdapter(this@ChatActivity, android.R.layout.simple_list_item_1, displayList)
+                listView.setOnItemClickListener { _, _, position, _ ->
+                    val msgId = pinnedMessages[position].id
+                    val index = messageList.indexOfFirst { it.id == msgId }
+                    if (index != -1) {
+                        val child = chatContainer.getChildAt(index)
+                        if (child != null) {
+                            chatScrollView.post {
+                                chatScrollView.smoothScrollTo(0, child.top)
+                            }
+                        }
+                    }
+                    bottomSheetDialog.dismiss()
+                }
+                bottomSheetDialog.setContentView(view)
+                bottomSheetDialog.show()
+            }
+        }
     }
 
     private fun addChatBubble(container: LinearLayout, msg: ChatMessage) {
