@@ -818,6 +818,14 @@ class FileManagerActivity : AppCompatActivity() {
         super.onDestroy()
         imagePagingJob?.cancel()
     }
+
+    override fun onResume() {
+        super.onResume()
+        val prefs = getSharedPreferences("FileManagerPrefs", MODE_PRIVATE)
+        findViewById<View>(R.id.rootLayout)?.setBackgroundColor(
+            prefs.getInt("bg_color", Color.parseColor("#050505"))
+        )
+    }
 }
 
 data class FileItem(
