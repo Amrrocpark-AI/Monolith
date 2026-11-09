@@ -410,7 +410,7 @@ class FileManagerActivity : AppCompatActivity() {
         bottomSelectionBar.visibility = View.GONE
         fileAdapter.setSelectionMode(false)
         imageAdapter.setSelectionMode(false)
-        updateSelectionCount()
+        tvSelectionCount.text = "تم تحديد 0 عنصر"
     }
 
     private fun handleFileClick(file: File) {
@@ -487,7 +487,19 @@ class FileManagerActivity : AppCompatActivity() {
 
     private fun updateSelectionCount() {
         val count = if (currentMode == ViewMode.GALLERY || currentMode == ViewMode.SCREENSHOTS) selectedImages.size else selectedFiles.size
-        if (count == 0) clearSelection() else tvSelectionCount.text = "تم تحديد $count عنصر"
+        if (count == 0) {
+            isSelectionMode = false
+            selectedFiles.clear()
+            selectedImages.clear()
+            topBarFileManager.visibility = View.VISIBLE
+            topBarSelection.visibility = View.GONE
+            bottomSelectionBar.visibility = View.GONE
+            fileAdapter.setSelectionMode(false)
+            imageAdapter.setSelectionMode(false)
+            tvSelectionCount.text = "تم تحديد 0 عنصر"
+        } else {
+            tvSelectionCount.text = "تم تحديد $count عنصر"
+        }
     }
 
     private fun shareSelectedFiles() {
