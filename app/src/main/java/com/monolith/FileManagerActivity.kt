@@ -178,7 +178,9 @@ class FileManagerActivity : AppCompatActivity() {
         findViewById<ImageButton>(R.id.btnSort).setOnClickListener { showSortDialog() }
         
         // زر الإعدادات الجديد
-        findViewById<ImageButton>(R.id.btnFileManagerSettings).setOnClickListener { showFileManagerSettings() }
+        findViewById<ImageButton>(R.id.btnFileManagerSettings).setOnClickListener { 
+            startActivity(Intent(this, FileManagerSettingsActivity::class.java)) 
+        }
 
         findViewById<ImageButton>(R.id.btnZipSelected)?.setOnClickListener { 
             if (selectedFiles.isNotEmpty()) showCreateZipDialog(selectedFiles.toList()) 
@@ -209,29 +211,6 @@ class FileManagerActivity : AppCompatActivity() {
         fabCreateFolder.setOnClickListener {
             if (currentMode == ViewMode.ALBUMS) showCreateVirtualAlbumDialog() else showCreateFolderDialog()
         }
-    }
-
-    private fun showFileManagerSettings() {
-        val options = arrayOf("الوضع الداكن", "الوضع الفاتح", "تغيير لون الخلفية")
-        AlertDialog.Builder(this)
-            .setTitle("إعدادات مدير الملفات")
-            .setItems(options) { _, which ->
-                when (which) {
-                    0 -> {
-                        Toast.makeText(this, "الوضع الداكن", Toast.LENGTH_SHORT).show()
-                        // يمكنك تطبيق الوضع الداكن هنا
-                    }
-                    1 -> {
-                        Toast.makeText(this, "الوضع الفاتح", Toast.LENGTH_SHORT).show()
-                        // يمكنك تطبيق الوضع الفاتح هنا
-                    }
-                    2 -> {
-                        Toast.makeText(this, "تغيير لون الخلفية", Toast.LENGTH_SHORT).show()
-                        // يمكنك إضافة منتقي الألوان هنا
-                    }
-                }
-            }
-            .show()
     }
 
     private fun setViewMode(mode: ViewMode) {
