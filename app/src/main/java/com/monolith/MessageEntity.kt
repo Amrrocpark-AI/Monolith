@@ -22,5 +22,6 @@ data class MessageEntity(
     val pinCategory: String? = null,
     val iconType: String? = null,
     val pathColor: String? = null,
-    val uuid: String = UUID.randomUUID().toString()
+    val uuid: String = UUID.randomUUID().toString(),
+    val modelName: String? = null
 )
