@@ -46,6 +46,8 @@
         <activity android:name=".MainActivity" android:exported="false" android:windowSoftInputMode="adjustResize" android:configChanges="orientation|screenSize|keyboardHidden" />
         <activity android:name=".LockScreenActivity" android:exported="false" android:configChanges="orientation|screenSize|keyboardHidden" />
         <activity android:name=".FileManagerActivity" />
+        <!-- الشاشة الجديدة لإعدادات مدير الملفات -->
+        <activity android:name=".FileManagerSettingsActivity" />
         <activity android:name=".ChatActivity" />
         <activity android:name=".SettingsActivity" />
         <activity android:name=".ImageViewerActivity" android:theme="@style/Theme.AppCompat.NoActionBar" />
