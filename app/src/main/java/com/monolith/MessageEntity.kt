@@ -15,15 +15,12 @@ data class MessageEntity(
     val timestamp: Long,
     val attachmentUris: String? = null,
     val isEncrypted: Boolean = false,
-
-    // الحقول الجديدة للتفاعلات
     val reactionType: String? = null,
     val reactionColor: String? = null,
-
-    // حقول الشبكة العصبية (الخطوط الذكية)
-    val linkedMessageIds: String? = null, // معرفات الرسائل المرتبطة (مفصولة بفواصل)
-    val isPinned: Boolean = false, // ميزة التثبيت
-    val iconType: String? = null, // نوع الإشارة: REPLY, QUESTION, ANALYSIS, REFERENCE
-    val pathColor: String? = null, // لون الخط الرابط (HEX)
-    val uuid: String = UUID.randomUUID().toString() // معرف فريد لكل رسالة
+    val linkedMessageIds: String? = null,
+    val isPinned: Boolean = false,
+    val pinCategory: String? = null,
+    val iconType: String? = null,
+    val pathColor: String? = null,
+    val uuid: String = UUID.randomUUID().toString()
 )
