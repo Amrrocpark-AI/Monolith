@@ -16,7 +16,9 @@ import kotlinx.coroutines.withContext
 
 class ImagePagingSource(
     private val contentResolver: ContentResolver,
-    private val searchQuery: String? = null
+    private val searchQuery: String? = null,
+    private val screenshotsOnly: Boolean = false,
+    private val bucketId: String? = null
 ) : PagingSource<Int, Uri>() {
 
     private val collectionUri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
@@ -32,11 +34,7 @@ class ImagePagingSource(
     }
 
     init {
-        contentResolver.registerContentObserver(
-            collectionUri,
-            true,
-            observer
-        )
+        contentResolver.registerContentObserver(collectionUri, true, observer)
 
         registerInvalidatedCallback {
             try {
@@ -51,33 +49,63 @@ class ImagePagingSource(
         withContext(Dispatchers.IO) {
             val offset = params.key ?: 0
             val limit = params.loadSize.coerceAtLeast(1)
-            val query = searchQuery?.trim()?.takeIf { it.isNotEmpty() }
+            val clauses = mutableListOf<String>()
+            val selectionArgs = mutableListOf<String>()
 
-            val selection = if (query == null) {
-                null
-            } else {
-                "${MediaStore.Images.Media.DISPLAY_NAME} LIKE ?"
+            searchQuery
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { query ->
+                    clauses += "${MediaStore.Images.Media.DISPLAY_NAME} LIKE ?"
+                    selectionArgs += "%$query%"
+                }
+
+            bucketId
+                ?.takeIf { it.isNotBlank() }
+                ?.let { id ->
+                    clauses += "${MediaStore.Images.Media.BUCKET_ID} = ?"
+                    selectionArgs += id
+                }
+
+            if (screenshotsOnly) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    clauses += "(" +
+                        "${MediaStore.Images.Media.RELATIVE_PATH} LIKE ? OR " +
+                        "${MediaStore.Images.Media.BUCKET_DISPLAY_NAME} LIKE ?" +
+                        ")"
+                    selectionArgs += "%Screenshot%"
+                    selectionArgs += "%Screenshot%"
+                } else {
+                    clauses += "${MediaStore.Images.Media.BUCKET_DISPLAY_NAME} LIKE ?"
+                    selectionArgs += "%Screenshot%"
+                }
             }
-            val selectionArgs = query?.let { arrayOf("%$it%") }
+
+            val selection = clauses
+                .takeIf { it.isNotEmpty() }
+                ?.joinToString(" AND ")
+
+            val args = selectionArgs
+                .takeIf { it.isNotEmpty() }
+                ?.toTypedArray()
 
             try {
                 val projection = arrayOf(MediaStore.Images.Media._ID)
+                val sortOrder =
+                    "${MediaStore.Images.Media.DATE_ADDED} DESC, " +
+                        "${MediaStore.Images.Media._ID} DESC"
 
                 val cursor = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     val queryArgs = Bundle().apply {
-                        putString(
-                            ContentResolver.QUERY_ARG_SQL_SORT_ORDER,
-                            "${MediaStore.Images.Media.DATE_ADDED} DESC, " +
-                                "${MediaStore.Images.Media._ID} DESC"
-                        )
+                        putString(ContentResolver.QUERY_ARG_SQL_SORT_ORDER, sortOrder)
                         putInt(ContentResolver.QUERY_ARG_LIMIT, limit)
                         putInt(ContentResolver.QUERY_ARG_OFFSET, offset)
 
-                        if (selection != null && selectionArgs != null) {
+                        if (selection != null && args != null) {
                             putString(ContentResolver.QUERY_ARG_SQL_SELECTION, selection)
                             putStringArray(
                                 ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS,
-                                selectionArgs
+                                args
                             )
                         }
                     }
@@ -89,28 +117,29 @@ class ImagePagingSource(
                         null
                     )
                 } else {
-                    val sortOrder =
-                        "${MediaStore.Images.Media.DATE_ADDED} DESC, " +
-                            "${MediaStore.Images.Media._ID} DESC " +
-                            "LIMIT $limit OFFSET $offset"
+                    val pagedSortOrder = "$sortOrder LIMIT $limit OFFSET $offset"
 
                     contentResolver.query(
                         collectionUri,
                         projection,
                         selection,
-                        selectionArgs,
-                        sortOrder
+                        args,
+                        pagedSortOrder
                     )
                 }
 
                 val imageUris = mutableListOf<Uri>()
 
                 cursor?.use {
-                    val idColumn = it.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
+                    val idColumn =
+                        it.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
 
                     while (it.moveToNext()) {
                         val id = it.getLong(idColumn)
-                        imageUris += Uri.withAppendedPath(collectionUri, id.toString())
+                        imageUris += Uri.withAppendedPath(
+                            collectionUri,
+                            id.toString()
+                        )
                     }
                 }
 
