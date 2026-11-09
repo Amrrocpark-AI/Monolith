@@ -16,6 +16,8 @@
         <ImageButton android:id="@+id/btnBackFileManager" android:layout_width="40dp" android:layout_height="40dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@android:drawable/ic_menu_revert" app:tint="#00D4FF" />
         <TextView android:id="@+id/tvPathTitle" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="مركز الملفات" android:textColor="#FFFFFF" android:textSize="18sp" android:textStyle="bold" android:layout_marginStart="12dp" android:singleLine="true" android:ellipsize="start"/>
         <ImageButton android:id="@+id/btnSort" android:layout_width="40dp" android:layout_height="40dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@android:drawable/ic_menu_sort_by_size" app:tint="#FFFFFF" />
+        <!-- أيقونة الإعدادات الخاصة بمدير الملفات -->
+        <ImageButton android:id="@+id/btnFileManagerSettings" android:layout_width="40dp" android:layout_height="40dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@android:drawable/ic_menu_manage" app:tint="#FFFFFF" />
     </LinearLayout>
 
     <LinearLayout
