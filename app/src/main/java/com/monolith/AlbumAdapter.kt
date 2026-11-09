@@ -14,7 +14,8 @@ data class AlbumItem(
     val name: String,
     val coverUri: Uri?,
     val imageCount: Int,
-    val isVault: Boolean = false
+    val isVault: Boolean = false,
+    val isVirtual: Boolean = false // <--- إضافة هذا الحقل
 )
 
 class AlbumAdapter(
