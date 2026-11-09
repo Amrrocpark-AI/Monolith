@@ -27,10 +27,24 @@ interface UserDao {
 interface MessageDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMessage(message: MessageEntity)
+    
     @Query("SELECT * FROM messages WHERE conversationId = :conversationId ORDER BY timestamp ASC")
     suspend fun getMessagesForConversation(conversationId: String): List<MessageEntity>
+    
     @Query("DELETE FROM messages WHERE conversationId = :conversationId")
     suspend fun clearConversation(conversationId: String)
+    
+    @Query("SELECT * FROM messages WHERE conversationId = :conversationId AND isPinned = 1 ORDER BY timestamp DESC")
+    suspend fun getPinnedMessages(conversationId: String): List<MessageEntity>
+    
+    @Query("SELECT * FROM messages WHERE conversationId = :conversationId AND isPinned = 1 AND pinCategory = :category ORDER BY timestamp DESC")
+    suspend fun getPinnedMessagesByCategory(conversationId: String, category: String): List<MessageEntity>
+    
+    @Query("SELECT * FROM messages WHERE linkedMessageIds LIKE '%' || :messageId || '%'")
+    suspend fun getLinkedMessages(messageId: String): List<MessageEntity>
+    
+    @Query("UPDATE messages SET isPinned = :isPinned, pinCategory = :category WHERE id = :messageId")
+    suspend fun updatePinnedStatus(messageId: String, isPinned: Boolean, category: String?)
 }
 
 @Dao
@@ -89,11 +103,21 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
     }
 }
 
-// الترحيل الجديد لإضافة حقول التفاعل
 val MIGRATION_4_5 = object : Migration(4, 5) {
     override fun migrate(database: SupportSQLiteDatabase) {
         database.execSQL("ALTER TABLE messages ADD COLUMN reactionType TEXT DEFAULT NULL")
         database.execSQL("ALTER TABLE messages ADD COLUMN reactionColor TEXT DEFAULT NULL")
+    }
+}
+
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        database.execSQL("ALTER TABLE messages ADD COLUMN linkedMessageIds TEXT DEFAULT NULL")
+        database.execSQL("ALTER TABLE messages ADD COLUMN isPinned INTEGER NOT NULL DEFAULT 0")
+        database.execSQL("ALTER TABLE messages ADD COLUMN pinCategory TEXT DEFAULT NULL")
+        database.execSQL("ALTER TABLE messages ADD COLUMN iconType TEXT DEFAULT NULL")
+        database.execSQL("ALTER TABLE messages ADD COLUMN pathColor TEXT DEFAULT NULL")
+        database.execSQL("ALTER TABLE messages ADD COLUMN uuid TEXT NOT NULL DEFAULT ''")
     }
 }
 
@@ -105,7 +129,7 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
         VirtualAlbumEntity::class,
         AlbumMediaCrossRef::class
     ], 
-    version = 5, // تم رفع الإصدار إلى 5
+    version = 6, 
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -133,7 +157,7 @@ abstract class AppDatabase : RoomDatabase() {
                     "monolith_database"
                 )
                 .openHelperFactory(factory)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5) // إضافة الترحيل الجديد
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6) 
                 .build()
                 INSTANCE = instance
                 instance
