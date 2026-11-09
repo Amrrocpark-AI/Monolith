@@ -58,9 +58,10 @@ class ImageAdapter(
             try {
                 Glide.with(itemView.context)
                     .load(uri)
+                    .override(200, 200) // <--- التعديل 1: تحميل صورة مصغرة 200x200
                     .placeholder(android.R.drawable.ic_menu_gallery)
                     .error(android.R.drawable.ic_menu_report_image)
-                    .diskCacheStrategy(DiskCacheStrategy.ALL)
+                    .diskCacheStrategy(DiskCacheStrategy.RESOURCE) // <--- التعديل 2: تخزين المصغرات فقط
                     .centerCrop()
                     .into(ivGalleryImage)
             } catch (e: Exception) {
