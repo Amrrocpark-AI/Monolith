@@ -4,6 +4,7 @@ import android.app.AlertDialog
 import android.content.ContentUris
 import android.content.Intent
 import android.content.SharedPreferences
+import android.graphics.Color
 import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
@@ -117,6 +118,9 @@ class FileManagerActivity : AppCompatActivity() {
         setContentView(R.layout.activity_file_manager)
         
         prefs = getSharedPreferences("FileManagerPrefs", MODE_PRIVATE)
+        
+        val savedColor = prefs.getInt("bg_color", Color.parseColor("#050505"))
+        findViewById<View>(R.id.rootLayout)?.setBackgroundColor(savedColor)
 
         lifecycleScope.launch(Dispatchers.IO) {
             try {
@@ -177,7 +181,6 @@ class FileManagerActivity : AppCompatActivity() {
         findViewById<ImageButton>(R.id.btnCancelSelection).setOnClickListener { clearSelection() }
         findViewById<ImageButton>(R.id.btnSort).setOnClickListener { showSortDialog() }
         
-        // زر الإعدادات الجديد
         findViewById<ImageButton>(R.id.btnFileManagerSettings).setOnClickListener { 
             startActivity(Intent(this, FileManagerSettingsActivity::class.java)) 
         }
