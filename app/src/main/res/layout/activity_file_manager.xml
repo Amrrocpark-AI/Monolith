@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/rootLayout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#050505">
@@ -16,7 +17,6 @@
         <ImageButton android:id="@+id/btnBackFileManager" android:layout_width="40dp" android:layout_height="40dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@android:drawable/ic_menu_revert" app:tint="#00D4FF" />
         <TextView android:id="@+id/tvPathTitle" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="مركز الملفات" android:textColor="#FFFFFF" android:textSize="18sp" android:textStyle="bold" android:layout_marginStart="12dp" android:singleLine="true" android:ellipsize="start"/>
         <ImageButton android:id="@+id/btnSort" android:layout_width="40dp" android:layout_height="40dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@android:drawable/ic_menu_sort_by_size" app:tint="#FFFFFF" />
-        <!-- أيقونة الإعدادات الخاصة بك -->
         <ImageButton android:id="@+id/btnFileManagerSettings" android:layout_width="40dp" android:layout_height="40dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_file_manager_settings" app:tint="#FFFFFF" />
     </LinearLayout>
 
@@ -68,7 +68,6 @@
         <com.google.android.material.tabs.TabItem android:text="الألبومات" />
     </com.google.android.material.tabs.TabLayout>
 
-    <!-- *** قسم ملفاتي (تصميم مطابق لجوجل) *** -->
     <LinearLayout
         android:id="@+id/pinnedAlbumsSection"
         android:layout_width="match_parent"
@@ -88,7 +87,6 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal">
 
-                <!-- 1. زر الإضافة (+) -->
                 <LinearLayout android:id="@+id/btnPinnedNew" android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="vertical" android:gravity="center" android:paddingHorizontal="8dp" android:layout_marginEnd="4dp" android:clickable="true" android:focusable="true">
                     <com.google.android.material.card.MaterialCardView android:layout_width="64dp" android:layout_height="64dp" app:cardCornerRadius="32dp" app:cardBackgroundColor="#1A1A1A" app:strokeColor="#444444" app:strokeWidth="1dp" app:cardElevation="0dp" app:rippleColor="#33FFFFFF">
                         <ImageView android:layout_width="28dp" android:layout_height="28dp" android:layout_gravity="center" android:src="@android:drawable/ic_input_add" app:tint="#EEEEEE" />
@@ -96,7 +94,6 @@
                     <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="جديد" android:textColor="#AAAAAA" android:textSize="11sp" android:layout_marginTop="6dp" />
                 </LinearLayout>
 
-                <!-- 2. المفضلة -->
                 <LinearLayout android:id="@+id/btnPinnedFavorites" android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="vertical" android:gravity="center" android:paddingHorizontal="8dp" android:layout_marginEnd="4dp" android:clickable="true" android:focusable="true">
                     <com.google.android.material.card.MaterialCardView android:layout_width="64dp" android:layout_height="64dp" app:cardCornerRadius="32dp" app:cardBackgroundColor="#1A1A1A" app:strokeWidth="0dp" app:cardElevation="0dp" app:rippleColor="#33FFFFFF">
                         <ImageView android:layout_width="28dp" android:layout_height="28dp" android:layout_gravity="center" android:src="@android:drawable/star_on" app:tint="#EEEEEE" />
@@ -104,7 +101,6 @@
                     <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="المفضلة" android:textColor="#AAAAAA" android:textSize="11sp" android:layout_marginTop="6dp" />
                 </LinearLayout>
 
-                <!-- 3. لقطات الشاشة -->
                 <LinearLayout android:id="@+id/btnPinnedScreenshots" android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="vertical" android:gravity="center" android:paddingHorizontal="8dp" android:layout_marginEnd="4dp" android:clickable="true" android:focusable="true">
                     <com.google.android.material.card.MaterialCardView android:layout_width="64dp" android:layout_height="64dp" app:cardCornerRadius="32dp" app:cardBackgroundColor="#1A1A1A" app:strokeWidth="0dp" app:cardElevation="0dp" app:rippleColor="#33FFFFFF">
                         <ImageView android:layout_width="28dp" android:layout_height="28dp" android:layout_gravity="center" android:src="@android:drawable/ic_menu_camera" app:tint="#EEEEEE" />
@@ -112,7 +108,6 @@
                     <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="لقطات الشاشة" android:textColor="#AAAAAA" android:textSize="11sp" android:layout_marginTop="6dp" />
                 </LinearLayout>
 
-                <!-- 4. المهملات -->
                 <LinearLayout android:id="@+id/btnPinnedTrash" android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="vertical" android:gravity="center" android:paddingHorizontal="8dp" android:layout_marginEnd="4dp" android:clickable="true" android:focusable="true">
                     <com.google.android.material.card.MaterialCardView android:layout_width="64dp" android:layout_height="64dp" app:cardCornerRadius="32dp" app:cardBackgroundColor="#1A1A1A" app:strokeWidth="0dp" app:cardElevation="0dp" app:rippleColor="#33FFFFFF">
                         <ImageView android:layout_width="28dp" android:layout_height="28dp" android:layout_gravity="center" android:src="@android:drawable/ic_menu_delete" app:tint="#FF4444" />
@@ -124,7 +119,6 @@
         </HorizontalScrollView>
     </LinearLayout>
 
-    <!-- قائمة الملفات (تنسدل تحت قسم ملفاتي) -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rvFiles"
         android:layout_width="match_parent"
@@ -145,7 +139,6 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
-    <!-- الشريط السفلي السيادي -->
     <LinearLayout
         android:id="@+id/bottomSelectionBar"
         android:layout_width="match_parent"
