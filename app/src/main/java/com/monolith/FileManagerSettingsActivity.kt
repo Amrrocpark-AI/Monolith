@@ -1,79 +1,73 @@
-<?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:id="@+id/settingsRootLayout"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="#050505">
+package com.monolith
 
-    <!-- الشريط العلوي -->
-    <LinearLayout
-        android:id="@+id/settingsTopBar"
-        android:layout_width="match_parent"
-        android:layout_height="56dp"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:paddingHorizontal="16dp"
-        app:layout_constraintTop_toTopOf="parent">
-        <ImageButton
-            android:id="@+id/btnBackSettings"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_menu_revert"
-            app:tint="#00D4FF" />
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="إعدادات مدير الملفات"
-            android:textColor="#FFFFFF"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:layout_marginStart="12dp"/>
-    </LinearLayout>
+import android.content.SharedPreferences
+import android.graphics.Color
+import android.os.Bundle
+import android.widget.GridLayout
+import android.widget.ImageButton
+import android.widget.LinearLayout
+import android.widget.Switch
+import androidx.appcompat.app.AppCompatActivity
+import androidx.constraintlayout.widget.ConstraintLayout
 
-    <!-- الوضع الداكن/الفاتح -->
-    <LinearLayout
-        android:id="@+id/llDarkMode"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:padding="16dp"
-        app:layout_constraintTop_toBottomOf="@id/settingsTopBar">
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="الوضع الداكن"
-            android:textColor="#FFFFFF"
-            android:textSize="16sp"/>
-        <Switch
-            android:id="@+id/swDarkMode"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"/>
-    </LinearLayout>
+class FileManagerSettingsActivity : AppCompatActivity() {
 
-    <!-- شبكة الألوان -->
-    <TextView
-        android:id="@+id/tvColorTitle"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="لون الخلفية"
-        android:textColor="#FFFFFF"
-        android:textSize="16sp"
-        android:padding="16dp"
-        app:layout_constraintTop_toBottomOf="@id/llDarkMode"/>
+    private lateinit var prefs: SharedPreferences
+    private lateinit var rootLayout: ConstraintLayout
 
-    <GridLayout
-        android:id="@+id/gridColors"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:columnCount="5"
-        android:rowCount="2"
-        android:padding="16dp"
-        app:layout_constraintTop_toBottomOf="@id/tvColorTitle">
-        <!-- سيتم إضافة الألوان برمجياً في الكود -->
-    </GridLayout>
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_file_manager_settings)
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+        prefs = getSharedPreferences("FileManagerPrefs", MODE_PRIVATE)
+        rootLayout = findViewById(R.id.settingsRootLayout)
+
+        // تطبيق الخلفية المحفوظة
+        val savedColor = prefs.getInt("bg_color", Color.parseColor("#050505"))
+        rootLayout.setBackgroundColor(savedColor)
+
+        // زر الرجوع
+        findViewById<ImageButton>(R.id.btnBackSettings).setOnClickListener {
+            finish() // إغلاق الشاشة والعودة
+        }
+
+        // الوضع الداكن/الفاتح (Switch)
+        val swDarkMode = findViewById<Switch>(R.id.swDarkMode)
+        swDarkMode.isChecked = savedColor == Color.parseColor("#050505")
+        swDarkMode.setOnCheckedChangeListener { _, isChecked ->
+            val newColor = if (isChecked) Color.parseColor("#050505") else Color.parseColor("#FFFFFF")
+            rootLayout.setBackgroundColor(newColor)
+            prefs.edit().putInt("bg_color", newColor).apply()
+        }
+
+        // شبكة الألوان
+        val gridColors = findViewById<GridLayout>(R.id.gridColors)
+        val colors = arrayOf(
+            Color.parseColor("#050505"), // أسود
+            Color.parseColor("#FFFFFF"), // أبيض
+            Color.parseColor("#1A1A1A"), // رمادي داكن
+            Color.parseColor("#0D47A1"), // أزرق داكن
+            Color.parseColor("#B71C1C"), // أحمر داكن
+            Color.parseColor("#1B5E20"), // أخضر داكن
+            Color.parseColor("#4A148C"), // بنفسجي داكن
+            Color.parseColor("#E65100"), // برتقالي داكن
+            Color.parseColor("#004D40"), // أخضر مزرق
+            Color.parseColor("#3E2723")  // بني داكن
+        )
+
+        for (color in colors) {
+            val colorView = LinearLayout(this)
+            val params = GridLayout.LayoutParams()
+            params.width = 60
+            params.height = 60
+            params.setMargins(8, 8, 8, 8)
+            colorView.layoutParams = params
+            colorView.setBackgroundColor(color)
+            colorView.setOnClickListener {
+                rootLayout.setBackgroundColor(color)
+                prefs.edit().putInt("bg_color", color).apply()
+            }
+            gridColors.addView(colorView)
+        }
+    }
+}
