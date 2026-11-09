@@ -32,7 +32,6 @@
         android:hardwareAccelerated="true"
         android:theme="@style/Theme.Monolith">
 
-        <!-- سطر تحميل نموذج الذكاء الاصطناعي تلقائياً -->
         <meta-data
             android:name="com.google.mlkit.vision.DEPENDENCIES"
             android:value="subject_segment" />
@@ -46,17 +45,13 @@
         <activity android:name=".MainActivity" android:exported="false" android:windowSoftInputMode="adjustResize" android:configChanges="orientation|screenSize|keyboardHidden" />
         <activity android:name=".LockScreenActivity" android:exported="false" android:configChanges="orientation|screenSize|keyboardHidden" />
         <activity android:name=".FileManagerActivity" />
-        <!-- الشاشة الجديدة لإعدادات مدير الملفات -->
         <activity android:name=".FileManagerSettingsActivity" />
         <activity android:name=".ChatActivity" />
         <activity android:name=".SettingsActivity" />
         <activity android:name=".ImageViewerActivity" android:theme="@style/Theme.AppCompat.NoActionBar" />
         <activity android:name=".ImageEditorActivity" android:theme="@style/Theme.Monolith" android:screenOrientation="portrait" />
         <activity android:name=".DispersionEditorActivity" android:theme="@style/Theme.Monolith" android:screenOrientation="portrait" />
-        
-        <!-- شاشة العدسة الجراحية الجديدة مسجلة هنا -->
         <activity android:name=".SurgicalLensActivity" android:theme="@style/Theme.Monolith" android:screenOrientation="portrait" />
-        
         <activity android:name=".CapturePermissionActivity" android:theme="@android:style/Theme.Translucent.NoTitleBar" android:excludeFromRecents="true" android:exported="false" />
 
         <service android:name=".PlaybackService" android:foregroundServiceType="mediaPlayback" android:exported="true">
