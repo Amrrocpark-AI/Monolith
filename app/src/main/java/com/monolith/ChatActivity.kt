@@ -188,8 +188,15 @@ class ChatActivity : AppCompatActivity() {
                 chatScrollView.post { chatScrollView.fullScroll(android.widget.ScrollView.FOCUS_DOWN) }
 
                 val apiKey = securePrefs.getString("api_key", null)
+                val selectedModel = securePrefs.getString("selected_model", null)
+                
                 if (apiKey.isNullOrEmpty()) {
                     showSetupDialog()
+                    return
+                }
+                
+                if (selectedModel.isNullOrEmpty()) {
+                    Toast.makeText(this, "يرجى اختيار نموذج من الإعدادات أولاً", Toast.LENGTH_LONG).show()
                     return
                 }
 
@@ -208,7 +215,7 @@ class ChatActivity : AppCompatActivity() {
                     else if (msg.role == MessageRole.AI && msg.content != "جاري التفكير...") apiMessages.add(Message(role = "assistant", content = msg.content))
                 }
 
-                val request = ChatRequest(model = "llama3-8b-8192", messages = apiMessages, temperature = 0.7f, maxTokens = 2048)
+                val request = ChatRequest(model = selectedModel, messages = apiMessages, temperature = 0.7f, maxTokens = 2048)
 
                 ApiClient.service.sendMessage(url = "v1/chat/completions", headers = emptyMap(), request = request).enqueue(object : Callback<ChatResponse> {
                     override fun onResponse(call: Call<ChatResponse>, response: Response<ChatResponse>) {
@@ -266,7 +273,9 @@ class ChatActivity : AppCompatActivity() {
             colorHex = if (this.role == "USER") themeColorHex else "#2A2A2A", 
             timestamp = this.timestamp,
             reactionType = this.reactionType,
-            reactionColor = this.reactionColor
+            reactionColor = this.reactionColor,
+            isPinned = this.isPinned,
+            modelName = this.modelName
         )
     }
 
@@ -281,7 +290,9 @@ class ChatActivity : AppCompatActivity() {
             attachmentUris = this.attachmentUris?.joinToString(","), 
             isEncrypted = false,
             reactionType = this.reactionType,
-            reactionColor = this.reactionColor
+            reactionColor = this.reactionColor,
+            isPinned = this.isPinned,
+            modelName = this.modelName
         )
     }
 
@@ -463,7 +474,6 @@ class ChatActivity : AppCompatActivity() {
                         mode?.finish(); return true 
                     }
                     3 -> { 
-                        // الحل: استخدام Selection.selectAll بدلاً من selectAll()
                         val text = textView.text
                         if (text is Spannable) {
                             Selection.selectAll(text)
@@ -562,9 +572,18 @@ class ChatActivity : AppCompatActivity() {
                     .show()
             }
             actionBar.addView(heartIcon)
+            
+            val pinIcon = createActionIcon(R.drawable.ic_pinned, if (msg.isPinned) Color.parseColor("#00D4FF") else Color.parseColor("#88FFFFFF")) {
+                msg.isPinned = !msg.isPinned
+                val iconView = actionBar.getChildAt(4) as ImageView
+                iconView.setColorFilter(if (msg.isPinned) Color.parseColor("#00D4FF") else Color.parseColor("#88FFFFFF"))
+                saveMessageToDb(msg)
+                Toast.makeText(this, if (msg.isPinned) "تم التثبيت" else "تم إلغاء التثبيت", Toast.LENGTH_SHORT).show()
+            }
+            actionBar.addView(pinIcon)
 
             actionBar.addView(createActionIcon(R.drawable.ic_more_vert, Color.parseColor("#88FFFFFF")) {
-                val popup = PopupMenu(this, actionBar.getChildAt(4))
+                val popup = PopupMenu(this, actionBar.getChildAt(5))
                 popup.menu.add("🔄 إعادة توليد")
                 popup.menu.add("📤 مشاركة")
                 popup.setOnMenuItemClickListener { item ->
