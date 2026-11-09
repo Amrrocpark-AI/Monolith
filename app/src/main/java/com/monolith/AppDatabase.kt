@@ -121,6 +121,12 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
     }
 }
 
+val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        database.execSQL("ALTER TABLE messages ADD COLUMN modelName TEXT DEFAULT NULL")
+    }
+}
+
 @Database(
     entities = [
         UserEntity::class, 
@@ -129,7 +135,7 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
         VirtualAlbumEntity::class,
         AlbumMediaCrossRef::class
     ], 
-    version = 6, 
+    version = 7, 
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -157,7 +163,7 @@ abstract class AppDatabase : RoomDatabase() {
                     "monolith_database"
                 )
                 .openHelperFactory(factory)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6) 
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7) 
                 .build()
                 INSTANCE = instance
                 instance
