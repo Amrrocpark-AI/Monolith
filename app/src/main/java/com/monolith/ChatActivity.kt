@@ -13,6 +13,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.text.Editable
+import android.text.InputType
 import android.text.Selection
 import android.text.Spannable
 import android.text.TextWatcher
@@ -631,12 +632,16 @@ class ChatActivity : AppCompatActivity() {
                 val popup = PopupMenu(this, actionBar.getChildAt(5))
                 popup.menu.add("🔄 إعادة توليد")
                 popup.menu.add("📤 مشاركة")
+                popup.menu.add("✏️ تعديل")
                 popup.setOnMenuItemClickListener { item ->
                     when(item.title) {
                         "🔄 إعادة توليد" -> Toast.makeText(this, "سيتم التوليد قريباً", Toast.LENGTH_SHORT).show()
                         "📤 مشاركة" -> {
                             val intent = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, msg.content) }
                             startActivity(Intent.createChooser(intent, "مشاركة"))
+                        }
+                        "✏️ تعديل" -> {
+                            showEditDialog(msg)
                         }
                     }
                     true
@@ -662,5 +667,68 @@ class ChatActivity : AppCompatActivity() {
         }
         
         container.addView(messageLayout)
+    }
+
+    private fun showEditDialog(msg: ChatMessage) {
+        val builder = AlertDialog.Builder(this)
+        builder.setTitle("تعديل الرسالة")
+
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dpToPx(16), dpToPx(16), dpToPx(16), dpToPx(16))
+        }
+
+        val etNewContent = EditText(this).apply {
+            setText(msg.content)
+            hint = "النص الجديد"
+            setTextColor(Color.BLACK)
+        }
+        layout.addView(etNewContent)
+
+        val etReason = EditText(this).apply {
+            hint = "سبب التعديل (اختياري)"
+            setTextColor(Color.BLACK)
+        }
+        layout.addView(etReason)
+
+        builder.setView(layout)
+
+        builder.setPositiveButton("حفظ") { _, _ ->
+            val newContent = etNewContent.text.toString().trim()
+            val reason = etReason.text.toString().trim()
+            if (newContent.isNotEmpty()) {
+                lifecycleScope.launch {
+                    try {
+                        messageDao.updateMessageContent(
+                            messageId = msg.id,
+                            newContent = newContent,
+                            originalContent = msg.content,
+                            reason = if (reason.isEmpty()) null else reason,
+                            timestamp = System.currentTimeMillis()
+                        )
+                        withContext(Dispatchers.Main) {
+                            val index = messageList.indexOfFirst { it.id == msg.id }
+                            if (index != -1) {
+                                val updatedMsg = messageList[index].copy(
+                                    content = newContent,
+                                    isEdited = true,
+                                    originalContent = msg.content,
+                                    editReason = if (reason.isEmpty()) null else reason,
+                                    editedTimestamp = System.currentTimeMillis()
+                                )
+                                messageList[index] = updatedMsg
+                                chatContainer.removeAllViews()
+                                for (m in messageList) { addChatBubble(chatContainer, m) }
+                                chatScrollView.post { chatScrollView.fullScroll(android.widget.ScrollView.FOCUS_DOWN) }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Toast.makeText(this@ChatActivity, "فشل التعديل: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+        builder.setNegativeButton("إلغاء", null)
+        builder.show()
     }
 }
