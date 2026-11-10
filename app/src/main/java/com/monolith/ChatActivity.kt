@@ -234,45 +234,83 @@ class ChatActivity : AppCompatActivity() {
                     return
                 }
 
-                val aiMsg = ChatMessage(role = MessageRole.AI, content = "جاري التفكير...", colorHex = "#2A2A2A")
-                messageList.add(aiMsg)
-                val aiMsgIndex = messageList.size - 1 
+                val thinkingMsg = ChatMessage(role = MessageRole.AI, content = "جاري التفكير...", colorHex = "#1A1A1A", isThinking = true)
+                messageList.add(thinkingMsg)
+                val thinkingIndex = messageList.size - 1
                 chatAdapter.updateMessages(messageList)
                 scrollToBottom()
 
-                val apiMessages = mutableListOf<Message>()
-                apiMessages.add(Message(role = "system", content = "أنت Monolith، ذكاء اصطناعي سيادي متقدم."))
-                val recentHistory = messageList.takeLast(15)
-                for (msg in recentHistory) {
-                    if (msg.role == MessageRole.USER) apiMessages.add(Message(role = "user", content = msg.content))
-                    else if (msg.role == MessageRole.AI && msg.content != "جاري التفكير...") apiMessages.add(Message(role = "assistant", content = msg.content))
-                }
+                val thinkingPrompt = "أنت الآن في مرحلة 'التفكير الداخلي'. لا ترد على المستخدم مباشرة. بل حلل رسالته خطوة بخطوة: ماذا يريد؟ ما هي الثغرات في فكرته؟ ما هي أفضل زاوية للرد؟ اكتب خطوات تفكيرك فقط، بدون إجابة نهائية."
+                
+                val thinkingMessages = mutableListOf<Message>()
+                thinkingMessages.add(Message(role = "system", content = thinkingPrompt))
+                thinkingMessages.add(Message(role = "user", content = message))
 
-                val request = ChatRequest(model = selectedModel, messages = apiMessages, temperature = 0.7f, maxTokens = 2048)
+                val thinkingRequest = ChatRequest(model = selectedModel, messages = thinkingMessages, temperature = 0.9f, maxTokens = 1024)
 
-                ApiClient.service.sendMessage(url = "v1/chat/completions", headers = emptyMap(), request = request).enqueue(object : Callback<ChatResponse> {
+                ApiClient.service.sendMessage(url = "v1/chat/completions", headers = emptyMap(), request = thinkingRequest).enqueue(object : Callback<ChatResponse> {
                     override fun onResponse(call: Call<ChatResponse>, response: Response<ChatResponse>) {
                         runOnUiThread {
                             if (response.isSuccessful) {
-                                val reply = response.body()?.choices?.firstOrNull()?.message?.content ?: "لم يتم استلام رد."
-                                val updatedMsg = aiMsg.copy(content = reply)
-                                messageList[aiMsgIndex] = updatedMsg
-                                saveMessageToDb(updatedMsg)
+                                val thought = response.body()?.choices?.firstOrNull()?.message?.content ?: "..."
+                                val updatedThinking = thinkingMsg.copy(content = thought)
+                                messageList[thinkingIndex] = updatedThinking
                                 chatAdapter.updateMessages(messageList)
                                 scrollToBottom()
+
+                                sendFinalResponse(message, selectedModel, apiKey)
                             } else {
-                                handleApiError(aiMsgIndex, "خطأ: ${response.code()}")
+                                handleApiError(thinkingIndex, "خطأ في التفكير: ${response.code()}")
                             }
                         }
                     }
                     override fun onFailure(call: Call<ChatResponse>, t: Throwable) {
-                        runOnUiThread { handleApiError(aiMsgIndex, t.message ?: "خطأ غير معروف") }
+                        runOnUiThread { handleApiError(thinkingIndex, t.message ?: "خطأ غير معروف") }
                     }
                 })
             }
         } catch (e: Exception) {
             Toast.makeText(this, "حدث خطأ: ${e.message}", Toast.LENGTH_LONG).show()
         }
+    }
+
+    private fun sendFinalResponse(originalMessage: String, selectedModel: String, apiKey: String) {
+        val aiMsg = ChatMessage(role = MessageRole.AI, content = "جاري صياغة الرد...", colorHex = "#2A2A2A")
+        messageList.add(aiMsg)
+        val aiMsgIndex = messageList.size - 1 
+        chatAdapter.updateMessages(messageList)
+        scrollToBottom()
+
+        val apiMessages = mutableListOf<Message>()
+        apiMessages.add(Message(role = "system", content = "أنت Monolith، ذكاء اصطناعي سيادي متقدم. لقد انتهيت من التفكير الداخلي. الآن قدم إجابتك النهائية للمستخدم بناءً على تفكيرك السابق."))
+        
+        val recentHistory = messageList.takeLast(15)
+        for (msg in recentHistory) {
+            if (msg.role == MessageRole.USER) apiMessages.add(Message(role = "user", content = msg.content))
+            else if (msg.role == MessageRole.AI && !msg.isThinking && msg.content != "جاري صياغة الرد...") apiMessages.add(Message(role = "assistant", content = msg.content))
+        }
+
+        val request = ChatRequest(model = selectedModel, messages = apiMessages, temperature = 0.7f, maxTokens = 2048)
+
+        ApiClient.service.sendMessage(url = "v1/chat/completions", headers = emptyMap(), request = request).enqueue(object : Callback<ChatResponse> {
+            override fun onResponse(call: Call<ChatResponse>, response: Response<ChatResponse>) {
+                runOnUiThread {
+                    if (response.isSuccessful) {
+                        val reply = response.body()?.choices?.firstOrNull()?.message?.content ?: "لم يتم استلام رد."
+                        val updatedMsg = aiMsg.copy(content = reply)
+                        messageList[aiMsgIndex] = updatedMsg
+                        saveMessageToDb(updatedMsg)
+                        chatAdapter.updateMessages(messageList)
+                        scrollToBottom()
+                    } else {
+                        handleApiError(aiMsgIndex, "خطأ: ${response.code()}")
+                    }
+                }
+            }
+            override fun onFailure(call: Call<ChatResponse>, t: Throwable) {
+                runOnUiThread { handleApiError(aiMsgIndex, t.message ?: "خطأ غير معروف") }
+            }
+        })
     }
 
     private fun scrollToBottom() {
