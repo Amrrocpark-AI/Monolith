@@ -44,15 +44,15 @@
         </activity>
         <activity android:name=".MainActivity" android:exported="false" android:windowSoftInputMode="adjustResize" android:configChanges="orientation|screenSize|keyboardHidden" />
         <activity android:name=".LockScreenActivity" android:exported="false" android:configChanges="orientation|screenSize|keyboardHidden" />
-        <activity android:name=".FileManagerActivity" />
-        <activity android:name=".FileManagerSettingsActivity" />
-        <activity android:name=".ChatActivity" />
-        <activity android:name=".SettingsActivity" />
-        <activity android:name=".NotesActivity" />
-        <activity android:name=".ImageViewerActivity" android:theme="@style/Theme.AppCompat.NoActionBar" />
-        <activity android:name=".ImageEditorActivity" android:theme="@style/Theme.Monolith" android:screenOrientation="portrait" />
-        <activity android:name=".DispersionEditorActivity" android:theme="@style/Theme.Monolith" android:screenOrientation="portrait" />
-        <activity android:name=".SurgicalLensActivity" android:theme="@style/Theme.Monolith" android:screenOrientation="portrait" />
+        <activity android:name=".FileManagerActivity" android:exported="false" />
+        <activity android:name=".FileManagerSettingsActivity" android:exported="false" />
+        <activity android:name=".ChatActivity" android:exported="false" />
+        <activity android:name=".SettingsActivity" android:exported="false" />
+        <activity android:name=".NotesActivity" android:exported="false" />
+        <activity android:name=".ImageViewerActivity" android:exported="false" android:theme="@style/Theme.AppCompat.NoActionBar" />
+        <activity android:name=".ImageEditorActivity" android:exported="false" android:theme="@style/Theme.Monolith" android:screenOrientation="portrait" />
+        <activity android:name=".DispersionEditorActivity" android:exported="false" android:theme="@style/Theme.Monolith" android:screenOrientation="portrait" />
+        <activity android:name=".SurgicalLensActivity" android:exported="false" android:theme="@style/Theme.Monolith" android:screenOrientation="portrait" />
         <activity android:name=".CapturePermissionActivity" android:theme="@android:style/Theme.Translucent.NoTitleBar" android:excludeFromRecents="true" android:exported="false" />
 
         <service android:name=".PlaybackService" android:foregroundServiceType="mediaPlayback" android:exported="true">
