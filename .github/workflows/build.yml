@@ -1,5 +1,7 @@
 name: Build Monolith APK
 on: [push]
+permissions:
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-latest
