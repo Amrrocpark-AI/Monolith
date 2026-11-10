@@ -126,21 +126,17 @@ class ChatActivity : AppCompatActivity() {
         previewListContainer = findViewById(R.id.previewListContainer)
 
         val rootLayout = findViewById<LinearLayout>(R.id.rootLayout)
-        val btnPinnedBox = Button(this).apply {
-            text = "📌 المثبتة"
-            setBackgroundColor(Color.parseColor("#2A2A2A"))
-            setTextColor(Color.WHITE)
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                setMargins(dpToPx(8), dpToPx(8), dpToPx(8), dpToPx(8))
-            }
+        val topBar = rootLayout.getChildAt(0) as LinearLayout
+        val btnPinnedBox = ImageButton(this).apply {
+            setImageResource(R.drawable.ic_pinned)
+            setBackgroundColor(Color.TRANSPARENT)
+            setColorFilter(Color.WHITE)
+            layoutParams = LinearLayout.LayoutParams(dpToPx(48), dpToPx(48))
             setOnClickListener {
                 showPinnedMessagesBottomSheet()
             }
         }
-        rootLayout.addView(btnPinnedBox, 0)
+        topBar.addView(btnPinnedBox, topBar.childCount - 1)
 
         btnSend.isEnabled = false
         btnSend.alpha = 0.5f
