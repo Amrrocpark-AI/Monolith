@@ -172,6 +172,17 @@ class ChatActivity : AppCompatActivity() {
         }
         topBar.addView(btnControls, topBar.childCount - 1)
 
+        val btnNotes = ImageButton(this).apply {
+            setImageResource(R.drawable.ic_copy)
+            setBackgroundColor(Color.TRANSPARENT)
+            setColorFilter(Color.WHITE)
+            layoutParams = LinearLayout.LayoutParams(dpToPx(48), dpToPx(48))
+            setOnClickListener {
+                startActivity(Intent(this@ChatActivity, NotesActivity::class.java))
+            }
+        }
+        topBar.addView(btnNotes, topBar.childCount - 1)
+
         btnSend.isEnabled = false
         btnSend.alpha = 0.5f
 
