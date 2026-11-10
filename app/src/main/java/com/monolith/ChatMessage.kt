@@ -11,6 +11,12 @@ data class ChatMessage(
     val attachmentUris: List<String>? = null,
     val colorHex: String = "#2A2A2A",
     val timestamp: Long = System.currentTimeMillis(),
-    var reactionType: String? = null,  // الحقل الجديد
-    var reactionColor: String? = null  // الحقل الجديد
+    var reactionType: String? = null,
+    var reactionColor: String? = null,
+    var isPinned: Boolean = false,
+    var modelName: String? = null,
+    var isEdited: Boolean = false,
+    var originalContent: String? = null,
+    var editReason: String? = null,
+    var editedTimestamp: Long? = null
 )
