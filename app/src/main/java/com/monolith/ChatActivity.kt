@@ -50,6 +50,7 @@ class ChatActivity : AppCompatActivity() {
     private var themeColorHex = "#00D4FF"
     private lateinit var securePrefs: androidx.security.crypto.EncryptedSharedPreferences
     private lateinit var messageDao: MessageDao
+    private lateinit var memoryDao: MemoryDao
     private var messageList: MutableList<ChatMessage> = mutableListOf()
     private val currentConversationId = "main_chat" 
     
@@ -92,6 +93,7 @@ class ChatActivity : AppCompatActivity() {
             try {
                 val db = AppDatabase.getDatabase(applicationContext)
                 messageDao = db.messageDao()
+                memoryDao = db.memoryDao()
                 withContext(Dispatchers.Main) {
                     loadMessagesFromDb()
                 }
@@ -204,6 +206,38 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
+    private fun analyzeUserMessage(message: String) {
+        lifecycleScope.launch {
+            try {
+                if (message.length < 20 && message.isNotEmpty()) {
+                    memoryDao.insertMemory(MemoryEntity(type = "PREFERENCE", content = "المستخدم يفضل الإجابات القصيرة", confidence = 0.6f))
+                }
+                if (message.contains("شكرا") || message.contains("شكراً")) {
+                    memoryDao.insertMemory(MemoryEntity(type = "EMOTION", content = "المستخدم يقدر المساعدة", confidence = 0.7f))
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    private suspend fun getMemoriesContext(): String {
+        return try {
+            val memories = memoryDao.getRecentMemories()
+            if (memories.isEmpty()) ""
+            else {
+                val sb = StringBuilder()
+                sb.append("ذكريات عن المستخدم:\n")
+                for (mem in memories) {
+                    sb.append("- ${mem.content}\n")
+                }
+                sb.toString()
+            }
+        } catch (e: Exception) {
+            ""
+        }
+    }
+
     private fun sendMessage() {
         try {
             val message = etMessage.text.toString().trim()
@@ -234,47 +268,69 @@ class ChatActivity : AppCompatActivity() {
                     return
                 }
 
-                val thinkingMsg = ChatMessage(role = MessageRole.AI, content = "جاري التفكير...", colorHex = "#1A1A1A", isThinking = true)
-                messageList.add(thinkingMsg)
-                val thinkingIndex = messageList.size - 1
-                chatAdapter.updateMessages(messageList)
-                scrollToBottom()
+                analyzeUserMessage(message)
 
-                val thinkingPrompt = "أنت الآن في مرحلة 'التفكير الداخلي'. لا ترد على المستخدم مباشرة. بل حلل رسالته خطوة بخطوة: ماذا يريد؟ ما هي الثغرات في فكرته؟ ما هي أفضل زاوية للرد؟ اكتب خطوات تفكيرك فقط، بدون إجابة نهائية."
+                val enableThinking = securePrefs.getBoolean("enable_thinking", true)
+                val temperature = securePrefs.getFloat("temperature", 0.7f)
+                val persona = securePrefs.getString("persona", "default") ?: "default"
                 
-                val thinkingMessages = mutableListOf<Message>()
-                thinkingMessages.add(Message(role = "system", content = thinkingPrompt))
-                thinkingMessages.add(Message(role = "user", content = message))
+                val personaPrompt = when (persona) {
+                    "analytical" -> "أنت Monolith، في وضع المحلل النقدي. مهمتك هي تحدي أفكار المستخدم، وكشف الثغرات، واقتراح بدائل جذرية. لا توافق على أي شيء دون نقد."
+                    "objective" -> "أنت Monolith، في وضع الموضوعي. رد بالبيانات والأرقام فقط، بدون عواطف."
+                    "innovator" -> "أنت Monolith، في وضع المبتكر. رد بأفكار غير تقليدية، وخيال واسع."
+                    else -> "أنت Monolith، ذكاء اصطناعي سيادي متقدم."
+                }
 
-                val thinkingRequest = ChatRequest(model = selectedModel, messages = thinkingMessages, temperature = 0.9f, maxTokens = 1024)
+                lifecycleScope.launch {
+                    val memoriesContext = getMemoriesContext()
+                    val finalPrompt = if (memoriesContext.isNotEmpty()) "$personaPrompt\n\n$memoriesContext" else personaPrompt
 
-                ApiClient.service.sendMessage(url = "v1/chat/completions", headers = emptyMap(), request = thinkingRequest).enqueue(object : Callback<ChatResponse> {
-                    override fun onResponse(call: Call<ChatResponse>, response: Response<ChatResponse>) {
-                        runOnUiThread {
-                            if (response.isSuccessful) {
-                                val thought = response.body()?.choices?.firstOrNull()?.message?.content ?: "..."
-                                val updatedThinking = thinkingMsg.copy(content = thought)
-                                messageList[thinkingIndex] = updatedThinking
-                                chatAdapter.updateMessages(messageList)
-                                scrollToBottom()
+                    if (enableThinking) {
+                        val thinkingMsg = ChatMessage(role = MessageRole.AI, content = "جاري التفكير...", colorHex = "#1A1A1A", isThinking = true)
+                        messageList.add(thinkingMsg)
+                        val thinkingIndex = messageList.size - 1
+                        chatAdapter.updateMessages(messageList)
+                        scrollToBottom()
 
-                                sendFinalResponse(message, selectedModel, apiKey)
-                            } else {
-                                handleApiError(thinkingIndex, "خطأ في التفكير: ${response.code()}")
+                        val thinkingPrompt = "$finalPrompt\n\nأنت الآن في مرحلة 'التفكير الداخلي'. لا ترد على المستخدم مباشرة. بل حلل رسالته خطوة بخطوة: ماذا يريد؟ ما هي الثغرات في فكرته؟ ما هي أفضل زاوية للرد؟ اكتب خطوات تفكيرك فقط، بدون إجابة نهائية."
+                        
+                        val thinkingMessages = mutableListOf<Message>()
+                        thinkingMessages.add(Message(role = "system", content = thinkingPrompt))
+                        thinkingMessages.add(Message(role = "user", content = message))
+
+                        val thinkingRequest = ChatRequest(model = selectedModel, messages = thinkingMessages, temperature = temperature, maxTokens = 1024)
+
+                        ApiClient.service.sendMessage(url = "v1/chat/completions", headers = emptyMap(), request = thinkingRequest).enqueue(object : Callback<ChatResponse> {
+                            override fun onResponse(call: Call<ChatResponse>, response: Response<ChatResponse>) {
+                                runOnUiThread {
+                                    if (response.isSuccessful) {
+                                        val thought = response.body()?.choices?.firstOrNull()?.message?.content ?: "..."
+                                        val updatedThinking = thinkingMsg.copy(content = thought)
+                                        messageList[thinkingIndex] = updatedThinking
+                                        chatAdapter.updateMessages(messageList)
+                                        scrollToBottom()
+
+                                        sendFinalResponse(message, selectedModel, apiKey, finalPrompt, temperature)
+                                    } else {
+                                        handleApiError(thinkingIndex, "خطأ في التفكير: ${response.code()}")
+                                    }
+                                }
                             }
-                        }
+                            override fun onFailure(call: Call<ChatResponse>, t: Throwable) {
+                                runOnUiThread { handleApiError(thinkingIndex, t.message ?: "خطأ غير معروف") }
+                            }
+                        })
+                    } else {
+                        sendFinalResponse(message, selectedModel, apiKey, finalPrompt, temperature)
                     }
-                    override fun onFailure(call: Call<ChatResponse>, t: Throwable) {
-                        runOnUiThread { handleApiError(thinkingIndex, t.message ?: "خطأ غير معروف") }
-                    }
-                })
+                }
             }
         } catch (e: Exception) {
             Toast.makeText(this, "حدث خطأ: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 
-    private fun sendFinalResponse(originalMessage: String, selectedModel: String, apiKey: String) {
+    private fun sendFinalResponse(originalMessage: String, selectedModel: String, apiKey: String, personaPrompt: String, temperature: Float) {
         val aiMsg = ChatMessage(role = MessageRole.AI, content = "جاري صياغة الرد...", colorHex = "#2A2A2A")
         messageList.add(aiMsg)
         val aiMsgIndex = messageList.size - 1 
@@ -282,7 +338,7 @@ class ChatActivity : AppCompatActivity() {
         scrollToBottom()
 
         val apiMessages = mutableListOf<Message>()
-        apiMessages.add(Message(role = "system", content = "أنت Monolith، ذكاء اصطناعي سيادي متقدم. لقد انتهيت من التفكير الداخلي. الآن قدم إجابتك النهائية للمستخدم بناءً على تفكيرك السابق."))
+        apiMessages.add(Message(role = "system", content = "$personaPrompt\n\nلقد انتهيت من التفكير الداخلي. الآن قدم إجابتك النهائية للمستخدم بناءً على تفكيرك السابق."))
         
         val recentHistory = messageList.takeLast(15)
         for (msg in recentHistory) {
@@ -290,7 +346,7 @@ class ChatActivity : AppCompatActivity() {
             else if (msg.role == MessageRole.AI && !msg.isThinking && msg.content != "جاري صياغة الرد...") apiMessages.add(Message(role = "assistant", content = msg.content))
         }
 
-        val request = ChatRequest(model = selectedModel, messages = apiMessages, temperature = 0.7f, maxTokens = 2048)
+        val request = ChatRequest(model = selectedModel, messages = apiMessages, temperature = temperature, maxTokens = 2048)
 
         ApiClient.service.sendMessage(url = "v1/chat/completions", headers = emptyMap(), request = request).enqueue(object : Callback<ChatResponse> {
             override fun onResponse(call: Call<ChatResponse>, response: Response<ChatResponse>) {
