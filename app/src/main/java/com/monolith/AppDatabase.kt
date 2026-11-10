@@ -45,6 +45,12 @@ interface MessageDao {
     
     @Query("UPDATE messages SET isPinned = :isPinned, pinCategory = :category WHERE id = :messageId")
     suspend fun updatePinnedStatus(messageId: String, isPinned: Boolean, category: String?)
+    
+    @Query("SELECT * FROM messages WHERE id IN (:ids)")
+    suspend fun getMessagesByIds(ids: List<String>): List<MessageEntity>
+    
+    @Query("UPDATE messages SET content = :newContent, isEdited = 1, originalContent = :originalContent, editReason = :reason, editedTimestamp = :timestamp WHERE id = :messageId")
+    suspend fun updateMessageContent(messageId: String, newContent: String, originalContent: String, reason: String?, timestamp: Long)
 }
 
 @Dao
@@ -127,15 +133,26 @@ val MIGRATION_6_7 = object : Migration(6, 7) {
     }
 }
 
+val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        database.execSQL("ALTER TABLE messages ADD COLUMN isEdited INTEGER NOT NULL DEFAULT 0")
+        database.execSQL("ALTER TABLE messages ADD COLUMN originalContent TEXT DEFAULT NULL")
+        database.execSQL("ALTER TABLE messages ADD COLUMN editReason TEXT DEFAULT NULL")
+        database.execSQL("ALTER TABLE messages ADD COLUMN editedTimestamp INTEGER DEFAULT NULL")
+        database.execSQL("CREATE TABLE IF NOT EXISTS `conversations` (`id` TEXT NOT NULL, `title` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `lastModified` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+    }
+}
+
 @Database(
     entities = [
         UserEntity::class, 
         MessageEntity::class, 
         EncryptedFileEntity::class, 
         VirtualAlbumEntity::class,
-        AlbumMediaCrossRef::class
+        AlbumMediaCrossRef::class,
+        ConversationEntity::class
     ], 
-    version = 7, 
+    version = 8, 
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -143,6 +160,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun messageDao(): MessageDao
     abstract fun vaultDao(): VaultDao
     abstract fun virtualAlbumDao(): VirtualAlbumDao
+    abstract fun conversationDao(): ConversationDao
 
     companion object {
         @Volatile
@@ -163,7 +181,7 @@ abstract class AppDatabase : RoomDatabase() {
                     "monolith_database"
                 )
                 .openHelperFactory(factory)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7) 
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8) 
                 .build()
                 INSTANCE = instance
                 instance
