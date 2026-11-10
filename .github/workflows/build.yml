@@ -14,8 +14,16 @@ jobs:
       uses: gradle/actions/setup-gradle@v3
       with:
         gradle-version: 8.0.2
-    - name: Clean and Build with Gradle
-      run: gradle clean assembleDebug
+    - name: Generate Fixed Debug Keystore
+      run: |
+        keytool -genkey -v -keystore $RUNNER_TEMP/debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US"
+    - name: Clean and Build with Gradle (Signed)
+      run: |
+        gradle clean assembleDebug \
+          -Pandroid.injected.signing.store.file=$RUNNER_TEMP/debug.keystore \
+          -Pandroid.injected.signing.store.password=android \
+          -Pandroid.injecting.signing.key.alias=androiddebugkey \
+          -Pandroid.injected.signing.key.password=android
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
