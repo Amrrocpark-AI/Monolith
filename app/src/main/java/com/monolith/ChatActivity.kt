@@ -289,7 +289,11 @@ class ChatActivity : AppCompatActivity() {
             reactionType = this.reactionType,
             reactionColor = this.reactionColor,
             isPinned = this.isPinned,
-            modelName = this.modelName
+            modelName = this.modelName,
+            isEdited = this.isEdited,
+            originalContent = this.originalContent,
+            editReason = this.editReason,
+            editedTimestamp = this.editedTimestamp
         )
     }
 
@@ -306,7 +310,11 @@ class ChatActivity : AppCompatActivity() {
             reactionType = this.reactionType,
             reactionColor = this.reactionColor,
             isPinned = this.isPinned,
-            modelName = this.modelName
+            modelName = this.modelName,
+            isEdited = this.isEdited,
+            originalContent = this.originalContent,
+            editReason = this.editReason,
+            editedTimestamp = this.editedTimestamp
         )
     }
 
