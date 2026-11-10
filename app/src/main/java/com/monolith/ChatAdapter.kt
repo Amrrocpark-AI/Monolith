@@ -82,7 +82,14 @@ class ChatAdapter(
         val textView = TextView(context)
         textView.text = msg.content
         textView.textSize = 15f
-        textView.setTextColor(if (msg.role == MessageRole.USER) Color.BLACK else Color.WHITE)
+        
+        if (msg.isThinking) {
+            textView.setTextColor(Color.parseColor("#AAAAAA"))
+            textView.setTypeface(null, android.graphics.Typeface.ITALIC)
+        } else {
+            textView.setTextColor(if (msg.role == MessageRole.USER) Color.BLACK else Color.WHITE)
+        }
+        
         textView.textDirection = if (msg.role == MessageRole.USER) TextView.TEXT_DIRECTION_RTL else TextView.TEXT_DIRECTION_LOCALE
         textView.textAlignment = TextView.TEXT_ALIGNMENT_VIEW_START
         textView.setLineSpacing(dpToPx(4).toFloat(), 1.1f)
@@ -164,7 +171,7 @@ class ChatAdapter(
             messageLayout.addView(textBubble)
         }
 
-        if (msg.content.isNotEmpty() && msg.content != "جاري التفكير...") {
+        if (msg.content.isNotEmpty() && msg.content != "جاري التفكير..." && !msg.isThinking) {
             val actionBar = LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
