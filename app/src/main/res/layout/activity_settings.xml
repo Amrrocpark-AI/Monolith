@@ -55,6 +55,27 @@
             android:padding="16dp"
             android:layout_marginBottom="16dp"/>
 
+        <EditText
+            android:id="@+id/etCustomBaseUrl"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="أدخل رابط الخادم المخصص (Base URL)"
+            android:textColor="#FFFFFF"
+            android:textColorHint="#666666"
+            android:background="#1E1E1E"
+            android:padding="16dp"
+            android:visibility="gone"
+            android:layout_marginBottom="16dp" />
+
+        <Button
+            android:id="@+id/btnFetchModels"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="تحديث النماذج"
+            android:backgroundTint="#2A2A2A"
+            android:textColor="#00FF00"
+            android:layout_marginBottom="16dp" />
+
         <Button
             android:id="@+id/btnTestAndSave"
             android:layout_width="match_parent"
