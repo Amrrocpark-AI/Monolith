@@ -1,0 +1,61 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="360dp"
+    android:height="400dp"
+    android:viewportWidth="360"
+    android:viewportHeight="400">
+    
+    <!-- الخلفية الداكنة -->
+    <path
+        android:fillColor="#0D1117"
+        android:pathData="M0,0h360v400h-360z" />
+
+    <!-- الإطار الأخضر العلوي (مائل) -->
+    <path
+        android:strokeColor="#00FF00"
+        android:strokeWidth="2"
+        android:fillColor="#00000000"
+        android:pathData="M10,50 L30,10 L330,10 L350,50" />
+
+    <!-- خطوط الإطار الجانبية اليسرى -->
+    <path
+        android:strokeColor="#00FF00"
+        android:strokeWidth="2"
+        android:fillColor="#00000000"
+        android:pathData="M10,50 L10,390 L30,390" />
+    <path
+        android:strokeColor="#00FF00"
+        android:strokeWidth="2"
+        android:fillColor="#00000000"
+        android:pathData="M15,60 L15,380" />
+        
+    <!-- خطوط الإطار الجانبية اليمنى -->
+    <path
+        android:strokeColor="#00FF00"
+        android:strokeWidth="2"
+        android:fillColor="#00000000"
+        android:pathData="M350,50 L350,390 L330,390" />
+    <path
+        android:strokeColor="#00FF00"
+        android:strokeWidth="2"
+        android:fillColor="#00000000"
+        android:pathData="M345,60 L345,380" />
+
+    <!-- زخارف الزوايا (مائلة) -->
+    <path
+        android:strokeColor="#00FF00"
+        android:strokeWidth="3"
+        android:fillColor="#00000000"
+        android:pathData="M20,30 L60,30" />
+    <path
+        android:strokeColor="#00FF00"
+        android:strokeWidth="3"
+        android:fillColor="#00000000"
+        android:pathData="M300,30 L340,30" />
+        
+    <!-- الشريط العلوي -->
+    <path
+        android:strokeColor="#00FF00"
+        android:strokeWidth="2"
+        android:fillColor="#00000000"
+        android:pathData="M90,30 L270,30" />
+</vector>
