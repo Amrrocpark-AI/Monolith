@@ -149,6 +149,16 @@ val MIGRATION_8_9 = object : Migration(8, 9) {
     }
 }
 
+val MIGRATION_9_10 = object : Migration(9, 10) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        database.execSQL("CREATE TABLE IF NOT EXISTS `notes` (`id` TEXT NOT NULL, `title` TEXT NOT NULL, `content` TEXT NOT NULL, `type` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, `dueDate` INTEGER, `reminderTime` INTEGER, `isPinned` INTEGER NOT NULL, `colorHex` TEXT NOT NULL, `coverPattern` TEXT, `coverSticker` TEXT, PRIMARY KEY(`id`))")
+        database.execSQL("CREATE TABLE IF NOT EXISTS `tags` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, PRIMARY KEY(`id`))")
+        database.execSQL("CREATE TABLE IF NOT EXISTS `note_tag_cross_ref` (`noteId` TEXT NOT NULL, `tagId` TEXT NOT NULL, PRIMARY KEY(`noteId`, `tagId`), FOREIGN KEY(`noteId`) REFERENCES `notes`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`tagId`) REFERENCES `tags`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )")
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_note_tag_cross_ref_noteId` ON `note_tag_cross_ref` (`noteId`)")
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_note_tag_cross_ref_tagId` ON `note_tag_cross_ref` (`tagId`)")
+    }
+}
+
 @Database(
     entities = [
         UserEntity::class, 
@@ -157,9 +167,12 @@ val MIGRATION_8_9 = object : Migration(8, 9) {
         VirtualAlbumEntity::class,
         AlbumMediaCrossRef::class,
         ConversationEntity::class,
-        MemoryEntity::class
+        MemoryEntity::class,
+        NoteEntity::class,
+        TagEntity::class,
+        NoteTagCrossRef::class
     ], 
-    version = 9, 
+    version = 10, 
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -169,6 +182,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun virtualAlbumDao(): VirtualAlbumDao
     abstract fun conversationDao(): ConversationDao
     abstract fun memoryDao(): MemoryDao
+    abstract fun noteDao(): NoteDao
 
     companion object {
         @Volatile
@@ -189,7 +203,7 @@ abstract class AppDatabase : RoomDatabase() {
                     "monolith_database"
                 )
                 .openHelperFactory(factory)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9) 
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10) 
                 .build()
                 INSTANCE = instance
                 instance
