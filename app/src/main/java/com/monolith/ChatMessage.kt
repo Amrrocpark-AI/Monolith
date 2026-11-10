@@ -18,5 +18,6 @@ data class ChatMessage(
     var isEdited: Boolean = false,
     var originalContent: String? = null,
     var editReason: String? = null,
-    var editedTimestamp: Long? = null
+    var editedTimestamp: Long? = null,
+    var isThinking: Boolean = false
 )
