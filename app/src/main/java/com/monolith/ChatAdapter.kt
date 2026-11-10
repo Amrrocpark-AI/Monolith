@@ -19,7 +19,6 @@ import androidx.appcompat.widget.AppCompatTextView
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.google.android.material.card.MaterialCardView
-import java.util.UUID
 
 class ChatAdapter(
     private val context: Context,
@@ -31,10 +30,8 @@ class ChatAdapter(
     private val themeColorHex: String
 ) : RecyclerView.Adapter<ChatAdapter.ChatViewHolder>() {
 
-    private val viewPool = RecyclerView.RecycledViewPool()
-
     inner class ChatViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-        val messageLayout: LinearLayout = itemView.findViewById(R.id.messageLayout)
+        val messageLayout: LinearLayout = itemView as LinearLayout
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ChatViewHolder {
