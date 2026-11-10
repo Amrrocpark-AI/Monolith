@@ -149,6 +149,7 @@ class ChatActivity : AppCompatActivity() {
 
         val rootLayout = findViewById<LinearLayout>(R.id.rootLayout)
         val topBar = rootLayout.getChildAt(0) as LinearLayout
+        
         val btnPinnedBox = ImageButton(this).apply {
             setImageResource(R.drawable.ic_pinned)
             setBackgroundColor(Color.TRANSPARENT)
@@ -159,6 +160,17 @@ class ChatActivity : AppCompatActivity() {
             }
         }
         topBar.addView(btnPinnedBox, topBar.childCount - 1)
+
+        val btnControls = ImageButton(this).apply {
+            setImageResource(R.drawable.ic_settings)
+            setBackgroundColor(Color.TRANSPARENT)
+            setColorFilter(Color.WHITE)
+            layoutParams = LinearLayout.LayoutParams(dpToPx(48), dpToPx(48))
+            setOnClickListener {
+                showControlsBottomSheet()
+            }
+        }
+        topBar.addView(btnControls, topBar.childCount - 1)
 
         btnSend.isEnabled = false
         btnSend.alpha = 0.5f
@@ -204,6 +216,54 @@ class ChatActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    private fun showControlsBottomSheet() {
+        val bottomSheetDialog = BottomSheetDialog(this)
+        val view = layoutInflater.inflate(R.layout.bottom_sheet_controls, null)
+        
+        val sbTemperature = view.findViewById<SeekBar>(R.id.sbTemperature)
+        val tvTemperatureValue = view.findViewById<TextView>(R.id.tvTemperatureValue)
+        val spinnerPersona = view.findViewById<Spinner>(R.id.spinnerPersona)
+        val cbThinking = view.findViewById<CheckBox>(R.id.cbThinking)
+        val btnSaveControls = view.findViewById<Button>(R.id.btnSaveControls)
+
+        val savedTemp = securePrefs.getFloat("temperature", 0.7f)
+        sbTemperature.progress = (savedTemp * 100).toInt()
+        tvTemperatureValue.text = String.format("%.1f", savedTemp)
+
+        val personas = arrayOf("افتراضي", "محلل نقدي", "موضوعي", "مبتكر")
+        val personaKeys = arrayOf("default", "analytical", "objective", "innovator")
+        spinnerPersona.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, personas)
+        val savedPersona = securePrefs.getString("persona", "default")
+        val personaIndex = personaKeys.indexOf(savedPersona)
+        if (personaIndex != -1) spinnerPersona.setSelection(personaIndex)
+
+        cbThinking.isChecked = securePrefs.getBoolean("enable_thinking", true)
+
+        sbTemperature.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                tvTemperatureValue.text = String.format("%.1f", progress / 100f)
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
+
+        btnSaveControls.setOnClickListener {
+            val temp = sbTemperature.progress / 100f
+            val persona = personaKeys[spinnerPersona.selectedItemPosition]
+            val thinking = cbThinking.isChecked
+            securePrefs.edit()
+                .putFloat("temperature", temp)
+                .putString("persona", persona)
+                .putBoolean("enable_thinking", thinking)
+                .apply()
+            Toast.makeText(this, "تم حفظ إعدادات العقل", Toast.LENGTH_SHORT).show()
+            bottomSheetDialog.dismiss()
+        }
+
+        bottomSheetDialog.setContentView(view)
+        bottomSheetDialog.show()
     }
 
     private fun analyzeUserMessage(message: String) {
