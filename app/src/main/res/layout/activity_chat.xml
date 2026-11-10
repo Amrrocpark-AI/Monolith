@@ -35,12 +35,12 @@
             android:gravity="center" />
 
         <ImageButton
-            android:id="@+id/btnVisionToggle"
+            android:id="@+id/btnDashboard"
             android:layout_width="48dp"
             android:layout_height="48dp"
             android:src="@drawable/ic_vision"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:tint="#FFFFFF" />
+            android:tint="#00FF00" />
 
         <ImageButton
             android:id="@+id/btnSettings"
