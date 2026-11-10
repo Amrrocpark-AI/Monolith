@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
+import android.view.Gravity
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
@@ -193,7 +194,6 @@ class ChatActivity : AppCompatActivity() {
         if (ttsManager == null) {
             ttsManager = TtsManager(this) {
                 runOnUiThread {
-                    // no-op
                 }
             }
         }
