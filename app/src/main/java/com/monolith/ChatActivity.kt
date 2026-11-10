@@ -6,22 +6,12 @@ import android.content.Intent
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.PorterDuff
-import android.graphics.drawable.AnimatedVectorDrawable
 import android.graphics.drawable.BitmapDrawable
-import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.text.Editable
-import android.text.InputType
-import android.text.Selection
-import android.text.Spannable
 import android.text.TextWatcher
-import android.view.ActionMode
-import android.view.Gravity
-import android.view.Menu
-import android.view.MenuItem
-import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
@@ -30,6 +20,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.AppCompatTextView
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.bumptech.glide.Glide
@@ -50,8 +42,8 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var btnSend: ImageButton
     private lateinit var imagePreviewContainer: android.widget.HorizontalScrollView
     private lateinit var previewListContainer: LinearLayout
-    private lateinit var chatContainer: LinearLayout
-    private lateinit var chatScrollView: android.widget.ScrollView
+    private lateinit var recyclerViewChat: RecyclerView
+    private lateinit var chatAdapter: ChatAdapter
     private lateinit var tvAppTitle: TextView
 
     private var themeColorHex = "#00D4FF"
@@ -61,7 +53,6 @@ class ChatActivity : AppCompatActivity() {
     private val currentConversationId = "main_chat" 
     
     private var ttsManager: TtsManager? = null
-    private var currentPlayingIcon: ImageView? = null
 
     private val pickImagesLauncher = registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris: List<Uri> ->
         if (uris.isNotEmpty()) {
@@ -122,8 +113,33 @@ class ChatActivity : AppCompatActivity() {
         val btnAttach = findViewById<ImageButton>(R.id.btnAttach)
         tvAppTitle = findViewById(R.id.tvAppTitle)
 
-        chatContainer = findViewById(R.id.chatContainer)
-        chatScrollView = findViewById(R.id.chatScrollView)
+        recyclerViewChat = findViewById(R.id.recyclerViewChat)
+        recyclerViewChat.layoutManager = LinearLayoutManager(this)
+        chatAdapter = ChatAdapter(
+            context = this,
+            messages = messageList,
+            onEditClick = { msg -> showEditDialog(msg) },
+            onReactionClick = { msg -> 
+                val newReaction = when (msg.reactionType) {
+                    "LIKE" -> "DISLIKE"
+                    "DISLIKE" -> null
+                    else -> "LIKE"
+                }
+                msg.reactionType = newReaction
+                saveMessageToDb(msg)
+                chatAdapter.updateMessages(messageList)
+            },
+            onSpeakClick = { text -> initTtsIfNeeded(); ttsManager?.speak(text) },
+            onPinClick = { msg ->
+                msg.isPinned = !msg.isPinned
+                saveMessageToDb(msg)
+                chatAdapter.updateMessages(messageList)
+                Toast.makeText(this, if (msg.isPinned) "تم التثبيت" else "تم إلغاء التثبيت", Toast.LENGTH_SHORT).show()
+            },
+            themeColorHex = themeColorHex
+        )
+        recyclerViewChat.adapter = chatAdapter
+
         imagePreviewContainer = findViewById(R.id.imagePreviewContainer)
         previewListContainer = findViewById(R.id.previewListContainer)
 
@@ -177,9 +193,7 @@ class ChatActivity : AppCompatActivity() {
         if (ttsManager == null) {
             ttsManager = TtsManager(this) {
                 runOnUiThread {
-                    currentPlayingIcon?.setImageResource(R.drawable.ic_volume_up)
-                    currentPlayingIcon?.setColorFilter(Color.parseColor("#88FFFFFF"))
-                    currentPlayingIcon = null
+                    // no-op
                 }
             }
         }
@@ -193,14 +207,14 @@ class ChatActivity : AppCompatActivity() {
                 val userMsg = ChatMessage(role = MessageRole.USER, content = message, attachmentUris = selectedImageUris.map { it.toString() }, colorHex = themeColorHex)
                 messageList.add(userMsg)
                 saveMessageToDb(userMsg)
-                addChatBubble(chatContainer, userMsg)
+                chatAdapter.updateMessages(messageList)
 
                 selectedImageUris.clear()
                 updatePreviewUi()
                 etMessage.text.clear()
                 hideKeyboard()
                 
-                chatScrollView.post { chatScrollView.fullScroll(android.widget.ScrollView.FOCUS_DOWN) }
+                scrollToBottom()
 
                 val apiKey = securePrefs.getString("api_key", null)
                 val selectedModel = securePrefs.getString("selected_model", null)
@@ -218,9 +232,8 @@ class ChatActivity : AppCompatActivity() {
                 val aiMsg = ChatMessage(role = MessageRole.AI, content = "جاري التفكير...", colorHex = "#2A2A2A")
                 messageList.add(aiMsg)
                 val aiMsgIndex = messageList.size - 1 
-                addChatBubble(chatContainer, aiMsg)
-                
-                chatScrollView.post { chatScrollView.fullScroll(android.widget.ScrollView.FOCUS_DOWN) }
+                chatAdapter.updateMessages(messageList)
+                scrollToBottom()
 
                 val apiMessages = mutableListOf<Message>()
                 apiMessages.add(Message(role = "system", content = "أنت Monolith، ذكاء اصطناعي سيادي متقدم."))
@@ -240,10 +253,8 @@ class ChatActivity : AppCompatActivity() {
                                 val updatedMsg = aiMsg.copy(content = reply)
                                 messageList[aiMsgIndex] = updatedMsg
                                 saveMessageToDb(updatedMsg)
-                                
-                                chatContainer.removeAllViews()
-                                for (m in messageList) { addChatBubble(chatContainer, m) }
-                                chatScrollView.post { chatScrollView.fullScroll(android.widget.ScrollView.FOCUS_DOWN) }
+                                chatAdapter.updateMessages(messageList)
+                                scrollToBottom()
                             } else {
                                 handleApiError(aiMsgIndex, "خطأ: ${response.code()}")
                             }
@@ -259,15 +270,24 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
+    private fun scrollToBottom() {
+        recyclerViewChat.post {
+            if (messageList.isNotEmpty()) {
+                recyclerViewChat.smoothScrollToPosition(messageList.size - 1)
+            }
+        }
+    }
+
     private fun loadMessagesFromDb() {
         lifecycleScope.launch {
             try {
                 val entities = messageDao.getMessagesForConversation(currentConversationId)
                 messageList = entities.map { it.toChatMessage() }.toMutableList()
                 withContext(Dispatchers.Main) {
-                    chatContainer.removeAllViews()
-                    for (msg in messageList) { addChatBubble(chatContainer, msg) }
-                    chatScrollView.post { chatScrollView.fullScroll(android.widget.ScrollView.FOCUS_DOWN) }
+                    if (::chatAdapter.isInitialized) {
+                        chatAdapter.updateMessages(messageList)
+                        scrollToBottom()
+                    }
                 }
             } catch (e: Exception) { e.printStackTrace() }
         }
@@ -325,7 +345,7 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun handleApiError(aiMsgIndex: Int, errorMessage: String) {
-        if (aiMsgIndex < messageList.size) { messageList.removeAt(aiMsgIndex); chatContainer.removeAllViews(); for (m in messageList) { addChatBubble(chatContainer, m) } }
+        if (aiMsgIndex < messageList.size) { messageList.removeAt(aiMsgIndex); chatAdapter.updateMessages(messageList) }
         Toast.makeText(this, errorMessage, Toast.LENGTH_LONG).show()
         if (errorMessage.contains("مصادقة") || errorMessage.contains("مهيأ")) { showSetupDialog() }
     }
@@ -420,17 +440,6 @@ class ChatActivity : AppCompatActivity() {
                 applyColorBackground(settingsPrefs, rootLayout)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) rootLayout.foreground = null
             }
-
-            val savedColor = settingsPrefs.getString("AppBackground", "#0A0A0A") ?: "#0A0A0A"
-            if (savedColor == "#FFFFFF" && imageUriString == null) {
-                etMessage.setTextColor(Color.BLACK); etMessage.setHintTextColor(Color.GRAY)
-                findViewById<ImageButton>(R.id.btnBack).setColorFilter(Color.BLACK, PorterDuff.Mode.SRC_IN)
-                findViewById<ImageButton>(R.id.btnSettings).setColorFilter(Color.BLACK, PorterDuff.Mode.SRC_IN)
-            } else {
-                etMessage.setTextColor(Color.WHITE); etMessage.setHintTextColor(Color.parseColor("#666666"))
-                findViewById<ImageButton>(R.id.btnBack).setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN)
-                findViewById<ImageButton>(R.id.btnSettings).setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN)
-            }
         } catch (e: Exception) { e.printStackTrace() }
     }
 
@@ -455,12 +464,7 @@ class ChatActivity : AppCompatActivity() {
                     val msgId = pinnedMessages[position].id
                     val index = messageList.indexOfFirst { it.id == msgId }
                     if (index != -1) {
-                        val child = chatContainer.getChildAt(index)
-                        if (child != null) {
-                            chatScrollView.post {
-                                chatScrollView.smoothScrollTo(0, child.top)
-                            }
-                        }
+                        recyclerViewChat.smoothScrollToPosition(index)
                     }
                     bottomSheetDialog.dismiss()
                 }
@@ -468,241 +472,6 @@ class ChatActivity : AppCompatActivity() {
                 bottomSheetDialog.show()
             }
         }
-    }
-
-    private fun addChatBubble(container: LinearLayout, msg: ChatMessage) {
-        val messageLayout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-        }
-
-        if (!msg.attachmentUris.isNullOrEmpty()) {
-            val scrollView = android.widget.HorizontalScrollView(this)
-            val imageContainer = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-            val imageSizePx = dpToPx(180)
-
-            for ((index, uriString) in msg.attachmentUris.withIndex()) {
-                val imageView = ImageView(this).apply {
-                    layoutParams = LinearLayout.LayoutParams(imageSizePx, imageSizePx).apply { setMargins(0, 0, 16, 16) }
-                    scaleType = ImageView.ScaleType.CENTER_CROP
-                    val clip = GradientDrawable().apply { cornerRadius = dpToPx(16).toFloat(); setColor(Color.TRANSPARENT) }
-                    background = clip
-                    clipToOutline = true
-                }
-                Glide.with(this).load(uriString).into(imageView)
-                imageContainer.addView(imageView)
-            }
-            scrollView.addView(imageContainer)
-            messageLayout.addView(scrollView)
-        }
-
-        val textView = TextView(this)
-        textView.text = msg.content
-        textView.textSize = 15f
-        textView.setTextColor(if (msg.role == MessageRole.USER) Color.BLACK else Color.WHITE)
-        textView.textDirection = if (msg.role == MessageRole.USER) TextView.TEXT_DIRECTION_RTL else TextView.TEXT_DIRECTION_LOCALE
-        textView.textAlignment = TextView.TEXT_ALIGNMENT_VIEW_START
-        textView.setLineSpacing(dpToPx(4).toFloat(), 1.1f)
-        textView.setTextIsSelectable(true)
-
-        textView.customSelectionActionModeCallback = object : ActionMode.Callback {
-            override fun onCreateActionMode(mode: ActionMode?, menu: Menu?): Boolean {
-                menu?.clear()
-                menu?.add(0, 1, 0, "🔊 قراءة")?.setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
-                menu?.add(0, 2, 1, "📋 نسخ")?.setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
-                menu?.add(0, 3, 2, "تحديد الكل")?.setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
-                return true
-            }
-            override fun onPrepareActionMode(mode: ActionMode?, menu: Menu?): Boolean = false
-            override fun onActionItemClicked(mode: ActionMode?, item: MenuItem?): Boolean {
-                val start = textView.selectionStart
-                val end = textView.selectionEnd
-                if (start < 0 || end < 0) return false
-                val selectedText = textView.text.substring(start, end)
-                
-                when (item?.itemId) {
-                    1 -> { initTtsIfNeeded(); ttsManager?.speak(selectedText); mode?.finish(); return true }
-                    2 -> { 
-                        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Monolith", selectedText))
-                        Toast.makeText(this@ChatActivity, "تم النسخ", Toast.LENGTH_SHORT).show()
-                        mode?.finish(); return true 
-                    }
-                    3 -> { 
-                        val text = textView.text
-                        if (text is Spannable) {
-                            Selection.selectAll(text)
-                        }
-                        return true 
-                    }
-                }
-                return false
-            }
-            override fun onDestroyActionMode(mode: ActionMode?) {}
-        }
-
-        if (msg.content.isNotEmpty()) {
-            val textBubble = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(dpToPx(16), dpToPx(12), dpToPx(16), dpToPx(12))
-                background = GradientDrawable().apply { 
-                    setColor(Color.parseColor(msg.colorHex))
-                    cornerRadius = dpToPx(20).toFloat() 
-                }
-            }
-            if (msg.isEdited) {
-                val redLine = View(this).apply {
-                    layoutParams = LinearLayout.LayoutParams(dpToPx(4), ViewGroup.LayoutParams.MATCH_PARENT)
-                    setBackgroundColor(Color.RED)
-                }
-                val horizontalLayout = LinearLayout(this).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                }
-                horizontalLayout.addView(redLine)
-                horizontalLayout.addView(textView)
-                textBubble.addView(horizontalLayout)
-                
-                val eyeIcon = ImageView(this).apply {
-                    setImageResource(R.drawable.ic_vision)
-                    setColorFilter(Color.WHITE)
-                    layoutParams = LinearLayout.LayoutParams(dpToPx(20), dpToPx(20)).apply { setMargins(dpToPx(8), 0, 0, 0) }
-                    setOnClickListener {
-                        val dialog = AlertDialog.Builder(this@ChatActivity)
-                        dialog.setTitle("تفاصيل التعديل")
-                        dialog.setMessage("النص الأصلي:\n${msg.originalContent}\n\nسبب التعديل:\n${msg.editReason ?: "غير محدد"}")
-                        dialog.setPositiveButton("حسناً", null)
-                        dialog.show()
-                    }
-                }
-                textBubble.addView(eyeIcon)
-            } else {
-                textBubble.addView(textView)
-            }
-            messageLayout.addView(textBubble)
-        }
-
-        if (msg.content.isNotEmpty() && msg.content != "جاري التفكير...") {
-            val actionBar = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(dpToPx(8), dpToPx(8), dpToPx(8), 0)
-            }
-
-            fun createActionIcon(resId: Int, tintColor: Int, onClick: () -> Unit): ImageView {
-                return ImageView(this).apply {
-                    setImageResource(resId)
-                    setColorFilter(tintColor)
-                    val params = LinearLayout.LayoutParams(dpToPx(22), dpToPx(22))
-                    params.setMargins(0, 0, dpToPx(16), 0)
-                    layoutParams = params
-                    setOnClickListener { onClick() }
-                }
-            }
-
-            actionBar.addView(createActionIcon(R.drawable.ic_copy, Color.parseColor("#88FFFFFF")) {
-                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Monolith", msg.content))
-                Toast.makeText(this, "تم نسخ الرسالة", Toast.LENGTH_SHORT).show()
-            })
-
-            actionBar.addView(createActionIcon(R.drawable.ic_volume_up, Color.parseColor("#88FFFFFF")) {
-                initTtsIfNeeded()
-                currentPlayingIcon?.setImageResource(R.drawable.ic_volume_up)
-                currentPlayingIcon?.setColorFilter(Color.parseColor("#88FFFFFF"))
-                val v = actionBar.getChildAt(1) as ImageView
-                v.setImageResource(R.drawable.avd_audio_anim)
-                (v.drawable as? AnimatedVectorDrawable)?.start()
-                currentPlayingIcon = v
-                ttsManager?.speak(msg.content)
-            })
-
-            val thumbIcon = createActionIcon(R.drawable.ic_thumb_hybrid, Color.parseColor("#88FFFFFF")) {
-                var currentReaction = msg.reactionType
-                val newReaction = when (currentReaction) {
-                    "LIKE" -> "DISLIKE"
-                    "DISLIKE" -> null
-                    else -> "LIKE"
-                }
-                msg.reactionType = newReaction
-                val iconView = actionBar.getChildAt(2) as ImageView
-                when (newReaction) {
-                    "LIKE" -> { iconView.setColorFilter(Color.BLUE); iconView.rotation = 0f }
-                    "DISLIKE" -> { iconView.setColorFilter(Color.RED); iconView.rotation = 180f }
-                    else -> { iconView.setColorFilter(Color.parseColor("#88FFFFFF")); iconView.rotation = 0f }
-                }
-                saveMessageToDb(msg)
-            }
-            when (msg.reactionType) {
-                "LIKE" -> { thumbIcon.setColorFilter(Color.BLUE); thumbIcon.rotation = 0f }
-                "DISLIKE" -> { thumbIcon.setColorFilter(Color.RED); thumbIcon.rotation = 180f }
-            }
-            actionBar.addView(thumbIcon)
-
-            val heartIcon = createActionIcon(R.drawable.ic_heart, if (msg.reactionColor != null) Color.parseColor(msg.reactionColor) else Color.parseColor("#88FFFFFF")) {
-                val colors = arrayOf("أحمر", "أزرق", "أخضر", "أصفر", "بنفسجي")
-                val colorValues = arrayOf("#FF0000", "#0000FF", "#00FF00", "#FFFF00", "#800080")
-                AlertDialog.Builder(this)
-                    .setTitle("اختر لون القلب")
-                    .setItems(colors) { _, which ->
-                        val selectedColor = Color.parseColor(colorValues[which])
-                        msg.reactionType = "HEART"
-                        msg.reactionColor = colorValues[which]
-                        val iconView = actionBar.getChildAt(3) as ImageView
-                        iconView.setColorFilter(selectedColor)
-                        saveMessageToDb(msg)
-                    }
-                    .show()
-            }
-            actionBar.addView(heartIcon)
-            
-            val pinIcon = createActionIcon(R.drawable.ic_pinned, if (msg.isPinned) Color.parseColor("#00D4FF") else Color.parseColor("#88FFFFFF")) {
-                msg.isPinned = !msg.isPinned
-                val iconView = actionBar.getChildAt(4) as ImageView
-                iconView.setColorFilter(if (msg.isPinned) Color.parseColor("#00D4FF") else Color.parseColor("#88FFFFFF"))
-                saveMessageToDb(msg)
-                Toast.makeText(this, if (msg.isPinned) "تم التثبيت" else "تم إلغاء التثبيت", Toast.LENGTH_SHORT).show()
-            }
-            actionBar.addView(pinIcon)
-
-            actionBar.addView(createActionIcon(R.drawable.ic_more_vert, Color.parseColor("#88FFFFFF")) {
-                val popup = PopupMenu(this, actionBar.getChildAt(5))
-                popup.menu.add("🔄 إعادة توليد")
-                popup.menu.add("📤 مشاركة")
-                popup.menu.add("✏️ تعديل")
-                popup.setOnMenuItemClickListener { item ->
-                    when(item.title) {
-                        "🔄 إعادة توليد" -> Toast.makeText(this, "سيتم التوليد قريباً", Toast.LENGTH_SHORT).show()
-                        "📤 مشاركة" -> {
-                            val intent = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, msg.content) }
-                            startActivity(Intent.createChooser(intent, "مشاركة"))
-                        }
-                        "✏️ تعديل" -> {
-                            showEditDialog(msg)
-                        }
-                    }
-                    true
-                }
-                popup.show()
-            })
-
-            if (msg.role == MessageRole.USER) {
-                actionBar.gravity = Gravity.END
-            } else {
-                actionBar.gravity = Gravity.START
-            }
-
-            messageLayout.addView(actionBar)
-        }
-
-        if (msg.role == MessageRole.USER) { 
-            messageLayout.gravity = Gravity.END
-            messageLayout.setPadding(0, dpToPx(8), 0, dpToPx(8)) 
-        } else { 
-            messageLayout.gravity = Gravity.START
-            messageLayout.setPadding(0, dpToPx(8), 0, dpToPx(8)) 
-        }
-        
-        container.addView(messageLayout)
     }
 
     private fun showEditDialog(msg: ChatMessage) {
@@ -753,9 +522,8 @@ class ChatActivity : AppCompatActivity() {
                                     editedTimestamp = System.currentTimeMillis()
                                 )
                                 messageList[index] = updatedMsg
-                                chatContainer.removeAllViews()
-                                for (m in messageList) { addChatBubble(chatContainer, m) }
-                                chatScrollView.post { chatScrollView.fullScroll(android.widget.ScrollView.FOCUS_DOWN) }
+                                chatAdapter.updateMessages(messageList)
+                                scrollToBottom()
                             }
                         }
                     } catch (e: Exception) {
