@@ -4,7 +4,6 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
-import androidx.room.Transaction
 
 @Dao
 interface NoteDao {
@@ -40,13 +39,4 @@ interface NoteDao {
 
     @Query("SELECT * FROM notes WHERE reminderTime IS NOT NULL AND reminderTime > :now ORDER BY reminderTime ASC")
     suspend fun getUpcomingReminders(now: Long): List<NoteEntity>
-
-    @Transaction
-    @Query("SELECT * FROM notes WHERE id = :noteId")
-    suspend fun getNoteWithTags(noteId: String): NoteWithTags?
 }
-
-data class NoteWithTags(
-    val note: NoteEntity,
-    val tags: List<TagEntity>
-)
