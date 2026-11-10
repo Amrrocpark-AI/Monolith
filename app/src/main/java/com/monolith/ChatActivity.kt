@@ -112,6 +112,7 @@ class ChatActivity : AppCompatActivity() {
         val btnSettings = findViewById<ImageButton>(R.id.btnSettings)
         val btnBack = findViewById<ImageButton>(R.id.btnBack)
         val btnAttach = findViewById<ImageButton>(R.id.btnAttach)
+        val btnDashboard = findViewById<ImageButton>(R.id.btnDashboard)
         tvAppTitle = findViewById(R.id.tvAppTitle)
 
         recyclerViewChat = findViewById(R.id.recyclerViewChat)
@@ -178,6 +179,10 @@ class ChatActivity : AppCompatActivity() {
 
         btnBack.setOnClickListener { finish() }
         btnSettings.setOnClickListener { startActivity(Intent(this, SettingsActivity::class.java)) }
+        
+        btnDashboard.setOnClickListener {
+            showDashboardBottomSheet()
+        }
 
         btnSend.setOnClickListener { sendMessage() }
         etMessage.setOnEditorActionListener { _, actionId, _ ->
@@ -220,7 +225,7 @@ class ChatActivity : AppCompatActivity() {
                 val selectedModel = securePrefs.getString("selected_model", null)
                 
                 if (apiKey.isNullOrEmpty()) {
-                    showSetupDialog()
+                    Toast.makeText(this, "تم حفظ رسالتك محلياً. يرجى تهيئة المحرك من الإعدادات للرد.", Toast.LENGTH_LONG).show()
                     return
                 }
                 
@@ -339,15 +344,9 @@ class ChatActivity : AppCompatActivity() {
         )
     }
 
-    private fun showSetupDialog() {
-        AlertDialog.Builder(this).setTitle("المحرك غير متصل").setMessage("مرحباً بك في Monolith. تم حفظ رسالتك محلياً، ولكن للرد عليك بالذكاء الاصطناعي يرجى تهيئة المحرك.")
-            .setPositiveButton("الذهاب للإعدادات") { _, _ -> startActivity(Intent(this, SettingsActivity::class.java)) }.setNegativeButton("إلغاء", null).show()
-    }
-
     private fun handleApiError(aiMsgIndex: Int, errorMessage: String) {
         if (aiMsgIndex < messageList.size) { messageList.removeAt(aiMsgIndex); chatAdapter.updateMessages(messageList) }
         Toast.makeText(this, errorMessage, Toast.LENGTH_LONG).show()
-        if (errorMessage.contains("مصادقة") || errorMessage.contains("مهيأ")) { showSetupDialog() }
     }
 
     private fun updatePreviewUi() {
@@ -472,6 +471,55 @@ class ChatActivity : AppCompatActivity() {
                 bottomSheetDialog.show()
             }
         }
+    }
+
+    private fun showDashboardBottomSheet() {
+        val bottomSheetDialog = BottomSheetDialog(this)
+        val view = layoutInflater.inflate(R.layout.bottom_sheet_status, null)
+        
+        val apiKey = securePrefs.getString("api_key", null)
+        val selectedModel = securePrefs.getString("selected_model", null) ?: "غير محدد"
+        val provider = when {
+            apiKey == null -> "غير متصل"
+            selectedModel.contains("groq", true) -> "Groq"
+            selectedModel.contains("gpt", true) -> "OpenAI"
+            else -> "مخصص"
+        }
+
+        val tvConnectionStatus = view.findViewById<TextView>(R.id.tvConnectionStatus)
+        val ivConnectionIcon = view.findViewById<ImageView>(R.id.ivConnectionIcon)
+        val tvProviderName = view.findViewById<TextView>(R.id.tvProviderName)
+        val tvModelName = view.findViewById<TextView>(R.id.tvModelName)
+        val tvMessageCount = view.findViewById<TextView>(R.id.tvMessageCount)
+        val btnGoToSettings = view.findViewById<Button>(R.id.btnGoToSettings)
+
+        if (apiKey.isNullOrEmpty()) {
+            tvConnectionStatus.text = "غير متصل"
+            tvConnectionStatus.setTextColor(Color.RED)
+            ivConnectionIcon.setColorFilter(Color.RED)
+        } else {
+            tvConnectionStatus.text = "متصل"
+            tvConnectionStatus.setTextColor(Color.GREEN)
+            ivConnectionIcon.setColorFilter(Color.GREEN)
+        }
+
+        tvProviderName.text = provider
+        tvModelName.text = selectedModel
+        
+        lifecycleScope.launch {
+            val count = messageList.size
+            withContext(Dispatchers.Main) {
+                tvMessageCount.text = count.toString()
+            }
+        }
+
+        btnGoToSettings.setOnClickListener {
+            bottomSheetDialog.dismiss()
+            startActivity(Intent(this, SettingsActivity::class.java))
+        }
+
+        bottomSheetDialog.setContentView(view)
+        bottomSheetDialog.show()
     }
 
     private fun showEditDialog(msg: ChatMessage) {
