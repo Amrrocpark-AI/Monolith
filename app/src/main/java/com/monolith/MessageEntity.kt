@@ -23,5 +23,9 @@ data class MessageEntity(
     val iconType: String? = null,
     val pathColor: String? = null,
     val uuid: String = UUID.randomUUID().toString(),
-    val modelName: String? = null
+    val modelName: String? = null,
+    val isEdited: Boolean = false,
+    val originalContent: String? = null,
+    val editReason: String? = null,
+    val editedTimestamp: Long? = null
 )
