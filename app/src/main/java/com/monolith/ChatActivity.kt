@@ -549,7 +549,34 @@ class ChatActivity : AppCompatActivity() {
                     cornerRadius = dpToPx(20).toFloat() 
                 }
             }
-            textBubble.addView(textView)
+            if (msg.isEdited) {
+                val redLine = View(this).apply {
+                    layoutParams = LinearLayout.LayoutParams(dpToPx(4), ViewGroup.LayoutParams.MATCH_PARENT)
+                    setBackgroundColor(Color.RED)
+                }
+                val horizontalLayout = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                }
+                horizontalLayout.addView(redLine)
+                horizontalLayout.addView(textView)
+                textBubble.addView(horizontalLayout)
+                
+                val eyeIcon = ImageView(this).apply {
+                    setImageResource(R.drawable.ic_vision)
+                    setColorFilter(Color.WHITE)
+                    layoutParams = LinearLayout.LayoutParams(dpToPx(20), dpToPx(20)).apply { setMargins(dpToPx(8), 0, 0, 0) }
+                    setOnClickListener {
+                        val dialog = AlertDialog.Builder(this@ChatActivity)
+                        dialog.setTitle("تفاصيل التعديل")
+                        dialog.setMessage("النص الأصلي:\n${msg.originalContent}\n\nسبب التعديل:\n${msg.editReason ?: "غير محدد"}")
+                        dialog.setPositiveButton("حسناً", null)
+                        dialog.show()
+                    }
+                }
+                textBubble.addView(eyeIcon)
+            } else {
+                textBubble.addView(textView)
+            }
             messageLayout.addView(textBubble)
         }
 
