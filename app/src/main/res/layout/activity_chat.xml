@@ -8,7 +8,6 @@
     android:background="#0A0A0A"
     android:padding="8dp">
 
-    <!-- الشريط العلوي -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -52,22 +51,14 @@
             android:tint="#FFFFFF" />
     </LinearLayout>
 
-    <!-- منطقة الرسائل -->
-    <ScrollView
-        android:id="@+id/chatScrollView"
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/recyclerViewChat"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:padding="8dp">
+        android:padding="8dp"
+        android:clipToPadding="false" />
 
-        <LinearLayout
-            android:id="@+id/chatContainer"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical" />
-    </ScrollView>
-
-    <!-- شريط معاينة المرفقات (يدعم عدة صور) -->
     <HorizontalScrollView
         android:id="@+id/imagePreviewContainer"
         android:layout_width="match_parent"
@@ -86,7 +77,6 @@
 
     </HorizontalScrollView>
 
-    <!-- شريط الإدخال الكبسولة -->
     <com.google.android.material.card.MaterialCardView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
