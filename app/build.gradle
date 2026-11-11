@@ -12,8 +12,8 @@ android {
         applicationId "com.monolith"
         minSdk 26
         targetSdk 34
-        versionCode 7
-        versionName "1.6"
+        versionCode 8
+        versionName "1.7"
         
         buildConfigField "String", "API_BASE_URL", "\"https://api.groq.com/openai/\""
         vectorDrawables.useSupportLibrary = true
@@ -66,13 +66,16 @@ dependencies {
     implementation 'androidx.security:security-crypto:1.1.0-alpha06'
     implementation 'androidx.biometric:biometric:1.1.0'
     implementation 'com.airbnb.android:lottie:6.4.0'
-    implementation 'androidx.room:room-runtime:2.6.1'
-    implementation 'androidx.room:room-ktx:2.6.1'
-    ksp 'androidx.room:room-compiler:2.6.1'
+
+    // Room (الإصدار الجديد المتوافق مع Kotlin 2.1.20)
+    implementation 'androidx.room:room-runtime:2.7.0'
+    implementation 'androidx.room:room-ktx:2.7.0'
+    implementation 'androidx.room:room-paging:2.7.0'
+    ksp 'androidx.room:room-compiler:2.7.0'
+
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
     implementation 'androidx.work:work-runtime-ktx:2.9.0'
     implementation 'androidx.paging:paging-runtime-ktx:3.2.1'
-    implementation 'androidx.room:room-paging:2.6.1'
     implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.7.0'
     implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0'
     implementation 'net.lingala.zip4j:zip4j:2.11.5'
