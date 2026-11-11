@@ -51,7 +51,7 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var securePrefs: androidx.security.crypto.EncryptedSharedPreferences
     private lateinit var messageDao: MessageDao
     private lateinit var memoryDao: MemoryDao
-    private lateinit var agentManager: AgentManager
+    private lateinit var modelManager: ModelManager
     private var messageList: MutableList<ChatMessage> = mutableListOf()
     private val currentConversationId = "main_chat" 
     
@@ -95,7 +95,7 @@ class ChatActivity : AppCompatActivity() {
                 val db = AppDatabase.getDatabase(applicationContext)
                 messageDao = db.messageDao()
                 memoryDao = db.memoryDao()
-                agentManager = AgentManager()
+                modelManager = ModelManager(applicationContext)
                 withContext(Dispatchers.Main) {
                     loadMessagesFromDb()
                 }
