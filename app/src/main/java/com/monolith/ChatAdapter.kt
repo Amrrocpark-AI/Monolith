@@ -14,6 +14,8 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.*
 import androidx.appcompat.widget.AppCompatTextView
 import androidx.recyclerview.widget.RecyclerView
@@ -79,96 +81,26 @@ class ChatAdapter(
             messageLayout.addView(scrollView)
         }
 
-        val textView = TextView(context)
-        textView.text = msg.content
-        textView.textSize = 15f
-        
-        if (msg.isThinking) {
-            textView.setTextColor(Color.parseColor("#AAAAAA"))
-            textView.setTypeface(null, android.graphics.Typeface.ITALIC)
-        } else {
-            textView.setTextColor(if (msg.role == MessageRole.USER) Color.BLACK else Color.WHITE)
-        }
-        
-        textView.textDirection = if (msg.role == MessageRole.USER) TextView.TEXT_DIRECTION_RTL else TextView.TEXT_DIRECTION_LOCALE
-        textView.textAlignment = TextView.TEXT_ALIGNMENT_VIEW_START
-        textView.setLineSpacing(dpToPx(4).toFloat(), 1.1f)
-        textView.setTextIsSelectable(true)
-
-        textView.customSelectionActionModeCallback = object : ActionMode.Callback {
-            override fun onCreateActionMode(mode: ActionMode?, menu: Menu?): Boolean {
-                menu?.clear()
-                menu?.add(0, 1, 0, "🔊 قراءة")?.setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
-                menu?.add(0, 2, 1, "📋 نسخ")?.setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
-                menu?.add(0, 3, 2, "تحديد الكل")?.setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
-                return true
-            }
-            override fun onPrepareActionMode(mode: ActionMode?, menu: Menu?): Boolean = false
-            override fun onActionItemClicked(mode: ActionMode?, item: MenuItem?): Boolean {
-                val start = textView.selectionStart
-                val end = textView.selectionEnd
-                if (start < 0 || end < 0) return false
-                val selectedText = textView.text.substring(start, end)
-                
-                when (item?.itemId) {
-                    1 -> { onSpeakClick(selectedText); mode?.finish(); return true }
-                    2 -> { 
-                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Monolith", selectedText))
-                        Toast.makeText(context, "تم النسخ", Toast.LENGTH_SHORT).show()
-                        mode?.finish(); return true 
-                    }
-                    3 -> { 
-                        val text = textView.text
-                        if (text is Spannable) {
-                            Selection.selectAll(text)
-                        }
-                        return true 
-                    }
-                }
-                return false
-            }
-            override fun onDestroyActionMode(mode: ActionMode?) {}
-        }
-
         if (msg.content.isNotEmpty()) {
-            val textBubble = LinearLayout(context).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(dpToPx(16), dpToPx(12), dpToPx(16), dpToPx(12))
-                background = GradientDrawable().apply { 
-                    setColor(Color.parseColor(msg.colorHex))
-                    cornerRadius = dpToPx(20).toFloat() 
-                }
+            val webView = WebView(context).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+                setBackgroundColor(Color.TRANSPARENT)
+                settings.javaScriptEnabled = false
+                settings.loadWithOverviewMode = true
+                settings.useWideViewPort = true
+                webViewClient = WebViewClient()
             }
-            if (msg.isEdited) {
-                val redLine = View(context).apply {
-                    layoutParams = LinearLayout.LayoutParams(dpToPx(4), ViewGroup.LayoutParams.MATCH_PARENT)
-                    setBackgroundColor(Color.RED)
-                }
-                val horizontalLayout = LinearLayout(context).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                }
-                horizontalLayout.addView(redLine)
-                horizontalLayout.addView(textView)
-                textBubble.addView(horizontalLayout)
-                
-                val eyeIcon = ImageView(context).apply {
-                    setImageResource(R.drawable.ic_vision)
-                    setColorFilter(Color.WHITE)
-                    layoutParams = LinearLayout.LayoutParams(dpToPx(20), dpToPx(20)).apply { setMargins(dpToPx(8), 0, 0, 0) }
-                    setOnClickListener {
-                        val dialog = AlertDialog.Builder(context)
-                        dialog.setTitle("تفاصيل التعديل")
-                        dialog.setMessage("النص الأصلي:\n${msg.originalContent}\n\nسبب التعديل:\n${msg.editReason ?: "غير محدد"}")
-                        dialog.setPositiveButton("حسناً", null)
-                        dialog.show()
-                    }
-                }
-                textBubble.addView(eyeIcon)
-            } else {
-                textBubble.addView(textView)
-            }
-            messageLayout.addView(textBubble)
+
+            val isUser = msg.role == MessageRole.USER
+            val bubbleColor = if (isUser) themeColorHex else "#2A2A2A"
+            val textColor = if (isUser) "#000000" else "#FFFFFF"
+            
+            val htmlContent = buildHtml(msg.content, bubbleColor, textColor)
+            webView.loadDataWithBaseURL(null, htmlContent, "text/html", "UTF-8", null)
+            messageLayout.addView(webView)
         }
 
         if (msg.content.isNotEmpty() && msg.content != "جاري التفكير..." && !msg.isThinking) {
@@ -262,6 +194,61 @@ class ChatAdapter(
     fun updateMessages(newMessages: List<ChatMessage>) {
         this.messages = newMessages
         notifyDataSetChanged()
+    }
+
+    private fun buildHtml(content: String, bubbleColor: String, textColor: String): String {
+        return """
+            <html>
+            <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <style>
+                body {
+                    background-color: $bubbleColor;
+                    color: $textColor;
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+                    margin: 0;
+                    padding: 12px;
+                    border-radius: 20px;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+                    word-wrap: break-word;
+                    font-size: 16px;
+                    line-height: 1.5;
+                }
+                pre {
+                    background-color: #1A1A1A;
+                    padding: 12px;
+                    border-radius: 8px;
+                    overflow-x: auto;
+                    color: #00FF00;
+                    font-size: 14px;
+                }
+                code {
+                    font-family: 'Courier New', Courier, monospace;
+                    background-color: #1A1A1A;
+                    padding: 2px 4px;
+                    border-radius: 4px;
+                }
+                table {
+                    border-collapse: collapse;
+                    width: 100%;
+                    margin-top: 10px;
+                    margin-bottom: 10px;
+                }
+                th, td {
+                    border: 1px solid #444;
+                    padding: 8px;
+                    text-align: left;
+                }
+                th {
+                    background-color: #333;
+                }
+            </style>
+            </head>
+            <body>
+                $content
+            </body>
+            </html>
+        """.trimIndent()
     }
 
     private fun dpToPx(dp: Int): Int = (dp * context.resources.displayMetrics.density).toInt()
