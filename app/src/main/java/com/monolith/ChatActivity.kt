@@ -328,11 +328,6 @@ class ChatActivity : AppCompatActivity() {
                 
                 scrollToBottom()
 
-                if (message.startsWith("/")) {
-                    handleCommand(message)
-                    return
-                }
-
                 val apiKey = securePrefs.getString("api_key", null)
                 val selectedModel = securePrefs.getString("selected_model", null)
                 
@@ -405,27 +400,6 @@ class ChatActivity : AppCompatActivity() {
             }
         } catch (e: Exception) {
             Toast.makeText(this, "حدث خطأ: ${e.message}", Toast.LENGTH_LONG).show()
-        }
-    }
-
-    private fun handleCommand(command: String) {
-        lifecycleScope.launch {
-            val result = when {
-                command.startsWith("/search") -> {
-                    val query = command.removePrefix("/search").trim()
-                    agentManager.searchWeb(query)
-                }
-                command.startsWith("/open") -> {
-                    val packageName = command.removePrefix("/open").trim()
-                    agentManager.openApp(packageName)
-                }
-                else -> "أمر غير معروف."
-            }
-            val resultMsg = ChatMessage(role = MessageRole.AI, content = result, colorHex = "#2A2A2A")
-            messageList.add(resultMsg)
-            saveMessageToDb(resultMsg)
-            chatAdapter.updateMessages(messageList)
-            scrollToBottom()
         }
     }
 
