@@ -1,13 +1,14 @@
 package com.monolith
 
 import android.content.Context
+import com.arm.aichat.InferenceEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 
 class ModelManager(private val context: Context) {
 
-    private var llamaModel: LlamaModel? = null
+    private var inferenceEngine: InferenceEngine? = null
 
     fun loadModel(modelPath: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
         try {
@@ -17,13 +18,7 @@ class ModelManager(private val context: Context) {
                 return
             }
             
-            // تحميل النموذج (يجب أن يكون الملف بصيغة .gguf)
-            llamaModel = LlamaModel(
-                modelPath = file.absolutePath,
-                context = context,
-                nThreads = 4,
-                nCtx = 2048
-            )
+            inferenceEngine = InferenceEngine(context, file.absolutePath)
             onSuccess()
         } catch (e: Exception) {
             onError("فشل تحميل النموذج: ${e.message}")
@@ -33,12 +28,10 @@ class ModelManager(private val context: Context) {
     suspend fun generateResponse(prompt: String): String {
         return withContext(Dispatchers.IO) {
             try {
-                if (llamaModel == null) {
-                    return@withContext "النموذج غير محمل. يرجى تحميل نموذج أولاً."
+                if (inferenceEngine == null) {
+                    return@withContext "النموذج غير محمل."
                 }
-                // توليد الرد
-                val response = llamaModel?.generate(prompt, maxTokens = 512)
-                response ?: "فشل التوليد."
+                inferenceEngine?.generate(prompt) ?: "فشل التوليد."
             } catch (e: Exception) {
                 "فشل التوليد: ${e.message}"
             }
@@ -46,7 +39,7 @@ class ModelManager(private val context: Context) {
     }
 
     fun unloadModel() {
-        llamaModel?.close()
-        llamaModel = null
+        inferenceEngine?.close()
+        inferenceEngine = null
     }
 }
