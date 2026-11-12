@@ -1,241 +1,307 @@
 package com.monolith
 
+import android.content.ContentValues
 import android.content.Context
-import androidx.room.Dao
-import androidx.room.Database
-import androidx.room.Insert
-import androidx.room.OnConflictStrategy
-import androidx.room.Query
-import androidx.room.Room
-import androidx.room.RoomDatabase
-import androidx.room.migration.Migration
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
-import androidx.sqlite.db.SupportSQLiteDatabase
-import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
-import java.security.SecureRandom
+import android.database.sqlite.SQLiteDatabase
+import android.database.sqlite.SQLiteOpenHelper
+import java.util.UUID
 
-@Dao
-interface UserDao {
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertUser(user: UserEntity)
-    @Query("SELECT * FROM user_profile WHERE isCurrentUser = 1 LIMIT 1")
-    suspend fun getCurrentUser(): UserEntity?
-}
+class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_database", null, 1) {
 
-@Dao
-interface MessageDao {
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertMessage(message: MessageEntity)
-    
-    @Query("SELECT * FROM messages WHERE conversationId = :conversationId ORDER BY timestamp ASC")
-    suspend fun getMessagesForConversation(conversationId: String): List<MessageEntity>
-    
-    @Query("DELETE FROM messages WHERE conversationId = :conversationId")
-    suspend fun clearConversation(conversationId: String)
-    
-    @Query("SELECT * FROM messages WHERE conversationId = :conversationId AND isPinned = 1 ORDER BY timestamp DESC")
-    suspend fun getPinnedMessages(conversationId: String): List<MessageEntity>
-    
-    @Query("SELECT * FROM messages WHERE conversationId = :conversationId AND isPinned = 1 AND pinCategory = :category ORDER BY timestamp DESC")
-    suspend fun getPinnedMessagesByCategory(conversationId: String, category: String): List<MessageEntity>
-    
-    @Query("SELECT * FROM messages WHERE linkedMessageIds LIKE '%' || :messageId || '%'")
-    suspend fun getLinkedMessages(messageId: String): List<MessageEntity>
-    
-    @Query("UPDATE messages SET isPinned = :isPinned, pinCategory = :category WHERE id = :messageId")
-    suspend fun updatePinnedStatus(messageId: String, isPinned: Boolean, category: String?)
-    
-    @Query("SELECT * FROM messages WHERE id IN (:ids)")
-    suspend fun getMessagesByIds(ids: List<String>): List<MessageEntity>
-    
-    @Query("UPDATE messages SET content = :newContent, isEdited = 1, originalContent = :originalContent, editReason = :reason, editedTimestamp = :timestamp WHERE id = :messageId")
-    suspend fun updateMessageContent(messageId: String, newContent: String, originalContent: String, reason: String?, timestamp: Long)
-}
-
-@Dao
-interface VaultDao {
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertEncryptedFile(file: EncryptedFileEntity)
-    @Query("SELECT * FROM encrypted_files ORDER BY dateEncrypted DESC")
-    suspend fun getAllEncryptedFiles(): List<EncryptedFileEntity>
-    @Query("DELETE FROM encrypted_files WHERE id = :id")
-    suspend fun deleteEncryptedFileById(id: String)
-    @Query("SELECT COUNT(*) FROM encrypted_files")
-    suspend fun getFilesCount(): Int
-    @Query("SELECT SUM(fileSize) FROM encrypted_files")
-    suspend fun getTotalEncryptedSize(): Long?
-    @Query("SELECT COUNT(*) FROM encrypted_files WHERE isSteganography = 1")
-    suspend fun getSteganographyCount(): Int
-    @Query("SELECT * FROM encrypted_files WHERE originalName LIKE '%' || :query || '%'")
-    suspend fun searchEncryptedFiles(query: String): List<EncryptedFileEntity>
-}
-
-@Dao
-interface VirtualAlbumDao {
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertAlbum(album: VirtualAlbumEntity)
-    @Insert(onConflict = OnConflictStrategy.IGNORE)
-    suspend fun addMediaToAlbum(crossRef: AlbumMediaCrossRef)
-    @Query("SELECT * FROM virtual_albums WHERE isVault = 0 ORDER BY sortOrder ASC")
-    suspend fun getAllAlbums(): List<VirtualAlbumEntity>
-    @Query("SELECT mediaUri FROM album_media_cross_ref WHERE albumId = :albumId")
-    suspend fun getMediaForAlbum(albumId: String): List<String>
-    @Query("DELETE FROM virtual_albums WHERE id = :albumId")
-    suspend fun deleteAlbum(albumId: String)
-}
-
-val MIGRATION_1_2 = object : Migration(1, 2) {
-    override fun migrate(database: SupportSQLiteDatabase) {
-        database.execSQL("CREATE TABLE IF NOT EXISTS `encrypted_files` (`id` TEXT NOT NULL, `originalName` TEXT NOT NULL, `encryptedPath` TEXT NOT NULL, `uniquePasswordEncrypted` TEXT NOT NULL, `isSteganography` INTEGER NOT NULL, `carrierImagePath` TEXT, `fileSize` INTEGER NOT NULL, `dateEncrypted` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+    override fun onCreate(db: SQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, conversationId TEXT, senderId TEXT, role TEXT, content TEXT, timestamp INTEGER, attachmentUris TEXT, isEncrypted INTEGER, reactionType TEXT, reactionColor TEXT, linkedMessageIds TEXT, isPinned INTEGER, pinCategory TEXT, iconType TEXT, pathColor TEXT, uuid TEXT, modelName TEXT, isEdited INTEGER, originalContent TEXT, editReason TEXT, editedTimestamp INTEGER)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS memories (id TEXT PRIMARY KEY, type TEXT, content TEXT, timestamp INTEGER, confidence REAL)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS notes (id TEXT PRIMARY KEY, title TEXT, content TEXT, type TEXT, timestamp INTEGER, dueDate INTEGER, reminderTime INTEGER, isPinned INTEGER, colorHex TEXT, coverPattern TEXT, coverSticker TEXT)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS tags (id TEXT PRIMARY KEY, name TEXT)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS note_tag_cross_ref (noteId TEXT, tagId TEXT, PRIMARY KEY(noteId, tagId))")
+        db.execSQL("CREATE TABLE IF NOT EXISTS conversations (id TEXT PRIMARY KEY, title TEXT, createdAt INTEGER, lastModified INTEGER)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS user_profile (id TEXT PRIMARY KEY, name TEXT, bio TEXT, profileImageUri TEXT, publicKey TEXT, isCurrentUser INTEGER, followersCount INTEGER, followingCount INTEGER)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS encrypted_files (id TEXT PRIMARY KEY, originalName TEXT, encryptedPath TEXT, uniquePasswordEncrypted TEXT, isSteganography INTEGER, carrierImagePath TEXT, fileSize INTEGER, dateEncrypted INTEGER)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS virtual_albums (id TEXT PRIMARY KEY, name TEXT, coverUri TEXT, createdAt INTEGER, isVault INTEGER, sortOrder INTEGER)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS album_media_cross_ref (albumId TEXT, mediaUri TEXT, PRIMARY KEY(albumId, mediaUri))")
     }
-}
 
-val MIGRATION_2_3 = object : Migration(2, 3) {
-    override fun migrate(database: SupportSQLiteDatabase) {
-        database.execSQL("CREATE TABLE IF NOT EXISTS `virtual_albums` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `coverUri` TEXT, `createdAt` INTEGER NOT NULL, `isVault` INTEGER NOT NULL, `sortOrder` INTEGER NOT NULL, PRIMARY KEY(`id`))")
-        database.execSQL("CREATE TABLE IF NOT EXISTS `album_media_cross_ref` (`albumId` TEXT NOT NULL, `mediaUri` TEXT NOT NULL, PRIMARY KEY(`albumId`, `mediaUri`), FOREIGN KEY(`albumId`) REFERENCES `virtual_albums`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )")
-        database.execSQL("CREATE INDEX IF NOT EXISTS `index_album_media_cross_ref_albumId` ON `album_media_cross_ref` (`albumId`)")
-        database.execSQL("CREATE INDEX IF NOT EXISTS `index_album_media_cross_ref_mediaUri` ON `album_media_cross_ref` (`mediaUri`)")
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        db.execSQL("DROP TABLE IF EXISTS messages")
+        db.execSQL("DROP TABLE IF EXISTS memories")
+        db.execSQL("DROP TABLE IF EXISTS notes")
+        db.execSQL("DROP TABLE IF EXISTS tags")
+        db.execSQL("DROP TABLE IF EXISTS note_tag_cross_ref")
+        db.execSQL("DROP TABLE IF EXISTS conversations")
+        db.execSQL("DROP TABLE IF EXISTS user_profile")
+        db.execSQL("DROP TABLE IF EXISTS encrypted_files")
+        db.execSQL("DROP TABLE IF EXISTS virtual_albums")
+        db.execSQL("DROP TABLE IF EXISTS album_media_cross_ref")
+        onCreate(db)
     }
-}
 
-val MIGRATION_3_4 = object : Migration(3, 4) {
-    override fun migrate(database: SupportSQLiteDatabase) {
-        database.execSQL("CREATE TABLE IF NOT EXISTS `virtual_albums` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `coverUri` TEXT, `createdAt` INTEGER NOT NULL, `isVault` INTEGER NOT NULL, `sortOrder` INTEGER NOT NULL, PRIMARY KEY(`id`))")
-        database.execSQL("CREATE TABLE IF NOT EXISTS `album_media_cross_ref` (`albumId` TEXT NOT NULL, `mediaUri` TEXT NOT NULL, PRIMARY KEY(`albumId`, `mediaUri`), FOREIGN KEY(`albumId`) REFERENCES `virtual_albums`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )")
-        database.execSQL("CREATE INDEX IF NOT EXISTS `index_album_media_cross_ref_albumId` ON `album_media_cross_ref` (`albumId`)")
-        database.execSQL("CREATE INDEX IF NOT EXISTS `index_album_media_cross_ref_mediaUri` ON `album_media_cross_ref` (`mediaUri`)")
-    }
-}
-
-val MIGRATION_4_5 = object : Migration(4, 5) {
-    override fun migrate(database: SupportSQLiteDatabase) {
-        database.execSQL("ALTER TABLE messages ADD COLUMN reactionType TEXT DEFAULT NULL")
-        database.execSQL("ALTER TABLE messages ADD COLUMN reactionColor TEXT DEFAULT NULL")
-    }
-}
-
-val MIGRATION_5_6 = object : Migration(5, 6) {
-    override fun migrate(database: SupportSQLiteDatabase) {
-        database.execSQL("ALTER TABLE messages ADD COLUMN linkedMessageIds TEXT DEFAULT NULL")
-        database.execSQL("ALTER TABLE messages ADD COLUMN isPinned INTEGER NOT NULL DEFAULT 0")
-        database.execSQL("ALTER TABLE messages ADD COLUMN pinCategory TEXT DEFAULT NULL")
-        database.execSQL("ALTER TABLE messages ADD COLUMN iconType TEXT DEFAULT NULL")
-        database.execSQL("ALTER TABLE messages ADD COLUMN pathColor TEXT DEFAULT NULL")
-        database.execSQL("ALTER TABLE messages ADD COLUMN uuid TEXT NOT NULL DEFAULT ''")
-    }
-}
-
-val MIGRATION_6_7 = object : Migration(6, 7) {
-    override fun migrate(database: SupportSQLiteDatabase) {
-        database.execSQL("ALTER TABLE messages ADD COLUMN modelName TEXT DEFAULT NULL")
-    }
-}
-
-val MIGRATION_7_8 = object : Migration(7, 8) {
-    override fun migrate(database: SupportSQLiteDatabase) {
-        database.execSQL("ALTER TABLE messages ADD COLUMN isEdited INTEGER NOT NULL DEFAULT 0")
-        database.execSQL("ALTER TABLE messages ADD COLUMN originalContent TEXT DEFAULT NULL")
-        database.execSQL("ALTER TABLE messages ADD COLUMN editReason TEXT DEFAULT NULL")
-        database.execSQL("ALTER TABLE messages ADD COLUMN editedTimestamp INTEGER DEFAULT NULL")
-        database.execSQL("CREATE TABLE IF NOT EXISTS `conversations` (`id` TEXT NOT NULL, `title` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `lastModified` INTEGER NOT NULL, PRIMARY KEY(`id`))")
-    }
-}
-
-val MIGRATION_8_9 = object : Migration(8, 9) {
-    override fun migrate(database: SupportSQLiteDatabase) {
-        database.execSQL("CREATE TABLE IF NOT EXISTS `memories` (`id` TEXT NOT NULL, `type` TEXT NOT NULL, `content` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, `confidence` REAL NOT NULL, PRIMARY KEY(`id`))")
-    }
-}
-
-val MIGRATION_9_10 = object : Migration(9, 10) {
-    override fun migrate(database: SupportSQLiteDatabase) {
-        database.execSQL("CREATE TABLE IF NOT EXISTS `notes` (`id` TEXT NOT NULL, `title` TEXT NOT NULL, `content` TEXT NOT NULL, `type` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, `dueDate` INTEGER, `reminderTime` INTEGER, `isPinned` INTEGER NOT NULL, `colorHex` TEXT NOT NULL, `coverPattern` TEXT, `coverSticker` TEXT, PRIMARY KEY(`id`))")
-        database.execSQL("CREATE TABLE IF NOT EXISTS `tags` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, PRIMARY KEY(`id`))")
-        database.execSQL("CREATE TABLE IF NOT EXISTS `note_tag_cross_ref` (`noteId` TEXT NOT NULL, `tagId` TEXT NOT NULL, PRIMARY KEY(`noteId`, `tagId`), FOREIGN KEY(`noteId`) REFERENCES `notes`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`tagId`) REFERENCES `tags`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )")
-        database.execSQL("CREATE INDEX IF NOT EXISTS `index_note_tag_cross_ref_noteId` ON `note_tag_cross_ref` (`noteId`)")
-        database.execSQL("CREATE INDEX IF NOT EXISTS `index_note_tag_cross_ref_tagId` ON `note_tag_cross_ref` (`tagId`)")
-    }
-}
-
-@Database(
-    entities = [
-        UserEntity::class, 
-        MessageEntity::class, 
-        EncryptedFileEntity::class, 
-        VirtualAlbumEntity::class,
-        AlbumMediaCrossRef::class,
-        ConversationEntity::class,
-        MemoryEntity::class,
-        NoteEntity::class,
-        TagEntity::class,
-        NoteTagCrossRef::class
-    ], 
-    version = 10, 
-    exportSchema = false
-)
-abstract class AppDatabase : RoomDatabase() {
-    abstract fun userDao(): UserDao
-    abstract fun messageDao(): MessageDao
-    abstract fun vaultDao(): VaultDao
-    abstract fun virtualAlbumDao(): VirtualAlbumDao
-    abstract fun conversationDao(): ConversationDao
-    abstract fun memoryDao(): MemoryDao
-    abstract fun noteDao(): NoteDao
-
-    companion object {
-        @Volatile
-        private var INSTANCE: AppDatabase? = null
-
-        init {
-            System.loadLibrary("sqlcipher")
+    // دوال الرسائل
+    fun insertMessage(message: MessageEntity) {
+        val db = writableDatabase
+        val values = ContentValues().apply {
+            put("id", message.id)
+            put("conversationId", message.conversationId)
+            put("senderId", message.senderId)
+            put("role", message.role)
+            put("content", message.content)
+            put("timestamp", message.timestamp)
+            put("attachmentUris", message.attachmentUris)
+            put("isEncrypted", if (message.isEncrypted) 1 else 0)
+            put("reactionType", message.reactionType)
+            put("reactionColor", message.reactionColor)
+            put("linkedMessageIds", message.linkedMessageIds)
+            put("isPinned", if (message.isPinned) 1 else 0)
+            put("pinCategory", message.pinCategory)
+            put("iconType", message.iconType)
+            put("pathColor", message.pathColor)
+            put("uuid", message.uuid)
+            put("modelName", message.modelName)
+            put("isEdited", if (message.isEdited) 1 else 0)
+            put("originalContent", message.originalContent)
+            put("editReason", message.editReason)
+            put("editedTimestamp", message.editedTimestamp)
         }
+        db.insertWithOnConflict("messages", null, values, SQLiteDatabase.CONFLICT_REPLACE)
+        db.close()
+    }
 
-        fun getDatabase(context: Context): AppDatabase {
-            return INSTANCE ?: synchronized(this) {
-                val dbPassphrase = getOrCreateDbPassphrase(context)
-                val factory = SupportOpenHelperFactory(dbPassphrase.toByteArray())
-
-                val instance = Room.databaseBuilder(
-                    context.applicationContext,
-                    AppDatabase::class.java,
-                    "monolith_database"
-                )
-                .openHelperFactory(factory)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10) 
-                .build()
-                INSTANCE = instance
-                instance
-            }
+    fun getMessagesForConversation(conversationId: String): List<MessageEntity> {
+        val db = readableDatabase
+        val cursor = db.rawQuery("SELECT * FROM messages WHERE conversationId = ? ORDER BY timestamp ASC", arrayOf(conversationId))
+        val list = mutableListOf<MessageEntity>()
+        if (cursor.moveToFirst()) {
+            do {
+                list.add(MessageEntity(
+                    id = cursor.getString(cursor.getColumnIndexOrThrow("id")),
+                    conversationId = cursor.getString(cursor.getColumnIndexOrThrow("conversationId")),
+                    senderId = cursor.getString(cursor.getColumnIndexOrThrow("senderId")),
+                    role = cursor.getString(cursor.getColumnIndexOrThrow("role")),
+                    content = cursor.getString(cursor.getColumnIndexOrThrow("content")),
+                    timestamp = cursor.getLong(cursor.getColumnIndexOrThrow("timestamp")),
+                    attachmentUris = cursor.getString(cursor.getColumnIndexOrThrow("attachmentUris")),
+                    isEncrypted = cursor.getInt(cursor.getColumnIndexOrThrow("isEncrypted")) == 1,
+                    reactionType = cursor.getString(cursor.getColumnIndexOrThrow("reactionType")),
+                    reactionColor = cursor.getString(cursor.getColumnIndexOrThrow("reactionColor")),
+                    linkedMessageIds = cursor.getString(cursor.getColumnIndexOrThrow("linkedMessageIds")),
+                    isPinned = cursor.getInt(cursor.getColumnIndexOrThrow("isPinned")) == 1,
+                    pinCategory = cursor.getString(cursor.getColumnIndexOrThrow("pinCategory")),
+                    iconType = cursor.getString(cursor.getColumnIndexOrThrow("iconType")),
+                    pathColor = cursor.getString(cursor.getColumnIndexOrThrow("pathColor")),
+                    uuid = cursor.getString(cursor.getColumnIndexOrThrow("uuid")),
+                    modelName = cursor.getString(cursor.getColumnIndexOrThrow("modelName")),
+                    isEdited = cursor.getInt(cursor.getColumnIndexOrThrow("isEdited")) == 1,
+                    originalContent = cursor.getString(cursor.getColumnIndexOrThrow("originalContent")),
+                    editReason = cursor.getString(cursor.getColumnIndexOrThrow("editReason")),
+                    editedTimestamp = cursor.getLong(cursor.getColumnIndexOrThrow("editedTimestamp"))
+                ))
+            } while (cursor.moveToNext())
         }
+        cursor.close()
+        db.close()
+        return list
+    }
 
-        private fun getOrCreateDbPassphrase(context: Context): String {
-            return try {
-                val masterKey = MasterKey.Builder(context)
-                    .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-                    .build()
-                val securePrefs = EncryptedSharedPreferences.create(
-                    context, "DatabaseSecret", masterKey,
-                    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-                    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-                )
-                
-                val existingPassphrase: String? = securePrefs.getString("db_passphrase", null)
-                if (existingPassphrase != null) {
-                    existingPassphrase
-                } else {
-                    val random = SecureRandom()
-                    val bytes = ByteArray(32)
-                    random.nextBytes(bytes)
-                    val newPassphrase = android.util.Base64.encodeToString(bytes, android.util.Base64.DEFAULT)
-                    securePrefs.edit().putString("db_passphrase", newPassphrase).apply()
-                    newPassphrase
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-                "Monolith_Fallback_Secure_Key_2024"
-            }
+    fun getPinnedMessages(conversationId: String): List<MessageEntity> {
+        val db = readableDatabase
+        val cursor = db.rawQuery("SELECT * FROM messages WHERE conversationId = ? AND isPinned = 1 ORDER BY timestamp DESC", arrayOf(conversationId))
+        val list = mutableListOf<MessageEntity>()
+        if (cursor.moveToFirst()) {
+            do {
+                list.add(MessageEntity(
+                    id = cursor.getString(cursor.getColumnIndexOrThrow("id")),
+                    conversationId = cursor.getString(cursor.getColumnIndexOrThrow("conversationId")),
+                    senderId = cursor.getString(cursor.getColumnIndexOrThrow("senderId")),
+                    role = cursor.getString(cursor.getColumnIndexOrThrow("role")),
+                    content = cursor.getString(cursor.getColumnIndexOrThrow("content")),
+                    timestamp = cursor.getLong(cursor.getColumnIndexOrThrow("timestamp")),
+                    attachmentUris = cursor.getString(cursor.getColumnIndexOrThrow("attachmentUris")),
+                    isEncrypted = cursor.getInt(cursor.getColumnIndexOrThrow("isEncrypted")) == 1,
+                    reactionType = cursor.getString(cursor.getColumnIndexOrThrow("reactionType")),
+                    reactionColor = cursor.getString(cursor.getColumnIndexOrThrow("reactionColor")),
+                    linkedMessageIds = cursor.getString(cursor.getColumnIndexOrThrow("linkedMessageIds")),
+                    isPinned = cursor.getInt(cursor.getColumnIndexOrThrow("isPinned")) == 1,
+                    pinCategory = cursor.getString(cursor.getColumnIndexOrThrow("pinCategory")),
+                    iconType = cursor.getString(cursor.getColumnIndexOrThrow("iconType")),
+                    pathColor = cursor.getString(cursor.getColumnIndexOrThrow("pathColor")),
+                    uuid = cursor.getString(cursor.getColumnIndexOrThrow("uuid")),
+                    modelName = cursor.getString(cursor.getColumnIndexOrThrow("modelName")),
+                    isEdited = cursor.getInt(cursor.getColumnIndexOrThrow("isEdited")) == 1,
+                    originalContent = cursor.getString(cursor.getColumnIndexOrThrow("originalContent")),
+                    editReason = cursor.getString(cursor.getColumnIndexOrThrow("editReason")),
+                    editedTimestamp = cursor.getLong(cursor.getColumnIndexOrThrow("editedTimestamp"))
+                ))
+            } while (cursor.moveToNext())
         }
+        cursor.close()
+        db.close()
+        return list
+    }
+
+    fun updateMessageContent(messageId: String, newContent: String, originalContent: String, reason: String?, timestamp: Long) {
+        val db = writableDatabase
+        val values = ContentValues().apply {
+            put("content", newContent)
+            put("isEdited", 1)
+            put("originalContent", originalContent)
+            put("editReason", reason)
+            put("editedTimestamp", timestamp)
+        }
+        db.update("messages", values, "id = ?", arrayOf(messageId))
+        db.close()
+    }
+
+    fun updatePinnedStatus(messageId: String, isPinned: Boolean, category: String?) {
+        val db = writableDatabase
+        val values = ContentValues().apply {
+            put("isPinned", if (isPinned) 1 else 0)
+            put("pinCategory", category)
+        }
+        db.update("messages", values, "id = ?", arrayOf(messageId))
+        db.close()
+    }
+
+    // دوال الذاكرة
+    fun insertMemory(memory: MemoryEntity) {
+        val db = writableDatabase
+        val values = ContentValues().apply {
+            put("id", memory.id)
+            put("type", memory.type)
+            put("content", memory.content)
+            put("timestamp", memory.timestamp)
+            put("confidence", memory.confidence)
+        }
+        db.insertWithOnConflict("memories", null, values, SQLiteDatabase.CONFLICT_REPLACE)
+        db.close()
+    }
+
+    fun getRecentMemories(): List<MemoryEntity> {
+        val db = readableDatabase
+        val cursor = db.rawQuery("SELECT * FROM memories ORDER BY timestamp DESC LIMIT 20", null)
+        val list = mutableListOf<MemoryEntity>()
+        if (cursor.moveToFirst()) {
+            do {
+                list.add(MemoryEntity(
+                    id = cursor.getString(cursor.getColumnIndexOrThrow("id")),
+                    type = cursor.getString(cursor.getColumnIndexOrThrow("type")),
+                    content = cursor.getString(cursor.getColumnIndexOrThrow("content")),
+                    timestamp = cursor.getLong(cursor.getColumnIndexOrThrow("timestamp")),
+                    confidence = cursor.getFloat(cursor.getColumnIndexOrThrow("confidence"))
+                ))
+            } while (cursor.moveToNext())
+        }
+        cursor.close()
+        db.close()
+        return list
+    }
+
+    // دوال المذكرة
+    fun insertNote(note: NoteEntity) {
+        val db = writableDatabase
+        val values = ContentValues().apply {
+            put("id", note.id)
+            put("title", note.title)
+            put("content", note.content)
+            put("type", note.type)
+            put("timestamp", note.timestamp)
+            put("dueDate", note.dueDate)
+            put("reminderTime", note.reminderTime)
+            put("isPinned", if (note.isPinned) 1 else 0)
+            put("colorHex", note.colorHex)
+            put("coverPattern", note.coverPattern)
+            put("coverSticker", note.coverSticker)
+        }
+        db.insertWithOnConflict("notes", null, values, SQLiteDatabase.CONFLICT_REPLACE)
+        db.close()
+    }
+
+    fun getAllNotes(): List<NoteEntity> {
+        val db = readableDatabase
+        val cursor = db.rawQuery("SELECT * FROM notes ORDER BY timestamp DESC", null)
+        val list = mutableListOf<NoteEntity>()
+        if (cursor.moveToFirst()) {
+            do {
+                list.add(NoteEntity(
+                    id = cursor.getString(cursor.getColumnIndexOrThrow("id")),
+                    title = cursor.getString(cursor.getColumnIndexOrThrow("title")),
+                    content = cursor.getString(cursor.getColumnIndexOrThrow("content")),
+                    type = cursor.getString(cursor.getColumnIndexOrThrow("type")),
+                    timestamp = cursor.getLong(cursor.getColumnIndexOrThrow("timestamp")),
+                    dueDate = cursor.getLong(cursor.getColumnIndexOrThrow("dueDate")),
+                    reminderTime = cursor.getLong(cursor.getColumnIndexOrThrow("reminderTime")),
+                    isPinned = cursor.getInt(cursor.getColumnIndexOrThrow("isPinned")) == 1,
+                    colorHex = cursor.getString(cursor.getColumnIndexOrThrow("colorHex")),
+                    coverPattern = cursor.getString(cursor.getColumnIndexOrThrow("coverPattern")),
+                    coverSticker = cursor.getString(cursor.getColumnIndexOrThrow("coverSticker"))
+                ))
+            } while (cursor.moveToNext())
+        }
+        cursor.close()
+        db.close()
+        return list
+    }
+
+    fun deleteNote(id: String) {
+        val db = writableDatabase
+        db.delete("notes", "id = ?", arrayOf(id))
+        db.close()
+    }
+
+    // دوال الألبوم
+    fun insertAlbum(album: VirtualAlbumEntity) {
+        val db = writableDatabase
+        val values = ContentValues().apply {
+            put("id", album.id)
+            put("name", album.name)
+            put("coverUri", album.coverUri)
+            put("createdAt", album.createdAt)
+            put("isVault", if (album.isVault) 1 else 0)
+            put("sortOrder", album.sortOrder)
+        }
+        db.insertWithOnConflict("virtual_albums", null, values, SQLiteDatabase.CONFLICT_REPLACE)
+        db.close()
+    }
+
+    fun addMediaToAlbum(albumId: String, mediaUri: String) {
+        val db = writableDatabase
+        val values = ContentValues().apply {
+            put("albumId", albumId)
+            put("mediaUri", mediaUri)
+        }
+        db.insertWithOnConflict("album_media_cross_ref", null, values, SQLiteDatabase.CONFLICT_IGNORE)
+        db.close()
+    }
+
+    fun getMediaForAlbum(albumId: String): List<String> {
+        val db = readableDatabase
+        val cursor = db.rawQuery("SELECT mediaUri FROM album_media_cross_ref WHERE albumId = ?", arrayOf(albumId))
+        val list = mutableListOf<String>()
+        if (cursor.moveToFirst()) {
+            do {
+                list.add(cursor.getString(cursor.getColumnIndexOrThrow("mediaUri")))
+            } while (cursor.moveToNext())
+        }
+        cursor.close()
+        db.close()
+        return list
+    }
+
+    fun deleteAlbum(albumId: String) {
+        val db = writableDatabase
+        db.delete("virtual_albums", "id = ?", arrayOf(albumId))
+        db.delete("album_media_cross_ref", "albumId = ?", arrayOf(albumId))
+        db.close()
+    }
+
+    // دوال المحادثة
+    fun insertConversation(conversation: ConversationEntity) {
+        val db = writableDatabase
+        val values = ContentValues().apply {
+            put("id", conversation.id)
+            put("title", conversation.title)
+            put("createdAt", conversation.createdAt)
+            put("lastModified", conversation.lastModified)
+        }
+        db.insertWithOnConflict("conversations", null, values, SQLiteDatabase.CONFLICT_REPLACE)
+        db.close()
     }
 }
