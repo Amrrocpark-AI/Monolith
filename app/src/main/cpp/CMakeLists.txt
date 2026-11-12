@@ -1,22 +1,19 @@
 cmake_minimum_required(VERSION 3.22.1)
 project("monolith")
 
-# إضافة مجلد llama.cpp (الذي سنضيفه لاحقاً)
-set(LLAMA_DIR ${CMAKE_SOURCE_DIR}/llama.cpp)
+include(FetchContent)
 
-add_library(monolith SHARED
-    ai_chat.cpp
+FetchContent_Declare(
+    llama
+    GIT_REPOSITORY https://github.com/ggml-org/llama.cpp.git
+    GIT_TAG        b4697
 )
+FetchContent_MakeAvailable(llama)
 
-target_include_directories(monolith PRIVATE
-    ${LLAMA_DIR}
-    ${LLAMA_DIR}/include
-    ${LLAMA_DIR}/common
-)
-
-find_library(log-lib log)
+add_library(monolith SHARED ai_chat.cpp)
 
 target_link_libraries(monolith
-    ${log-lib}
-    # سنربط مكتبة llama.cpp هنا لاحقاً
+    llama
+    android
+    log
 )
