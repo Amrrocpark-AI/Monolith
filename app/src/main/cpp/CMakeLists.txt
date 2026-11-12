@@ -10,6 +10,12 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(llama)
 
+# الحصول على مسار المصدر الصحيح
+FetchContent_GetProperties(llama)
+if(NOT llama_POPULATED)
+    FetchContent_Populate(llama)
+endif()
+
 add_library(monolith SHARED ai_chat.cpp)
 
 target_include_directories(monolith PRIVATE
