@@ -17,18 +17,6 @@ android {
         
         buildConfigField "String", "API_BASE_URL", "\"https://api.groq.com/openai/\""
         vectorDrawables.useSupportLibrary = true
-        
-        ndk {
-            abiFilters 'arm64-v8a'
-        }
-        
-        externalNativeBuild {
-            cmake {
-                arguments "-DANDROID_ABI=arm64-v8a",
-                          "-DANDROID_PLATFORM=android-26",
-                          "-DANDROID_STL=c++_shared"
-            }
-        }
     }
 
     buildTypes {
@@ -88,11 +76,7 @@ dependencies {
     implementation 'androidx.biometric:biometric:1.1.0'
     implementation 'com.airbnb.android:lottie:6.4.0'
 
-    implementation 'androidx.room:room-runtime:2.7.0'
-    implementation 'androidx.room:room-ktx:2.7.0'
-    implementation 'androidx.room:room-paging:2.7.0'
-    ksp 'androidx.room:room-compiler:2.7.0'
-
+    // لا Room، لا KSP
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
     implementation 'androidx.work:work-runtime-ktx:2.9.0'
     implementation 'androidx.paging:paging-runtime-ktx:3.2.1'
