@@ -12,8 +12,8 @@ android {
         applicationId "com.monolith"
         minSdk 26
         targetSdk 34
-        versionCode 10
-        versionName "1.9"
+        versionCode 11
+        versionName "2.0"
         
         buildConfigField "String", "API_BASE_URL", "\"https://api.groq.com/openai/\""
         vectorDrawables.useSupportLibrary = true
@@ -53,16 +53,15 @@ android {
     }
 }
 
-// هذا هو السطر السحري: يجبر Gradle على استخدام core-ktx القديم
 configurations.all {
-    resolutionStrategy {
-        force 'androidx.core:core-ktx:1.15.0'
-        force 'androidx.core:core:1.15.0'
+    resolutionStrategy.eachDependency { details ->
+        if (details.requested.group == 'androidx.core') {
+            details.useVersion '1.15.0'
+        }
     }
 }
 
 dependencies {
-    // تثبيت الإصدارات القديمة (المتوافقة مع compileSdk 34 و AGP 8.1.0)
     implementation 'androidx.core:core-ktx:1.15.0'
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'com.google.android.material:material:1.11.0'
@@ -76,7 +75,6 @@ dependencies {
     implementation 'androidx.biometric:biometric:1.1.0'
     implementation 'com.airbnb.android:lottie:6.4.0'
 
-    // Room (الإصدار الجديد المتوافق مع Kotlin 2.1.20)
     implementation 'androidx.room:room-runtime:2.7.0'
     implementation 'androidx.room:room-ktx:2.7.0'
     implementation 'androidx.room:room-paging:2.7.0'
@@ -99,6 +97,5 @@ dependencies {
     
     implementation 'com.google.android.gms:play-services-mlkit-subject-segmentation:16.0.0-beta1'
 
-    // مكتبة تشغيل النماذج المحلية (GGUF)
     implementation 'io.github.ljcamargo:llamacpp-kotlin:0.4.0'
 }
