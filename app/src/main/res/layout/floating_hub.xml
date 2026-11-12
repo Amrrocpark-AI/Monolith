@@ -49,10 +49,15 @@
                 <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Volume" android:textColor="#FFFFFF" android:textSize="10sp" />
             </LinearLayout>
 
-            <!-- *** زر التحكم في الحجم الجديد *** -->
             <LinearLayout android:id="@+id/btnResize" android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="vertical" android:gravity="center" android:paddingStart="16dp" android:paddingEnd="16dp">
                 <ImageView android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_resize" app:tint="#FFFFFF" />
                 <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Size" android:textColor="#FFFFFF" android:textSize="10sp" />
+            </LinearLayout>
+
+            <!-- الزر الجديد للوكيل -->
+            <LinearLayout android:id="@+id/btnAgentChat" android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="vertical" android:gravity="center" android:paddingStart="16dp" android:paddingEnd="16dp">
+                <ImageView android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_vision" app:tint="#00FF00" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="الوكيل" android:textColor="#00FF00" android:textSize="10sp" />
             </LinearLayout>
 
         </LinearLayout>
