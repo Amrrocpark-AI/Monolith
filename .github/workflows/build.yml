@@ -7,18 +7,32 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+
     - name: set up JDK 17
       uses: actions/setup-java@v4
       with:
         java-version: '17'
         distribution: 'temurin'
+
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+      with:
+        log-accepted-android-sdk-licenses: false
+
+    - name: Install NDK and CMake
+      run: |
+        sdkmanager "ndk;27.3.13750724" "cmake;3.22.1"
+        echo "ANDROID_NDK=${ANDROID_SDK_ROOT}/ndk/27.3.13750724" >> $GITHUB_ENV
+
     - name: Setup Gradle 8.0.2
       uses: gradle/actions/setup-gradle@v3
       with:
         gradle-version: 8.0.2
+
     - name: Generate Fixed Debug Keystore
       run: |
         keytool -genkey -v -keystore $RUNNER_TEMP/debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US"
+
     - name: Clean and Build with Gradle (Signed)
       run: |
         gradle clean assembleDebug \
@@ -26,6 +40,7 @@ jobs:
           -Pandroid.injected.signing.store.password=android \
           -Pandroid.injected.signing.key.alias=androiddebugkey \
           -Pandroid.injected.signing.key.password=android
+
     - name: Create Release and Upload APK
       uses: softprops/action-gh-release@v2
       with:
