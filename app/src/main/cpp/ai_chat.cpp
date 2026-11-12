@@ -46,7 +46,6 @@ Java_com_monolith_ModelManager_nativeGenerate(JNIEnv* env, jobject, jstring prom
     const char* promptStr = env->GetStringUTFChars(prompt, nullptr);
     LOGI("Generating for: %s", promptStr);
 
-    // توليد بسيط (بدون معالجة متقدمة)
     std::string result = "رد تجريبي من llama.cpp: ";
     result += promptStr;
 
