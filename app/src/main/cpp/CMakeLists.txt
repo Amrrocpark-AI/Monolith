@@ -10,7 +10,6 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(llama)
 
-# الحصول على مسار المصدر الصحيح
 FetchContent_GetProperties(llama)
 if(NOT llama_POPULATED)
     FetchContent_Populate(llama)
