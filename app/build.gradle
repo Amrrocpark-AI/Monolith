@@ -12,8 +12,8 @@ android {
         applicationId "com.monolith"
         minSdk 26
         targetSdk 34
-        versionCode 14
-        versionName "2.3"
+        versionCode 15
+        versionName "2.4"
         
         buildConfigField "String", "API_BASE_URL", "\"https://api.groq.com/openai/\""
         vectorDrawables.useSupportLibrary = true
