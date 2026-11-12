@@ -17,8 +17,11 @@ import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.widget.EditText
+import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
@@ -44,6 +47,9 @@ class FloatingService : Service() {
 
     private var bubbleScale = 1.0f
     private lateinit var prefs: android.content.SharedPreferences
+
+    private var agentChatView: View? = null
+    private var agentChatParams: WindowManager.LayoutParams? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -144,7 +150,6 @@ class FloatingService : Service() {
                         return true
                     }
                     MotionEvent.ACTION_UP -> {
-                        // العودة للسلوك الطبيعي: إذا لم يسحب، افتح القائمة
                         if (!isDragging) {
                             if (floatingHubView != null) {
                                 hideHub()
@@ -200,6 +205,7 @@ class FloatingService : Service() {
             floatingHubView?.findViewById<LinearLayout>(R.id.btnCode)?.setOnClickListener { Toast.makeText(this, "الأكواد", Toast.LENGTH_SHORT).show() }
             floatingHubView?.findViewById<LinearLayout>(R.id.btnSchedule)?.setOnClickListener { Toast.makeText(this, "الجدولة", Toast.LENGTH_SHORT).show() }
             floatingHubView?.findViewById<LinearLayout>(R.id.btnMessages)?.setOnClickListener { Toast.makeText(this, "الرسائل", Toast.LENGTH_SHORT).show() }
+            floatingHubView?.findViewById<LinearLayout>(R.id.btnAgentChat)?.setOnClickListener { showAgentChatWindow() }
 
             floatingHubView?.setOnTouchListener(object : View.OnTouchListener {
                 private var initialX = 0
@@ -422,22 +428,84 @@ class FloatingService : Service() {
                 @Suppress("DEPRECATION")
                 vibrator.vibrate(duration)
             }
+        } catch (e: Exception) { e.printStackTrace() }
+    }
+
+    private fun showAgentChatWindow() {
+        if (agentChatView != null) {
+            windowManager.removeView(agentChatView)
+            agentChatView = null
+            agentChatParams = null
+            return
+        }
+
+        try {
+            agentChatView = LayoutInflater.from(this).inflate(R.layout.floating_chat_window, null)
+            val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            } else {
+                WindowManager.LayoutParams.TYPE_PHONE
+            }
+
+            agentChatParams = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                layoutFlag,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                PixelFormat.TRANSLUCENT
+            )
+
+            agentChatParams?.gravity = Gravity.TOP or Gravity.START
+            agentChatParams?.x = 100
+            agentChatParams?.y = 200
+
+            val btnClose = agentChatView?.findViewById<ImageButton>(R.id.btnCloseAgentChat)
+            btnClose?.setOnClickListener {
+                agentChatView?.let { windowManager.removeView(it) }
+                agentChatView = null
+                agentChatParams = null
+            }
+
+            val btnSend = agentChatView?.findViewById<ImageButton>(R.id.btnSendAgent)
+            val etMessage = agentChatView?.findViewById<EditText>(R.id.etAgentMessage)
+            val chatContainer = agentChatView?.findViewById<LinearLayout>(R.id.chatContainerAgent)
+            val scrollView = agentChatView?.findViewById<ScrollView>(R.id.scrollViewAgentChat)
+
+            btnSend?.setOnClickListener {
+                val message = etMessage?.text.toString().trim()
+                if (message.isNotEmpty()) {
+                    addAgentMessage(chatContainer, scrollView, "أنت: $message", true)
+                    etMessage?.text?.clear()
+                }
+            }
+
+            agentChatView?.let { windowManager.addView(it, agentChatParams) }
         } catch (e: Exception) {
             e.printStackTrace()
         }
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
-    override fun onBind(intent: Intent?): IBinder? = null
+    private fun addAgentMessage(container: LinearLayout?, scrollView: ScrollView?, text: String, isUser: Boolean) {
+        if (container == null) return
+        val textView = TextView(this).apply {
+            this.text = text
+            setTextColor(if (isUser) 0xFF00FF00.toInt() else 0xFFFFFFFF.toInt())
+            textSize = 14f
+            setPadding(8, 8, 8, 8)
+        }
+        container.addView(textView)
+        scrollView?.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+    }
 
     override fun onDestroy() {
         super.onDestroy()
-        try {
-            if (::floatingBubbleView.isInitialized) windowManager.removeView(floatingBubbleView)
-            floatingHubView?.let { windowManager.removeView(it) }
-            volumePanelView?.let { windowManager.removeView(it) }
-            resizePanelView?.let { windowManager.removeView(it) }
-            streamSelectorView?.let { windowManager.removeView(it) }
-        } catch (e: Exception) { e.printStackTrace() }
+        if (::floatingBubbleView.isInitialized) {
+            windowManager.removeView(floatingBubbleView)
+        }
+        hideHub()
+        volumePanelView?.let { windowManager.removeView(it) }
+        resizePanelView?.let { windowManager.removeView(it) }
+        streamSelectorView?.let { windowManager.removeView(it) }
+        agentChatView?.let { windowManager.removeView(it) }
     }
 }
