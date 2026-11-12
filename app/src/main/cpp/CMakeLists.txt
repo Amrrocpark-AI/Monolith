@@ -6,11 +6,17 @@ include(FetchContent)
 FetchContent_Declare(
     llama
     GIT_REPOSITORY https://github.com/ggml-org/llama.cpp.git
-    GIT_TAG        b4697
+    GIT_TAG        v0.9.0
 )
 FetchContent_MakeAvailable(llama)
 
 add_library(monolith SHARED ai_chat.cpp)
+
+target_include_directories(monolith PRIVATE
+    ${llama_SOURCE_DIR}
+    ${llama_SOURCE_DIR}/include
+    ${llama_SOURCE_DIR}/common
+)
 
 target_link_libraries(monolith
     llama
