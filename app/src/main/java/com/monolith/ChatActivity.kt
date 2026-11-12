@@ -49,8 +49,7 @@ class ChatActivity : AppCompatActivity() {
 
     private var themeColorHex = "#00D4FF"
     private lateinit var securePrefs: androidx.security.crypto.EncryptedSharedPreferences
-    private lateinit var messageDao: MessageDao
-    private lateinit var memoryDao: MemoryDao
+    private lateinit var appDatabase: AppDatabase
     private lateinit var modelManager: ModelManager
     private var messageList: MutableList<ChatMessage> = mutableListOf()
     private val currentConversationId = "main_chat" 
@@ -90,17 +89,12 @@ class ChatActivity : AppCompatActivity() {
 
         ApiClient.init(applicationContext)
         
+        appDatabase = AppDatabase(applicationContext)
+        modelManager = ModelManager(applicationContext)
+        
         lifecycleScope.launch(Dispatchers.IO) {
-            try {
-                val db = AppDatabase.getDatabase(applicationContext)
-                messageDao = db.messageDao()
-                memoryDao = db.memoryDao()
-                modelManager = ModelManager(applicationContext)
-                withContext(Dispatchers.Main) {
-                    loadMessagesFromDb()
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
+            withContext(Dispatchers.Main) {
+                loadMessagesFromDb()
             }
         }
 
@@ -280,13 +274,13 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun analyzeUserMessage(message: String) {
-        lifecycleScope.launch {
+        lifecycleScope.launch(Dispatchers.IO) {
             try {
                 if (message.length < 20 && message.isNotEmpty()) {
-                    memoryDao.insertMemory(MemoryEntity(type = "PREFERENCE", content = "المستخدم يفضل الإجابات القصيرة", confidence = 0.6f))
+                    appDatabase.insertMemory(MemoryEntity(type = "PREFERENCE", content = "المستخدم يفضل الإجابات القصيرة", confidence = 0.6f))
                 }
                 if (message.contains("شكرا") || message.contains("شكراً")) {
-                    memoryDao.insertMemory(MemoryEntity(type = "EMOTION", content = "المستخدم يقدر المساعدة", confidence = 0.7f))
+                    appDatabase.insertMemory(MemoryEntity(type = "EMOTION", content = "المستخدم يقدر المساعدة", confidence = 0.7f))
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -296,7 +290,7 @@ class ChatActivity : AppCompatActivity() {
 
     private suspend fun getMemoriesContext(): String {
         return try {
-            val memories = memoryDao.getRecentMemories()
+            val memories = appDatabase.getRecentMemories()
             if (memories.isEmpty()) ""
             else {
                 val sb = StringBuilder()
@@ -453,7 +447,7 @@ class ChatActivity : AppCompatActivity() {
     private fun loadMessagesFromDb() {
         lifecycleScope.launch {
             try {
-                val entities = messageDao.getMessagesForConversation(currentConversationId)
+                val entities = appDatabase.getMessagesForConversation(currentConversationId)
                 messageList = entities.map { it.toChatMessage() }.toMutableList()
                 withContext(Dispatchers.Main) {
                     if (::chatAdapter.isInitialized) {
@@ -466,8 +460,8 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun saveMessageToDb(msg: ChatMessage) {
-        lifecycleScope.launch {
-            try { messageDao.insertMessage(msg.toMessageEntity(currentConversationId)) } catch (e: Exception) { e.printStackTrace() }
+        lifecycleScope.launch(Dispatchers.IO) {
+            try { appDatabase.insertMessage(msg.toMessageEntity(currentConversationId)) } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
@@ -615,7 +609,7 @@ class ChatActivity : AppCompatActivity() {
 
     private fun showPinnedMessagesBottomSheet() {
         lifecycleScope.launch {
-            val pinnedMessages = messageDao.getPinnedMessages(currentConversationId)
+            val pinnedMessages = appDatabase.getPinnedMessages(currentConversationId)
             withContext(Dispatchers.Main) {
                 if (pinnedMessages.isEmpty()) {
                     Toast.makeText(this@ChatActivity, "لا توجد رسائل مثبتة", Toast.LENGTH_SHORT).show()
@@ -717,9 +711,9 @@ class ChatActivity : AppCompatActivity() {
             val newContent = etNewContent.text.toString().trim()
             val reason = etReason.text.toString().trim()
             if (newContent.isNotEmpty()) {
-                lifecycleScope.launch {
+                lifecycleScope.launch(Dispatchers.IO) {
                     try {
-                        messageDao.updateMessageContent(
+                        appDatabase.updateMessageContent(
                             messageId = msg.id,
                             newContent = newContent,
                             originalContent = msg.content,
