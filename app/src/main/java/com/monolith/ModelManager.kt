@@ -1,14 +1,21 @@
 package com.monolith
 
 import android.content.Context
-import com.arm.aichat.InferenceEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 
 class ModelManager(private val context: Context) {
 
-    private var inferenceEngine: InferenceEngine? = null
+    // تحميل المكتبة الأصلية C++
+    init {
+        System.loadLibrary("monolith")
+    }
+
+    // ربط دوال C++ التي تحمل نفس الأسماء
+    private external fun nativeLoadModel(modelPath: String): String
+    private external fun nativeGenerate(prompt: String): String
+    private external fun nativeUnloadModel()
 
     fun loadModel(modelPath: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
         try {
@@ -18,8 +25,14 @@ class ModelManager(private val context: Context) {
                 return
             }
             
-            inferenceEngine = InferenceEngine(context, file.absolutePath)
-            onSuccess()
+            // استدعاء دالة C++ لتحميل النموذج
+            val result = nativeLoadModel(file.absolutePath)
+            
+            if (result.contains("بنجاح")) {
+                onSuccess()
+            } else {
+                onError(result)
+            }
         } catch (e: Exception) {
             onError("فشل تحميل النموذج: ${e.message}")
         }
@@ -28,10 +41,8 @@ class ModelManager(private val context: Context) {
     suspend fun generateResponse(prompt: String): String {
         return withContext(Dispatchers.IO) {
             try {
-                if (inferenceEngine == null) {
-                    return@withContext "النموذج غير محمل."
-                }
-                inferenceEngine?.generate(prompt) ?: "فشل التوليد."
+                // استدعاء دالة C++ لتوليد النص
+                nativeGenerate(prompt)
             } catch (e: Exception) {
                 "فشل التوليد: ${e.message}"
             }
@@ -39,7 +50,11 @@ class ModelManager(private val context: Context) {
     }
 
     fun unloadModel() {
-        inferenceEngine?.close()
-        inferenceEngine = null
+        try {
+            // استدعاء دالة C++ لتحرير الذاكرة
+            nativeUnloadModel()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 }
