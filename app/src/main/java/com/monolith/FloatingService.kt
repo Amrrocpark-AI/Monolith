@@ -508,4 +508,7 @@ class FloatingService : Service() {
         streamSelectorView?.let { windowManager.removeView(it) }
         agentChatView?.let { windowManager.removeView(it) }
     }
+
+    // السطر الوحيد الذي تمت إضافته
+    override fun onBind(intent: Intent?): IBinder? = null
 }
