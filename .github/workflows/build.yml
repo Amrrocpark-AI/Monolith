@@ -32,18 +32,21 @@ jobs:
       with:
         gradle-version: 8.0.2
 
-    # الخطوة الجديدة: فك تشفير ملف التوقيع من GitHub Secrets
     - name: Decode Fixed Keystore
       run: |
-        echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > $RUNNER_TEMP/fixed.keystore
+        echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > $RUNNER_TEMP/fixed.p12
 
     - name: Clean and Build with Gradle (Signed)
+      env:
+        STORE_PASS: ${{ secrets.KEYSTORE_PASSWORD }}
+        KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
       run: |
         gradle clean assembleDebug \
-          -Pandroid.injected.signing.store.file=$RUNNER_TEMP/fixed.keystore \
-          -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }} \
-          -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
-          -Pandroid.injected.signing.key.password=${{ secrets.KEYSTORE_PASSWORD }}
+          -Pandroid.injected.signing.store.file=$RUNNER_TEMP/fixed.p12 \
+          -Pandroid.injected.signing.store.password="$STORE_PASS" \
+          -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
+          -Pandroid.injected.signing.key.password="$STORE_PASS" \
+          -Pandroid.injected.signing.store.type=pkcs12
 
     - name: Create Release and Upload APK
       uses: softprops/action-gh-release@v2
