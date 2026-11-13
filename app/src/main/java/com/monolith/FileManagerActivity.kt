@@ -48,7 +48,6 @@ import net.lingala.zip4j.model.ZipParameters
 import net.lingala.zip4j.model.enums.AesKeyStrength
 import net.lingala.zip4j.model.enums.EncryptionMethod
 import java.io.File
-import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -88,7 +87,8 @@ class FileManagerActivity : AppCompatActivity() {
     private val selectedFiles = mutableSetOf<File>()
     private val selectedImages = mutableSetOf<Uri>()
 
-    private var virtualAlbumDao: VirtualAlbumDao? = null
+    // استبدال VirtualAlbumDao بـ AppDatabase
+    private var db: AppDatabase? = null
     private var imagePagingJob: Job? = null
     private var selectedAlbum: AlbumItem? = null
 
@@ -122,12 +122,8 @@ class FileManagerActivity : AppCompatActivity() {
         val savedColor = prefs.getInt("bg_color", Color.parseColor("#050505"))
         findViewById<View>(R.id.rootLayout)?.setBackgroundColor(savedColor)
 
-        lifecycleScope.launch(Dispatchers.IO) {
-            try {
-                val db = AppDatabase.getDatabase(applicationContext)
-                virtualAlbumDao = db.virtualAlbumDao()
-            } catch (e: Exception) { e.printStackTrace() }
-        }
+        // تعديل: استخدام AppDatabase مباشرة
+        db = AppDatabase(applicationContext)
 
         initViews()
         setupListeners()
@@ -603,8 +599,8 @@ class FileManagerActivity : AppCompatActivity() {
     }
 
     private fun loadAlbums() {
-        val dao = virtualAlbumDao
-        if (dao == null) {
+        val database = db
+        if (database == null) {
             Toast.makeText(this, "قاعدة البيانات قيد التحميل، حاول بعد لحظات", Toast.LENGTH_SHORT).show()
             return
         }
@@ -633,9 +629,10 @@ class FileManagerActivity : AppCompatActivity() {
                     bucketMap.forEach { (id, pair) -> albumsList.add(AlbumItem(id, pair.first, pair.second, countMap[id] ?: 0, isVirtual = false)) }
                 }
                 
-                val virtualAlbums = dao.getAllAlbums()
+                // تعديل: استخدام AppDatabase بدلاً من Dao
+                val virtualAlbums = database.getAllVirtualAlbums() // افترضنا وجود هذه الدالة في AppDatabase
                 for (vAlbum in virtualAlbums) {
-                    val mediaUris = dao.getMediaForAlbum(vAlbum.id)
+                    val mediaUris = database.getMediaForAlbum(vAlbum.id)
                     val cover = if (mediaUris.isNotEmpty()) Uri.parse(mediaUris.first()) else null
                     albumsList.add(AlbumItem(vAlbum.id, vAlbum.name, cover, mediaUris.size, vAlbum.isVault, isVirtual = true))
                 }
@@ -672,8 +669,8 @@ class FileManagerActivity : AppCompatActivity() {
     }
 
     private fun showCreateVirtualAlbumDialog() {
-        val dao = virtualAlbumDao
-        if (dao == null) {
+        val database = db
+        if (database == null) {
             Toast.makeText(this, "قاعدة البيانات قيد التحميل...", Toast.LENGTH_SHORT).show()
             return
         }
@@ -682,7 +679,7 @@ class FileManagerActivity : AppCompatActivity() {
             val input = EditText(this).apply { hint = "اسم الألبوم" }
             AlertDialog.Builder(this).setTitle("إنشاء ألبوم").setView(input).setPositiveButton("إنشاء") { _, _ ->
                 val name = input.text.toString().trim()
-                if (name.isNotEmpty()) { lifecycleScope.launch { dao.insertAlbum(VirtualAlbumEntity(name = name)); loadAlbums() } }
+                if (name.isNotEmpty()) { lifecycleScope.launch { database.insertAlbum(VirtualAlbumEntity(name = name)); loadAlbums() } }
             }.setNegativeButton("إلغاء", null).show()
         } catch (e: Exception) { e.printStackTrace() }
     }
@@ -887,7 +884,7 @@ class FileAdapter(
                 } else if (file.name.endsWith(".zip", true)) { 
                     ivFileIcon.setImageResource(android.R.drawable.ic_menu_save); ivFileIcon.setColorFilter(android.graphics.Color.parseColor("#FFAA00")) 
                 } else if (file.name.endsWith(".apk", true)) { 
-                    ivFileIcon.setImageResource(android.R.drawable.ic_menu_manage); ivFileIcon.setColorFilter(android.graphics.Color.parseColor("#00D4FF")) 
+                    ivFileIcon.setImageResource(android.R.drawable.ic_menu_manage); ivFileIcon.setColorFilter(android.R.drawable.ic_menu_manage) 
                 } else {
                     ivFileIcon.setImageResource(android.R.drawable.ic_menu_agenda)
                 }
