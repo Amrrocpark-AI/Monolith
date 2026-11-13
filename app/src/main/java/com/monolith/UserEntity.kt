@@ -1,12 +1,6 @@
-
 package com.monolith
 
-import androidx.room.Entity
-import androidx.room.PrimaryKey
-
-@Entity(tableName = "user_profile")
 data class UserEntity(
-    @PrimaryKey
     val id: String, // معرف فريد للشخص (مثلاً بصمة الهاش)
     val name: String,
     val bio: String = "",
