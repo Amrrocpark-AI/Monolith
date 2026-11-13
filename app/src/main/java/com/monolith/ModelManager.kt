@@ -1,14 +1,14 @@
 package com.monolith
 
 import android.content.Context
-import com.arm.aichat.InferenceEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 
 class ModelManager(private val context: Context) {
 
-    private var inferenceEngine: InferenceEngine? = null
+    // تم تعليق InferenceEngine مؤقتاً لحين نجاح بناء C++
+    // private var inferenceEngine: InferenceEngine? = null
 
     fun loadModel(modelPath: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
         try {
@@ -17,9 +17,7 @@ class ModelManager(private val context: Context) {
                 onError("الملف غير موجود: $modelPath")
                 return
             }
-            
-            inferenceEngine = InferenceEngine(context, file.absolutePath)
-            onSuccess()
+            onError("المحرك (C++) غير متاح حالياً. البناء قيد الإصلاح.")
         } catch (e: Exception) {
             onError("فشل تحميل النموذج: ${e.message}")
         }
@@ -27,19 +25,12 @@ class ModelManager(private val context: Context) {
 
     suspend fun generateResponse(prompt: String): String {
         return withContext(Dispatchers.IO) {
-            try {
-                if (inferenceEngine == null) {
-                    return@withContext "النموذج غير محمل."
-                }
-                inferenceEngine?.generate(prompt) ?: "فشل التوليد."
-            } catch (e: Exception) {
-                "فشل التوليد: ${e.message}"
-            }
+            return@withContext "المحرك غير متاح حالياً."
         }
     }
 
     fun unloadModel() {
-        inferenceEngine?.close()
-        inferenceEngine = null
+        // inferenceEngine?.close()
+        // inferenceEngine = null
     }
 }
