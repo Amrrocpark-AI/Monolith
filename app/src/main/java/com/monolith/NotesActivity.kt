@@ -17,7 +17,7 @@ import kotlinx.coroutines.withContext
 
 class NotesActivity : AppCompatActivity() {
 
-    private lateinit var noteDao: NoteDao
+    private lateinit var db: AppDatabase
     private lateinit var noteAdapter: NoteAdapter
     private var notesList: MutableList<NoteEntity> = mutableListOf()
 
@@ -25,8 +25,7 @@ class NotesActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_notes)
 
-        val db = AppDatabase.getDatabase(applicationContext)
-        noteDao = db.noteDao()
+        db = AppDatabase(applicationContext)
 
         val recyclerViewNotes = findViewById<RecyclerView>(R.id.recyclerViewNotes)
         recyclerViewNotes.layoutManager = LinearLayoutManager(this)
@@ -46,7 +45,8 @@ class NotesActivity : AppCompatActivity() {
     private fun loadNotes() {
         lifecycleScope.launch {
             try {
-                val notes = withContext(Dispatchers.IO) { noteDao.getAllNotes() }
+                // استخدام AppDatabase بدلاً من NoteDao
+                val notes = withContext(Dispatchers.IO) { db.getAllNotes() }
                 notesList.clear()
                 notesList.addAll(notes)
                 noteAdapter.updateNotes(notesList)
@@ -80,7 +80,8 @@ class NotesActivity : AppCompatActivity() {
                 if (title.isNotEmpty() || content.isNotEmpty()) {
                     val note = NoteEntity(title = title, content = content)
                     lifecycleScope.launch {
-                        withContext(Dispatchers.IO) { noteDao.insertNote(note) }
+                        // استخدام AppDatabase
+                        withContext(Dispatchers.IO) { db.insertNote(note) }
                         loadNotes()
                         Toast.makeText(this@NotesActivity, "تم حفظ المذكرة", Toast.LENGTH_SHORT).show()
                     }
@@ -114,7 +115,8 @@ class NotesActivity : AppCompatActivity() {
                 if (title.isNotEmpty() || content.isNotEmpty()) {
                     val updatedNote = note.copy(title = title, content = content)
                     lifecycleScope.launch {
-                        withContext(Dispatchers.IO) { noteDao.insertNote(updatedNote) }
+                        // استخدام AppDatabase
+                        withContext(Dispatchers.IO) { db.insertNote(updatedNote) }
                         loadNotes()
                         Toast.makeText(this@NotesActivity, "تم تعديل المذكرة", Toast.LENGTH_SHORT).show()
                     }
@@ -130,7 +132,8 @@ class NotesActivity : AppCompatActivity() {
             .setMessage("هل أنت متأكد من حذف '${note.title}'؟")
             .setPositiveButton("حذف") { _, _ ->
                 lifecycleScope.launch {
-                    withContext(Dispatchers.IO) { noteDao.deleteNote(note.id) }
+                    // استخدام AppDatabase
+                    withContext(Dispatchers.IO) { db.deleteNote(note.id) }
                     loadNotes()
                     Toast.makeText(this@NotesActivity, "تم حذف المذكرة", Toast.LENGTH_SHORT).show()
                 }
