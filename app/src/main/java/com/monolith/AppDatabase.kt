@@ -35,7 +35,6 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
         onCreate(db)
     }
 
-    // دوال الرسائل
     fun insertMessage(message: MessageEntity) {
         val db = writableDatabase
         val values = ContentValues().apply {
@@ -160,7 +159,6 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
         db.close()
     }
 
-    // دوال الذاكرة
     fun insertMemory(memory: MemoryEntity) {
         val db = writableDatabase
         val values = ContentValues().apply {
@@ -194,7 +192,6 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
         return list
     }
 
-    // دوال المذكرة
     fun insertNote(note: NoteEntity) {
         val db = writableDatabase
         val values = ContentValues().apply {
@@ -246,7 +243,6 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
         db.close()
     }
 
-    // دوال الألبوم
     fun insertAlbum(album: VirtualAlbumEntity) {
         val db = writableDatabase
         val values = ContentValues().apply {
@@ -292,7 +288,6 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
         db.close()
     }
 
-    // دوال المحادثة
     fun insertConversation(conversation: ConversationEntity) {
         val db = writableDatabase
         val values = ContentValues().apply {
@@ -303,5 +298,27 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
         }
         db.insertWithOnConflict("conversations", null, values, SQLiteDatabase.CONFLICT_REPLACE)
         db.close()
+    }
+
+    // --- الدالة الجديدة التي تمت إضافتها ---
+    fun getAllVirtualAlbums(): List<VirtualAlbumEntity> {
+        val db = readableDatabase
+        val cursor = db.rawQuery("SELECT * FROM virtual_albums", null)
+        val list = mutableListOf<VirtualAlbumEntity>()
+        if (cursor.moveToFirst()) {
+            do {
+                list.add(VirtualAlbumEntity(
+                    id = cursor.getString(cursor.getColumnIndexOrThrow("id")),
+                    name = cursor.getString(cursor.getColumnIndexOrThrow("name")),
+                    coverUri = cursor.getString(cursor.getColumnIndexOrThrow("coverUri")),
+                    createdAt = cursor.getLong(cursor.getColumnIndexOrThrow("createdAt")),
+                    isVault = cursor.getInt(cursor.getColumnIndexOrThrow("isVault")) == 1,
+                    sortOrder = cursor.getInt(cursor.getColumnIndexOrThrow("sortOrder"))
+                ))
+            } while (cursor.moveToNext())
+        }
+        cursor.close()
+        db.close()
+        return list
     }
 }
