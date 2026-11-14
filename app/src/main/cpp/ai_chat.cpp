@@ -10,6 +10,7 @@
 
 static llama_model* model = nullptr;
 static llama_context* ctx = nullptr;
+static const llama_vocab* vocab = nullptr;
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_monolith_ModelManager_nativeLoadModel(JNIEnv* env, jobject, jstring modelPath) {
@@ -18,10 +19,7 @@ Java_com_monolith_ModelManager_nativeLoadModel(JNIEnv* env, jobject, jstring mod
 
     llama_backend_init();
     llama_model_params model_params = llama_model_default_params();
-    
-    // ميزة توفير الذاكرة (mmap)
-    model_params.use_mmap = true; 
-    model_params.n_gpu_layers = 0;
+    model_params.use_mmap = true;
 
     model = llama_load_model_from_file(path, model_params);
     env->ReleaseStringUTFChars(modelPath, path);
@@ -29,6 +27,9 @@ Java_com_monolith_ModelManager_nativeLoadModel(JNIEnv* env, jobject, jstring mod
     if (model == nullptr) {
         return env->NewStringUTF("فشل تحميل النموذج. تأكد من صيغة GGUF.");
     }
+
+    // الحصول على المفردات (Vocab) من النموذج
+    vocab = llama_model_get_vocab(model);
 
     llama_context_params ctx_params = llama_context_default_params();
     ctx_params.n_ctx = 2048;
@@ -46,67 +47,64 @@ Java_com_monolith_ModelManager_nativeLoadModel(JNIEnv* env, jobject, jstring mod
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_monolith_ModelManager_nativeGenerate(JNIEnv* env, jobject, jstring prompt) {
-    if (model == nullptr || ctx == nullptr) {
+    if (model == nullptr || ctx == nullptr || vocab == nullptr) {
         return env->NewStringUTF("النموذج غير محمل.");
     }
 
     const char* promptStr = env->GetStringUTFChars(prompt, nullptr);
     LOGI("Generating for: %s", promptStr);
 
-    // 1. تحويل النص إلى Tokens
-    std::vector<llama_token> tokens(2048);
-    int n_tokens = llama_tokenize(model, promptStr, strlen(promptStr), tokens.data(), tokens.size(), true, false);
-    env->ReleaseStringUTFChars(prompt, promptStr);
+    // 1. حساب عدد الرموز المطلوبة أولاً
+    int n_prompt = -llama_tokenize(vocab, promptStr, strlen(promptStr), NULL, 0, true, true);
+    if (n_prompt < 0) {
+        env->ReleaseStringUTFChars(prompt, promptStr);
+        return env->NewStringUTF("فشل حساب عدد الرموز.");
+    }
 
-    if (n_tokens < 0) {
+    std::vector<llama_token> tokens(n_prompt);
+    if (llama_tokenize(vocab, promptStr, strlen(promptStr), tokens.data(), tokens.size(), true, true) < 0) {
+        env->ReleaseStringUTFChars(prompt, promptStr);
         return env->NewStringUTF("فشل تحويل النص إلى رموز.");
     }
-    tokens.resize(n_tokens);
+    env->ReleaseStringUTFChars(prompt, promptStr);
 
-    // 2. إدخال الرموز إلى النموذج
-    llama_batch batch = llama_batch_init(512, 0, 1);
-    for (int i = 0; i < n_tokens; i++) {
-        llama_batch_add(batch, tokens[i], i, {0}, false);
-    }
-    
+    // 2. إدخال الرموز إلى النموذج (Prompt Evaluation)
+    llama_batch batch = llama_batch_get_one(tokens.data(), tokens.size());
     if (llama_decode(ctx, batch) != 0) {
-        llama_batch_free(batch);
         return env->NewStringUTF("فشل في معالجة النص.");
     }
 
-    // 3. حلقة التوليد (Generation Loop)
+    // 3. حلقة التوليد
     std::string result = "";
-    int n_predict = 256; // الحد الأقصى لعدد الكلمات المولدة
-    int n_cur = batch.n_tokens;
-    
-    // استخدام أبسط طريقة اختيار (Greedy)
+    int n_predict = 256;
+    int n_cur = tokens.size();
+
     llama_sampler* smpl = llama_sampler_chain_init(llama_sampler_chain_default_params());
     llama_sampler_chain_add(smpl, llama_sampler_init_greedy());
 
     for (int i = 0; i < n_predict; i++) {
         llama_token id = llama_sampler_sample(smpl, ctx, -1);
-        
-        if (id == llama_token_eos(model)) {
+
+        // التحقق من نهاية التوليد
+        if (llama_vocab_is_eog(vocab, id)) {
             break;
         }
 
         char buf[128];
-        int n = llama_token_to_piece(model, id, buf, sizeof(buf), 0, true);
+        int n = llama_token_to_piece(vocab, id, buf, sizeof(buf), 0, true);
         if (n > 0) {
             result.append(buf, n);
         }
 
-        llama_batch_add(batch, id, n_cur, {0}, true);
-        n_cur++;
-        
-        if (llama_decode(ctx, batch) != 0) {
+        // إدخال الرمز الجديد باستخدام llama_batch_get_one
+        llama_batch single_batch = llama_batch_get_one(&id, 1);
+        if (llama_decode(ctx, single_batch) != 0) {
             break;
         }
+        n_cur++;
     }
 
-    // تنظيف الذاكرة
     llama_sampler_free(smpl);
-    llama_batch_free(batch);
 
     return env->NewStringUTF(result.c_str());
 }
@@ -121,5 +119,6 @@ Java_com_monolith_ModelManager_nativeUnloadModel(JNIEnv*, jobject) {
         llama_free_model(model);
         model = nullptr;
     }
+    vocab = nullptr;
     llama_backend_free();
 }
