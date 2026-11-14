@@ -36,22 +36,36 @@ jobs:
       run: |
         echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > $RUNNER_TEMP/fixed.p12
 
-    - name: Clean and Build with Gradle (Signed)
+    - name: Build Unsigned APK
+      run: |
+        gradle clean assembleDebug
+
+    - name: Zipalign and Sign APK
       env:
         STORE_PASS: ${{ secrets.KEYSTORE_PASSWORD }}
         KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
       run: |
-        gradle clean assembleDebug \
-          -Pandroid.injected.signing.store.file=$RUNNER_TEMP/fixed.p12 \
-          -Pandroid.injected.signing.store.password="$STORE_PASS" \
-          -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
-          -Pandroid.injected.signing.key.password="$STORE_PASS" \
-          -Pandroid.injected.signing.store.type=pkcs12
+        BUILD_TOOLS=$(ls $ANDROID_HOME/build-tools | sort -V | tail -1)
+        APKSIGNER="$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner"
+        ZIPALIGN="$ANDROID_HOME/build-tools/$BUILD_TOOLS/zipalign"
+
+        $ZIPALIGN -v -p 4 app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/app-debug-aligned.apk
+
+        $APKSIGNER sign \
+          --ks "$RUNNER_TEMP/fixed.p12" \
+          --ks-type pkcs12 \
+          --ks-pass "env:STORE_PASS" \
+          --key-pass "env:STORE_PASS" \
+          --ks-key-alias "$KEY_ALIAS" \
+          --out app/build/outputs/apk/debug/app-debug-signed.apk \
+          app/build/outputs/apk/debug/app-debug-aligned.apk
+
+        $APKSIGNER verify --print-certs app/build/outputs/apk/debug/app-debug-signed.apk
 
     - name: Create Release and Upload APK
       uses: softprops/action-gh-release@v2
       with:
-        files: app/build/outputs/apk/debug/app-debug.apk
+        files: app/build/outputs/apk/debug/app-debug-signed.apk
         tag_name: v1.0.${{ github.run_number }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
