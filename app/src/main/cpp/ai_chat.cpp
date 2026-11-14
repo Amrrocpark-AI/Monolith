@@ -33,7 +33,7 @@ Java_com_monolith_ModelManager_nativeLoadModel(JNIEnv* env, jobject, jstring mod
     vocab = llama_model_get_vocab(model);
 
     llama_context_params ctx_params = llama_context_default_params();
-    ctx_params.n_ctx = 2048; // يمكن زيادتها لاحقاً للأجهزة القوية
+    ctx_params.n_ctx = 2048; 
     ctx_params.n_threads = 4;
     
     ctx = llama_init_from_model(model, ctx_params);
@@ -55,7 +55,6 @@ Java_com_monolith_ModelManager_nativeGenerate(JNIEnv* env, jobject, jstring prom
 
     const char* promptStr = env->GetStringUTFChars(prompt, nullptr);
 
-    // حساب عدد الرموز المطلوبة
     int n_prompt = -llama_tokenize(vocab, promptStr, strlen(promptStr), NULL, 0, true, true);
     if (n_prompt < 0) {
         env->ReleaseStringUTFChars(prompt, promptStr);
@@ -69,8 +68,8 @@ Java_com_monolith_ModelManager_nativeGenerate(JNIEnv* env, jobject, jstring prom
     }
     env->ReleaseStringUTFChars(prompt, promptStr);
 
-    // إدخال الرموز الأولية (Prompt) مع تحديد الموضع (pos_0 = 0) والتسلسل (seq_id = 0)
-    llama_batch batch = llama_batch_get_one(tokens.data(), tokens.size(), 0, 0);
+    // إدخال الرموز الأولية (Prompt) - المعاملان 2 فقط
+    llama_batch batch = llama_batch_get_one(tokens.data(), tokens.size());
     if (llama_decode(ctx, batch) != 0) {
         return env->NewStringUTF("فشل في معالجة النص.");
     }
@@ -78,13 +77,12 @@ Java_com_monolith_ModelManager_nativeGenerate(JNIEnv* env, jobject, jstring prom
     std::string result = "";
     int n_predict = 256;
     int n_cur = tokens.size();
-    int n_ctx = llama_n_ctx(ctx); // جلب حجم السياق ديناميكياً
+    int n_ctx = llama_n_ctx(ctx); 
 
     llama_sampler* smpl = llama_sampler_chain_init(llama_sampler_chain_default_params());
     llama_sampler_chain_add(smpl, llama_sampler_init_greedy());
 
     for (int i = 0; i < n_predict; i++) {
-        // حماية السياق: التوقف قبل امتلاء الذاكرة لمنع التوليد اللانهائي
         if (n_cur >= n_ctx - 4) {
             LOGI("Context limit reached. Stopping generation.");
             break; 
@@ -102,8 +100,8 @@ Java_com_monolith_ModelManager_nativeGenerate(JNIEnv* env, jobject, jstring prom
             result.append(buf, n);
         }
 
-        // تمرير الرمز الجديد مع تحديد موقعه (n_cur) والتسلسل (0)
-        llama_batch single_batch = llama_batch_get_one(&id, 1, n_cur, 0);
+        // إدخال الرمز الجديد - المعاملان 2 فقط
+        llama_batch single_batch = llama_batch_get_one(&id, 1);
         n_cur++;
         
         if (llama_decode(ctx, single_batch) != 0) {
