@@ -15,7 +15,8 @@ if(NOT llama_POPULATED)
     FetchContent_Populate(llama)
 endif()
 
-add_library(monolith SHARED ai_chat.cpp)
+# التعديل هنا: إضافة ملف معالج الرؤية الجديد
+add_library(monolith SHARED ai_chat.cpp vision_processor.cpp)
 
 target_include_directories(monolith PRIVATE
     ${llama_SOURCE_DIR}
