@@ -6,7 +6,7 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import java.util.UUID
 
-class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_database", null, 4) { // تم رفع الإصدار إلى 4
+class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_database", null, 5) { // تم رفع الإصدار إلى 5
 
     override fun onCreate(db: SQLiteDatabase) {
         // الجداول القديمة (من الإصدار 1)
@@ -36,6 +36,9 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
         // الجداول الجديدة (الإصدار 4 - تتبع حياة الوكيل وتقييم الأداء)
         db.execSQL("CREATE TABLE IF NOT EXISTS agent_lifecycle_log (id TEXT PRIMARY KEY, event_type TEXT, reason TEXT, timestamp INTEGER, duration_active INTEGER)")
         db.execSQL("CREATE TABLE IF NOT EXISTS agent_performance_log (id TEXT PRIMARY KEY, goal TEXT, status TEXT, steps_taken INTEGER, latency_ms INTEGER, self_rating INTEGER, reflection_note TEXT, suggested_solution TEXT, timestamp INTEGER)")
+
+        // الجداول الجديدة (الإصدار 5 - استكمال المهام)
+        db.execSQL("CREATE TABLE IF NOT EXISTS agent_task_queue (id TEXT PRIMARY KEY, task_goal TEXT, current_step INTEGER, status TEXT, timestamp INTEGER)")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -57,6 +60,10 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
         if (oldVersion < 4) {
             db.execSQL("CREATE TABLE IF NOT EXISTS agent_lifecycle_log (id TEXT PRIMARY KEY, event_type TEXT, reason TEXT, timestamp INTEGER, duration_active INTEGER)")
             db.execSQL("CREATE TABLE IF NOT EXISTS agent_performance_log (id TEXT PRIMARY KEY, goal TEXT, status TEXT, steps_taken INTEGER, latency_ms INTEGER, self_rating INTEGER, reflection_note TEXT, suggested_solution TEXT, timestamp INTEGER)")
+        }
+        // هجرة آمنة للإصدار 5 (بدون حذف بيانات)
+        if (oldVersion < 5) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS agent_task_queue (id TEXT PRIMARY KEY, task_goal TEXT, current_step INTEGER, status TEXT, timestamp INTEGER)")
         }
     }
 
@@ -547,7 +554,6 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
     // الدوال الجديدة (الإصدار 4 - تتبع حياة الوكيل وتقييم الأداء)
     // ==========================================
 
-    // 1. دوال سجل حياة الوكيل (AgentLifecycleLog)
     fun insertLifecycleEvent(eventType: String, reason: String, durationActive: Int) {
         val db = writableDatabase
         val values = ContentValues().apply {
@@ -581,7 +587,6 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
         return list
     }
 
-    // 2. دوال تقييم الأداء (AgentPerformanceLog)
     fun insertPerformanceLog(goal: String, status: String, steps: Int, latencyMs: Long, selfRating: Int, reflection: String, solution: String) {
         val db = writableDatabase
         val values = ContentValues().apply {
@@ -621,5 +626,45 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
         cursor.close()
         db.close()
         return list
+    }
+
+    // ==========================================
+    // الدوال الجديدة (الإصدار 5 - استكمال المهام)
+    // ==========================================
+    fun insertTaskToQueue(taskGoal: String) {
+        val db = writableDatabase
+        val values = ContentValues().apply {
+            put("id", UUID.randomUUID().toString())
+            put("task_goal", taskGoal)
+            put("current_step", 0)
+            put("status", "PENDING")
+            put("timestamp", System.currentTimeMillis())
+        }
+        db.insert("agent_task_queue", null, values)
+        db.close()
+    }
+
+    fun getPendingTask(): Map<String, String>? {
+        val db = readableDatabase
+        val cursor = db.rawQuery("SELECT * FROM agent_task_queue WHERE status = 'PENDING' ORDER BY timestamp ASC LIMIT 1", null)
+        var map: MutableMap<String, String>? = null
+        if (cursor.moveToFirst()) {
+            map = mutableMapOf()
+            map["id"] = cursor.getString(cursor.getColumnIndexOrThrow("id"))
+            map["task_goal"] = cursor.getString(cursor.getColumnIndexOrThrow("task_goal"))
+            map["current_step"] = cursor.getInt(cursor.getColumnIndexOrThrow("current_step")).toString()
+        }
+        cursor.close()
+        db.close()
+        return map
+    }
+
+    fun updateTaskStatus(taskId: String, status: String) {
+        val db = writableDatabase
+        val values = ContentValues().apply {
+            put("status", status)
+        }
+        db.update("agent_task_queue", values, "id = ?", arrayOf(taskId))
+        db.close()
     }
 }
