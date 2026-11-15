@@ -34,6 +34,8 @@ import kotlinx.coroutines.withContext
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
+import java.io.File
+import java.io.FileOutputStream
 import java.io.InputStream
 
 class ChatActivity : AppCompatActivity() {
@@ -51,12 +53,14 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var securePrefs: androidx.security.crypto.EncryptedSharedPreferences
     private lateinit var appDatabase: AppDatabase
     private lateinit var modelManager: ModelManager
-    private lateinit var agentBrain: AgentBrain // العقل الجديد
+    private lateinit var agentBrain: AgentBrain
     private var messageList: MutableList<ChatMessage> = mutableListOf()
     private val currentConversationId = "main_chat" 
     
     private var ttsManager: TtsManager? = null
+    private var isModelLoaded = false
 
+    // اختيار الصور
     private val pickImagesLauncher = registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris: List<Uri> ->
         if (uris.isNotEmpty()) {
             selectedImageUris.addAll(uris)
@@ -64,6 +68,7 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
+    // اختيار المستندات النصية
     private val pickDocumentLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) {
             try {
@@ -84,6 +89,47 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
+    // *** اختيار ملف النموذج (GGUF) ***
+    private val pickModelLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri != null) {
+            lifecycleScope.launch(Dispatchers.IO) {
+                try {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(this@ChatActivity, "جاري نسخ الملف وتحميله... قد يستغرق بعض الوقت", Toast.LENGTH_LONG).show()
+                    }
+
+                    // نسخ الملف إلى الذاكرة الداخلية للتطبيق
+                    val inputStream = contentResolver.openInputStream(uri)
+                    val modelFile = File(filesDir, "model.gguf")
+                    val outputStream = FileOutputStream(modelFile)
+                    inputStream?.copyTo(outputStream)
+                    inputStream?.close()
+                    outputStream.close()
+
+                    // استدعاء المحرك C++ لتحميل النموذج
+                    modelManager.loadModel(modelFile.absolutePath, 
+                        onSuccess = {
+                            runOnUiThread {
+                                isModelLoaded = true
+                                Toast.makeText(this@ChatActivity, "تم تحميل النموذج في الذاكرة بنجاح!", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        onError = { error ->
+                            runOnUiThread {
+                                isModelLoaded = false
+                                Toast.makeText(this@ChatActivity, "فشل التحميل: $error", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    )
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(this@ChatActivity, "فشل نسخ الملف: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_chat)
@@ -92,7 +138,7 @@ class ChatActivity : AppCompatActivity() {
         
         appDatabase = AppDatabase(applicationContext)
         modelManager = ModelManager(applicationContext)
-        agentBrain = AgentBrain(modelManager) // تهيئة العقل
+        agentBrain = AgentBrain(modelManager)
         
         lifecycleScope.launch(Dispatchers.IO) {
             withContext(Dispatchers.Main) {
@@ -147,6 +193,19 @@ class ChatActivity : AppCompatActivity() {
 
         val rootLayout = findViewById<LinearLayout>(R.id.rootLayout)
         val topBar = rootLayout.getChildAt(0) as LinearLayout
+
+        // *** زر تحميل النموذج الجديد ***
+        val btnLoadModel = ImageButton(this).apply {
+            setImageResource(android.R.drawable.ic_menu_save) // أيقونة الحفظ
+            setBackgroundColor(Color.TRANSPARENT)
+            setColorFilter(Color.parseColor("#00FF00")) // لون أخضر لتمييزه
+            layoutParams = LinearLayout.LayoutParams(dpToPx(48), dpToPx(48))
+            setOnClickListener {
+                pickModelLauncher.launch(arrayOf("*/*"))
+            }
+        }
+        topBar.addView(btnLoadModel, topBar.childCount - 1)
+        // ==================================
         
         val btnPinnedBox = ImageButton(this).apply {
             setImageResource(R.drawable.ic_pinned)
@@ -329,6 +388,12 @@ class ChatActivity : AppCompatActivity() {
                 // ========================================================
                 if (message.startsWith("#")) {
                     val task = message.substring(1).trim()
+                    
+                    if (!isModelLoaded) {
+                        Toast.makeText(this, "يرجى تحميل النموذج أولاً بالضغط على الزر الأخضر في الأعلى", Toast.LENGTH_LONG).show()
+                        return
+                    }
+
                     lifecycleScope.launch {
                         val thinkingMsg = ChatMessage(role = MessageRole.AI, content = "جاري تنفيذ المهمة عبر الوكيل...", colorHex = "#1A1A1A", isThinking = true)
                         messageList.add(thinkingMsg)
