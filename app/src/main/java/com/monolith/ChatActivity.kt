@@ -38,6 +38,7 @@ import retrofit2.Response
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
+import java.util.UUID
 
 class ChatActivity : AppCompatActivity() {
 
@@ -51,6 +52,7 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var tvAppTitle: TextView
     private lateinit var btnLoadModel: ImageButton
     private lateinit var btnAgents: ImageButton
+    private lateinit var btnThreads: ImageButton // زر الخيوط اللونية الجديد
 
     private var themeColorHex = "#00D4FF"
     private lateinit var securePrefs: androidx.security.crypto.EncryptedSharedPreferences
@@ -62,7 +64,7 @@ class ChatActivity : AppCompatActivity() {
     
     private var ttsManager: TtsManager? = null
     private var isModelLoaded = false
-    private var activeAgentId = 0 // 0 هو الوكيل الرئيسي
+    private var activeAgentId = 0
 
     private val pickImagesLauncher = registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris: List<Uri> ->
         if (uris.isNotEmpty()) {
@@ -114,7 +116,7 @@ class ChatActivity : AppCompatActivity() {
                             runOnUiThread {
                                 isModelLoaded = true
                                 btnLoadModel.setColorFilter(Color.GREEN)
-                                activeAgentId = 0 // إعادة تعيين للوكيل الرئيسي عند تحميل نموذج جديد
+                                activeAgentId = 0
                                 Toast.makeText(this@ChatActivity, "تم تحميل النموذج بنجاح!", Toast.LENGTH_SHORT).show()
                             }
                         },
@@ -199,7 +201,6 @@ class ChatActivity : AppCompatActivity() {
         val rootLayout = findViewById<LinearLayout>(R.id.rootLayout)
         val topBar = rootLayout.getChildAt(0) as LinearLayout
 
-        // زر تحميل النموذج
         btnLoadModel = ImageButton(this).apply {
             setImageResource(android.R.drawable.ic_menu_save)
             setBackgroundColor(Color.TRANSPARENT)
@@ -209,15 +210,24 @@ class ChatActivity : AppCompatActivity() {
         }
         topBar.addView(btnLoadModel, topBar.childCount - 1)
 
-        // زر الوكلاء المتعددين (الجديد)
         btnAgents = ImageButton(this).apply {
-            setImageResource(android.R.drawable.ic_menu_add) // يمكنك تغيير الأيقونة
+            setImageResource(android.R.drawable.ic_menu_add)
             setBackgroundColor(Color.TRANSPARENT)
-            setColorFilter(Color.parseColor("#FFAA00")) // لون برتقالي للتمييز
+            setColorFilter(Color.parseColor("#FFAA00"))
             layoutParams = LinearLayout.LayoutParams(dpToPx(48), dpToPx(48))
             setOnClickListener { showAgentsBottomSheet() }
         }
         topBar.addView(btnAgents, topBar.childCount - 1)
+
+        // زر الخيوط اللونية الجديد
+        btnThreads = ImageButton(this).apply {
+            setImageResource(android.R.drawable.ic_menu_agenda) // أيقونة قائمة
+            setBackgroundColor(Color.TRANSPARENT)
+            setColorFilter(Color.parseColor("#00D4FF"))
+            layoutParams = LinearLayout.LayoutParams(dpToPx(48), dpToPx(48))
+            setOnClickListener { showThreadsBottomSheet() }
+        }
+        topBar.addView(btnThreads, topBar.childCount - 1)
         
         val btnPinnedBox = ImageButton(this).apply {
             setImageResource(R.drawable.ic_pinned)
@@ -275,6 +285,130 @@ class ChatActivity : AppCompatActivity() {
         
         checkAndLoadModelOnStartup()
     }
+
+    // ========================================================
+    // إدارة الخيوط اللونية والعقد
+    // ========================================================
+    private fun showThreadsBottomSheet() {
+        val bottomSheetDialog = BottomSheetDialog(this)
+        val view = layoutInflater.inflate(android.R.layout.list_content, null)
+        val listView = view.findViewById<ListView>(android.R.id.list)
+        
+        val items = arrayOf(
+            "إنشاء عقدة (لون وتعريف) جديدة",
+            "ربط رسالتين بخيط",
+            "عرض العقد المتاحة"
+        )
+        
+        listView.adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, items)
+        listView.setOnItemClickListener { _, _, position, _ ->
+            when(position) {
+                0 -> { bottomSheetDialog.dismiss(); showCreateNodeDialog() }
+                1 -> { bottomSheetDialog.dismiss(); showLinkMessagesDialog() }
+                2 -> { bottomSheetDialog.dismiss(); showNodesListDialog() }
+            }
+        }
+        bottomSheetDialog.setContentView(view)
+        bottomSheetDialog.show()
+    }
+
+    private fun showCreateNodeDialog() {
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dpToPx(16), dpToPx(16), dpToPx(16), dpToPx(16))
+        }
+
+        val etName = EditText(this).apply { hint = "اسم العقدة (مثلاً: تحذير، فكرة)" }
+        val etDefinition = EditText(this).apply { hint = "تعريف العقدة (ماذا يعني هذا اللون؟)" }
+        
+        val spinnerColor = Spinner(this)
+        val colors = arrayOf("أحمر (#FF0000)", "أزرق (#0000FF)", "أخضر (#00FF00)", "أصفر (#FFFF00)", "بنفسجي (#800080)")
+        val colorHexes = arrayOf("#FF0000", "#0000FF", "#00FF00", "#FFFF00", "#800080")
+        spinnerColor.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, colors)
+
+        layout.addView(etName)
+        layout.addView(etDefinition)
+        layout.addView(spinnerColor)
+
+        AlertDialog.Builder(this)
+            .setTitle("إنشاء عقدة لونية")
+            .setView(layout)
+            .setPositiveButton("حفظ") { _, _ ->
+                val name = etName.text.toString().trim()
+                val def = etDefinition.text.toString().trim()
+                val hex = colorHexes[spinnerColor.selectedItemPosition]
+                if (name.isNotEmpty() && def.isNotEmpty()) {
+                    appDatabase.insertChromaticNode(colorHex = hex, name = name, definition = def)
+                    Toast.makeText(this, "تم إنشاء العقدة بنجاح", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("إلغاء", null)
+            .show()
+    }
+
+    private fun showNodesListDialog() {
+        val nodes = appDatabase.getAllChromaticNodes()
+        if (nodes.isEmpty()) {
+            Toast.makeText(this, "لا توجد عقد (ألوان) مضافة بعد", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val displayList = nodes.map { "${it["name"]} (${it["color_hex"]}): ${it["definition"]}" }
+        AlertDialog.Builder(this)
+            .setTitle("العقد المتاحة")
+            .setItems(displayList.toTypedArray(), null)
+            .setPositiveButton("حسناً", null)
+            .show()
+    }
+
+    private fun showLinkMessagesDialog() {
+        if (messageList.size < 2) {
+            Toast.makeText(this, "تحتاج إلى رسالتين على الأقل للربط", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val nodes = appDatabase.getAllChromaticNodes()
+        if (nodes.isEmpty()) {
+            Toast.makeText(this, "يرجى إنشاء عقدة (لون) أولاً", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        // 1. اختيار الرسالة المصدر
+        val msgOptions = messageList.mapIndexed { index, msg -> "$index: ${msg.content.take(20)}..." }.toTypedArray()
+        
+        AlertDialog.Builder(this)
+            .setTitle("اختر الرسالة المصدر")
+            .setItems(msgOptions) { _, sourceIndex ->
+                // 2. اختيار الرسالة الهدف
+                AlertDialog.Builder(this)
+                    .setTitle("اختر الرسالة الهدف")
+                    .setItems(msgOptions) { _, targetIndex ->
+                        if (sourceIndex != targetIndex) {
+                            // 3. اختيار اللون (العقدة)
+                            val nodeOptions = nodes.map { it["name"] ?: "لون" }.toTypedArray()
+                            AlertDialog.Builder(this)
+                                .setTitle("اختر لون الخيط")
+                                .setItems(nodeOptions) { _, nodeIndex ->
+                                    val sourceId = messageList[sourceIndex].id
+                                    val targetId = messageList[targetIndex].id
+                                    val nodeId = nodes[nodeIndex]["id"]!!
+                                    
+                                    appDatabase.insertMessageThread(sourceId, targetId, nodeId)
+                                    Toast.makeText(this, "تم ربط الرسالتين بنجاح", Toast.LENGTH_SHORT).show()
+                                    
+                                    // تحديث الواجهة (اختياري، يمكننا إضافة مؤشر بصري لاحقاً)
+                                    chatAdapter.notifyDataSetChanged()
+                                }
+                                .show()
+                        } else {
+                            Toast.makeText(this, "لا يمكن ربط الرسالة بنفسها", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    .show()
+            }
+            .show()
+    }
+    // ========================================================
 
     private fun showAgentsBottomSheet() {
         val bottomSheetDialog = BottomSheetDialog(this)
@@ -473,7 +607,6 @@ class ChatActivity : AppCompatActivity() {
                         chatAdapter.updateMessages(messageList)
                         scrollToBottom()
 
-                        // تمرير activeAgentId إلى العقل
                         val result = agentBrain.executeTask(task, agentId = activeAgentId)
                         
                         val updatedThinking = thinkingMsg.copy(content = "${agentPrefix}النتيجة: $result", isThinking = false)
