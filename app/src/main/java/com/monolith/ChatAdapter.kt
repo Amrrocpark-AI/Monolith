@@ -18,9 +18,6 @@ import com.bumptech.glide.Glide
 import io.noties.markwon.Markwon
 import io.noties.markwon.ext.tables.TablePlugin
 import io.noties.markwon.ext.tables.TableTheme
-import io.noties.markwon.syntax.Prism4jTheme
-import io.noties.markwon.syntax.SyntaxHighlightPlugin
-import io.noties.prism4j.Prism4j
 
 class ChatAdapter(
     private val context: Context,
@@ -32,19 +29,18 @@ class ChatAdapter(
     private val themeColorHex: String
 ) : RecyclerView.Adapter<ChatAdapter.ChatViewHolder>() {
 
-    // إعداد محرك عرض النصوص Markdown مع جداول مخصصة
-    private val tableTheme = TableTheme.create(context).apply {
-        tableCellPadding(16)
-        tableBorderWidth(2)
-        tableBorderColor(Color.parseColor("#444444"))
-        tableHeaderRowBackgroundColor(Color.parseColor("#333333"))
-        tableOddRowBackgroundColor(Color.parseColor("#2A2A2A"))
-        tableEvenRowBackgroundColor(Color.parseColor("#222222"))
-    }
+    // إعداد محرك عرض النصوص Markdown مع جداول مخصصة (تم تصحيح الخطأ هنا)
+    private val tableTheme = TableTheme.builder()
+        .tableCellPadding(16)
+        .tableBorderWidth(2)
+        .tableBorderColor(Color.parseColor("#444444"))
+        .tableHeaderRowBackgroundColor(Color.parseColor("#333333"))
+        .tableOddRowBackgroundColor(Color.parseColor("#2A2A2A"))
+        .tableEvenRowBackgroundColor(Color.parseColor("#222222"))
+        .build()
 
     private val markwon = Markwon.builder(context)
         .usePlugin(TablePlugin.create(tableTheme))
-        // يمكن إضافة ملون للأكواد هنا إذا أردت لاحقاً
         .build()
 
     companion object {
@@ -76,10 +72,10 @@ class ChatAdapter(
         val msg = messages[position]
         val isUser = msg.role == MessageRole.USER
 
-        // 1. إعداد النص باستخدام Markwon لعرض التنسيق والجداول والأكواد
+        // 1. إعداد النص باستخدام Markwon
         if (msg.content.isNotEmpty()) {
             markwon.setMarkdown(holder.tvMessageContent, msg.content)
-            holder.tvMessageContent.movementMethod = LinkMovementMethod.getInstance() // لجعل الروابط قابلة للنقر
+            holder.tvMessageContent.movementMethod = LinkMovementMethod.getInstance()
             holder.tvMessageContent.visibility = View.VISIBLE
             holder.cardView.visibility = View.VISIBLE
         } else {
@@ -87,15 +83,13 @@ class ChatAdapter(
             holder.cardView.visibility = View.GONE
         }
 
-        // 2. إضافة الصور (إذا وجدت)
-        // نقوم بإزالة أي صور قديمة (بسبب إعادة تدوير العناصر)
+        // 2. إضافة الصور
         holder.rootLayout.removeAllViews()
-        holder.rootLayout.addView(holder.cardView) // إعادة إضافة الفقاعة الأساسية
+        holder.rootLayout.addView(holder.cardView)
 
         if (!msg.attachmentUris.isNullOrEmpty()) {
             val imageContainer = LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
-                // إذا كانت رسالة المستخدم، اجعل الصور على اليمين
                 gravity = if (isUser) Gravity.END else Gravity.START 
                 setPadding(0, 0, 0, dpToPx(8))
             }
@@ -114,12 +108,10 @@ class ChatAdapter(
                 imageContainer.addView(imageView)
             }
             scrollView.addView(imageContainer)
-            // إضافة الصور فوق الفقاعة
             holder.rootLayout.addView(scrollView, 0)
         }
 
-        // 3. إضافة شريط الإجراءات (أزرار النسخ، الصوت، التفاعل) أسفل الفقاعة
-        // نقوم بإزالة الشريط القديم إن وجد
+        // 3. إضافة شريط الإجراءات
         if (holder.rootLayout.childCount > 1) {
             for (i in holder.rootLayout.childCount - 1 downTo 1) {
                 holder.rootLayout.removeViewAt(i)
@@ -133,7 +125,6 @@ class ChatAdapter(
                 setPadding(dpToPx(4), dpToPx(8), dpToPx(4), 0)
             }
 
-            // دالة مساعدة لإنشاء الأزرار
             fun createActionIcon(resId: Int, tintColor: Int, onClick: () -> Unit): ImageView {
                 return ImageView(context).apply {
                     setImageResource(resId)
@@ -145,19 +136,16 @@ class ChatAdapter(
                 }
             }
 
-            // زر النسخ
             actionBar.addView(createActionIcon(R.drawable.ic_copy, Color.parseColor("#88FFFFFF")) {
                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 clipboard.setPrimaryClip(ClipData.newPlainText("Monolith", msg.content))
                 Toast.makeText(context, "تم نسخ الرسالة", Toast.LENGTH_SHORT).show()
             })
 
-            // زر النطق
             actionBar.addView(createActionIcon(R.drawable.ic_volume_up, Color.parseColor("#88FFFFFF")) {
                 onSpeakClick(msg.content)
             })
 
-            // زر التفاعل
             val thumbIcon = createActionIcon(R.drawable.ic_thumb_hybrid, Color.parseColor("#88FFFFFF")) {
                 onReactionClick(msg)
             }
@@ -167,13 +155,11 @@ class ChatAdapter(
             }
             actionBar.addView(thumbIcon)
 
-            // زر التثبيت
             val pinIcon = createActionIcon(R.drawable.ic_pinned, if (msg.isPinned) Color.parseColor("#00D4FF") else Color.parseColor("#88FFFFFF")) {
                 onPinClick(msg)
             }
             actionBar.addView(pinIcon)
 
-            // زر المزيد
             actionBar.addView(createActionIcon(R.drawable.ic_more_vert, Color.parseColor("#88FFFFFF")) {
                 val popup = PopupMenu(context, actionBar.getChildAt(actionBar.childCount - 1))
                 popup.menu.add("🔄 إعادة توليد")
@@ -193,7 +179,6 @@ class ChatAdapter(
                 popup.show()
             })
 
-            // محاذاة شريط الإجراءات
             if (isUser) {
                 actionBar.gravity = Gravity.END
             } else {
