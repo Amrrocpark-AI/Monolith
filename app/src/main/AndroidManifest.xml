@@ -64,7 +64,10 @@
         <service android:name=".FloatingService" android:exported="false" android:foregroundServiceType="specialUse" android:stopWithTask="false" />
         <service android:name=".ScreenCaptureService" android:exported="false" android:foregroundServiceType="mediaProjection" />
 
-        <!-- خدمة الصوت القديمة (بقيت كما هي) -->
+        <!-- خدمة الرسم الجديدة (المؤشر والأرقام) -->
+        <service android:name=".AgentOverlayService" android:exported="false" />
+
+        <!-- خدمة الصوت القديمة -->
         <service
             android:name=".VolumeButtonService"
             android:exported="true"
