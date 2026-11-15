@@ -3,6 +3,7 @@ package com.monolith
 import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.PorterDuff
@@ -38,7 +39,7 @@ import retrofit2.Response
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
-import java.util.UUID
+import java.nio.ByteBuffer
 
 class ChatActivity : AppCompatActivity() {
 
@@ -51,6 +52,7 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var chatAdapter: ChatAdapter
     private lateinit var tvAppTitle: TextView
     private lateinit var btnLoadModel: ImageButton
+    private lateinit var btnLoadVisionModel: ImageButton
     private lateinit var btnAgents: ImageButton
     private lateinit var btnThreads: ImageButton
 
@@ -60,11 +62,13 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var modelManager: ModelManager
     private lateinit var agentBrain: AgentBrain
     private var messageList: MutableList<ChatMessage> = mutableListOf()
-    private val currentConversationId = "main_chat" 
+    private val currentConversationId = "main_chat"
     
     private var ttsManager: TtsManager? = null
     private var isModelLoaded = false
+    private var isVisionLoaded = false
     private var activeAgentId = 0
+    private var pendingVisionGgufPath: String? = null
 
     private val pickImagesLauncher = registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris: List<Uri> ->
         if (uris.isNotEmpty()) {
@@ -137,6 +141,76 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
+    private val pickVisionGgufLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri == null) return@registerForActivityResult
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@ChatActivity, "جاري نسخ نموذج الرؤية...", Toast.LENGTH_SHORT).show()
+                }
+                val inputStream = contentResolver.openInputStream(uri)
+                val visionModelFile = File(filesDir, "vision_model.gguf")
+                val outputStream = FileOutputStream(visionModelFile)
+                inputStream?.copyTo(outputStream)
+                inputStream?.close()
+                outputStream.close()
+                pendingVisionGgufPath = visionModelFile.absolutePath
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@ChatActivity, "الآن اختر ملف mmproj...", Toast.LENGTH_LONG).show()
+                    pickMmprojLauncher.launch(arrayOf("*/*"))
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@ChatActivity, "فشل نسخ GGUF: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private val pickMmprojLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri == null) return@registerForActivityResult
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@ChatActivity, "جاري نسخ ملف mmproj...", Toast.LENGTH_SHORT).show()
+                }
+                val inputStream = contentResolver.openInputStream(uri)
+                val mmprojFile = File(filesDir, "vision_mmproj.gguf")
+                val outputStream = FileOutputStream(mmprojFile)
+                inputStream?.copyTo(outputStream)
+                inputStream?.close()
+                outputStream.close()
+
+                val ggufPath = pendingVisionGgufPath
+                if (ggufPath == null) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(this@ChatActivity, "خطأ: لم يتم تحديد ملف GGUF مسبقاً.", Toast.LENGTH_SHORT).show()
+                    }
+                    return@launch
+                }
+
+                val success = withContext(Dispatchers.IO) {
+                    VisionProcessor.initVision(ggufPath, mmprojFile.absolutePath)
+                }
+                withContext(Dispatchers.Main) {
+                    if (success) {
+                        isVisionLoaded = true
+                        btnLoadVisionModel.setColorFilter(Color.GREEN)
+                        Toast.makeText(this@ChatActivity, "تم تحميل نموذج الرؤية بنجاح!", Toast.LENGTH_SHORT).show()
+                    } else {
+                        isVisionLoaded = false
+                        btnLoadVisionModel.setColorFilter(Color.RED)
+                        Toast.makeText(this@ChatActivity, "فشل تهيئة محرك الرؤية.", Toast.LENGTH_LONG).show()
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@ChatActivity, "فشل نسخ mmproj: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_chat)
@@ -145,7 +219,6 @@ class ChatActivity : AppCompatActivity() {
         
         appDatabase = AppDatabase(applicationContext)
         modelManager = ModelManager(applicationContext)
-        // التعديل هنا: تمرير applicationContext إلى AgentBrain
         agentBrain = AgentBrain(modelManager, applicationContext)
         
         lifecycleScope.launch(Dispatchers.IO) {
@@ -202,7 +275,6 @@ class ChatActivity : AppCompatActivity() {
         val rootLayout = findViewById<LinearLayout>(R.id.rootLayout)
         val topBar = rootLayout.getChildAt(0) as LinearLayout
 
-        // زر مشاركة المحادثة كاملة (جديد)
         val btnShareChat = ImageButton(this).apply {
             setImageResource(android.R.drawable.ic_menu_share)
             setBackgroundColor(Color.TRANSPARENT)
@@ -220,6 +292,18 @@ class ChatActivity : AppCompatActivity() {
             setOnClickListener { pickModelLauncher.launch(arrayOf("*/*")) }
         }
         topBar.addView(btnLoadModel, topBar.childCount - 1)
+
+        btnLoadVisionModel = ImageButton(this).apply {
+            setImageResource(android.R.drawable.ic_menu_camera)
+            setBackgroundColor(Color.TRANSPARENT)
+            setColorFilter(Color.GRAY)
+            layoutParams = LinearLayout.LayoutParams(dpToPx(48), dpToPx(48))
+            setOnClickListener {
+                Toast.makeText(this@ChatActivity, "اختر ملف الرؤية GGUF أولاً...", Toast.LENGTH_SHORT).show()
+                pickVisionGgufLauncher.launch(arrayOf("*/*"))
+            }
+        }
+        topBar.addView(btnLoadVisionModel, topBar.childCount - 1)
 
         btnAgents = ImageButton(this).apply {
             setImageResource(android.R.drawable.ic_menu_add)
