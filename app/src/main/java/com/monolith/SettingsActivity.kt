@@ -323,6 +323,14 @@ class SettingsActivity : AppCompatActivity() {
             Toast.makeText(this, "ابحث عن 'مونوليث' في القائمة وفعّل الخدمة", Toast.LENGTH_LONG).show()
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         }
+
+        // =========================================================
+        // إضافة واجهة المبادئ التوجيهية للوكيل
+        // =========================================================
+        val containerDirectives = findViewById<LinearLayout>(R.id.containerDirectives)
+        val directivesView = AgentDirectivesView(this)
+        containerDirectives.addView(directivesView)
+        // =========================================================
     }
 
     private fun requestBatteryOptimizationExemption() {
