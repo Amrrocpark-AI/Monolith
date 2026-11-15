@@ -7,15 +7,14 @@ import java.io.File
 
 class ModelManager(private val context: Context) {
 
-    // تحميل المكتبة الأصلية C++
     init {
         System.loadLibrary("monolith")
     }
 
-    // ربط دوال C++ التي تحمل نفس الأسماء
     private external fun nativeLoadModel(modelPath: String): String
-    private external fun nativeGenerate(prompt: String): String
+    private external fun nativeGenerate(prompt: String, agentId: Int): String
     private external fun nativeUnloadModel()
+    private external fun nativeCreateSubAgent(): Int
 
     fun loadModel(modelPath: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
         try {
@@ -25,7 +24,6 @@ class ModelManager(private val context: Context) {
                 return
             }
             
-            // استدعاء دالة C++ لتحميل النموذج
             val result = nativeLoadModel(file.absolutePath)
             
             if (result.contains("بنجاح")) {
@@ -38,20 +36,26 @@ class ModelManager(private val context: Context) {
         }
     }
 
-    suspend fun generateResponse(prompt: String): String {
+    suspend fun generateResponse(prompt: String, agentId: Int = 0): String {
         return withContext(Dispatchers.IO) {
             try {
-                // استدعاء دالة C++ لتوليد النص
-                nativeGenerate(prompt)
+                nativeGenerate(prompt, agentId)
             } catch (e: Exception) {
                 "فشل التوليد: ${e.message}"
             }
         }
     }
 
+    fun createSubAgent(): Int {
+        return try {
+            nativeCreateSubAgent()
+        } catch (e: Exception) {
+            -1
+        }
+    }
+
     fun unloadModel() {
         try {
-            // استدعاء دالة C++ لتحرير الذاكرة
             nativeUnloadModel()
         } catch (e: Exception) {
             e.printStackTrace()
