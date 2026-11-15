@@ -69,12 +69,27 @@ class AgentBrain(private val modelManager: ModelManager) {
                     "click" -> {
                         val target = jsonAction.optString("target")
                         Log.d(TAG, "Executing: Click on $target")
-                        if (a11yService.clickNodeByText(target)) {
+                        
+                        // جلب إحداثيات العنصر
+                        val coords = a11yService.getCoordinatesByText(target)
+                        
+                        if (coords != null) {
+                            // رسم المؤشر وتأثير النقر قبل التنفيذ
+                            AgentOverlayService.instance?.showClick(coords.first, coords.second, currentStep)
+                            delay(500) // انتظار بسيط ليرى المستخدم المؤشر (نصف ثانية)
+                            
+                            // النقر على الإحداثيات
+                            a11yService.clickByCoordinates(coords.first, coords.second)
                             delay(1500) // انتظار انتقال الشاشة
                         } else {
-                            Log.d(TAG, "Element not found, trying scroll...")
-                            a11yService.scroll(true)
-                            delay(1000)
+                            Log.d(TAG, "Coordinates not found, trying programmatic click...")
+                            if (!a11yService.clickNodeByText(target)) {
+                                Log.d(TAG, "Element not found, trying scroll...")
+                                a11yService.scroll(true)
+                                delay(1000)
+                            } else {
+                                delay(1500)
+                            }
                         }
                     }
                     "type" -> {
