@@ -4,7 +4,6 @@ import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.delay
 import org.json.JSONObject
-import java.util.UUID
 
 class AgentBrain(private val modelManager: ModelManager, private val context: Context) {
 
@@ -22,26 +21,24 @@ class AgentBrain(private val modelManager: ModelManager, private val context: Co
         3. لكتابة نص في حقل إدخال: {"action": "type", "text": "النص المراد كتابته"}
         4. للتمرير في الشاشة: {"action": "scroll", "direction": "down"} (أو up)
         5. للانتظار (مثلاً انتظار تحميل تطبيق): {"action": "wait"}
-        6. لإنهاء المهمة وإخبار المستخدم بالنتيجة: {"action": "finish", "message": "رسالة النجاح النهائية"}
+        6. للرؤية الحاسوبية (تحليل صورة الشاشة): {"action": "see_screen", "prompt": "سؤالك عن الشاشة"}
+        7. لإنهاء المهمة وإخبار المستخدم بالنتيجة: {"action": "finish", "message": "رسالة النجاح النهائية"}
 
         قواعد صارمة:
         - إذا كان طلب المستخدم يحتاج إلى التحكم في الهاتف، استخدم الأدوات (click, type, scroll).
+        - إذا لم تجد العنصر في شجرة النصوص، استخدم (see_screen) لفهم ما يحدث بصرياً.
         - إذا كان طلب المستخدم مجرد سؤال أو دردشة، استخدم (chat) فوراً.
         - لا ترد بأي كلام خارج الـ JSON.
-        - إذا لم تجد العنصر المطلوب، استخدم أداة التمرير (scroll) للبحث عنه.
     """.trimIndent()
 
     suspend fun executeTask(userGoal: String, maxSteps: Int = 10, agentId: Int = 0): String {
         val a11yService = MonolithAccessibilityService.instance
             ?: return "خطأ: خدمة إمكانية الوصول (Accessibility) غير مفعلة. يرجى تفعيلها من إعدادات الهاتف."
 
-        // ========================================================
-        // استكمال المهام (Task Continuation)
-        // فحص إذا كانت هناك مهمة معلقة من جلسة سابقة
-        // ========================================================
         var currentGoal = userGoal
         var startStep = 0
         var taskId = ""
+        var visionContext = "" // سياق الرؤية للخطوات القادمة
 
         try {
             val pendingTask = appDatabase.getPendingTask()
@@ -50,7 +47,6 @@ class AgentBrain(private val modelManager: ModelManager, private val context: Co
                 startStep = pendingTask["current_step"]?.toIntOrNull() ?: 0
                 taskId = pendingTask["id"] ?: ""
             } else {
-                // مهمة جديدة، نحفظها في قائمة الانتظار
                 appDatabase.insertTaskToQueue(userGoal)
                 val newTask = appDatabase.getPendingTask()
                 taskId = newTask?.get("id") ?: ""
@@ -76,6 +72,7 @@ class AgentBrain(private val modelManager: ModelManager, private val context: Co
                 
                 هدف المستخدم: $currentGoal
                 حالة الشاشة الحالية (JSON): $screenJson
+                ${if (visionContext.isNotEmpty()) "معلومات بصرية إضافية: $visionContext\n" else ""}
                 
                 ما هي خطوتك التالية (JSON فقط)؟
             """.trimIndent()
@@ -88,7 +85,6 @@ class AgentBrain(private val modelManager: ModelManager, private val context: Co
                 val jsonEnd = response.lastIndexOf("}") + 1
                 
                 if (jsonStart == -1 || jsonEnd == 0) {
-                    // إذا لم يخرج النموذج JSON، نعتبره رداً نصياً عادياً
                     return response.trim()
                 }
 
@@ -96,7 +92,6 @@ class AgentBrain(private val modelManager: ModelManager, private val context: Co
                 val jsonAction = JSONObject(jsonString)
                 val action = jsonAction.optString("action")
                 
-                // تسجيل الإجراء في السجل
                 if (action != "chat") {
                     actionHistory.append("-> $action: ${jsonAction.toString()}\n")
                 }
@@ -135,14 +130,34 @@ class AgentBrain(private val modelManager: ModelManager, private val context: Co
                     "wait" -> {
                         delay(2000)
                     }
+                    "see_screen" -> {
+                        val visionPrompt = jsonAction.optString("prompt", "ماذا يظهر على الشاشة؟")
+                        Log.d(TAG, "Executing Vision: $visionPrompt")
+                        
+                        val screenCapture = ScreenCaptureService.instance
+                        if (screenCapture == null) {
+                            visionContext = "فشلت الرؤية: خدمة التقاط الشاشة غير مفعلة."
+                        } else {
+                            val frame = screenCapture.getLatestFrameForVision()
+                            if (frame != null) {
+                                val buffer = frame.first
+                                val width = frame.second
+                                val height = frame.third
+                                val visualDescription = modelManager.analyzeScreenFrame(buffer, width, height, visionPrompt)
+                                visionContext = "نتيجة الرؤية: $visualDescription"
+                                Log.d(TAG, visionContext)
+                            } else {
+                                visionContext = "فشلت الرؤية: لا يوجد إطار متاح."
+                            }
+                        }
+                        delay(1000)
+                    }
                     "finish" -> {
                         finalMessage = jsonAction.optString("message", "تمت المهمة بنجاح.")
                         
-                        // المهمة انتهت بنجاح: نقوم بتقييم الأداء
                         val latency = System.currentTimeMillis() - startTime
                         performSelfReflection(currentGoal, finalMessage, actionHistory.toString(), "SUCCESS", currentStep, latency)
                         
-                        // تحديث حالة المهمة في قائمة الانتظار إلى "مكتملة"
                         if (taskId.isNotEmpty()) {
                             try {
                                 appDatabase.updateTaskStatus(taskId, "COMPLETED")
@@ -160,11 +175,9 @@ class AgentBrain(private val modelManager: ModelManager, private val context: Co
             }
         }
         
-        // انتهت الخطوات دون إنجاز: نقوم بتقييم الفشل
         val latency = System.currentTimeMillis() - startTime
         performSelfReflection(currentGoal, "فشل في إنجاز المهمة خلال $maxSteps خطوات.", actionHistory.toString(), "FAILED", currentStep, latency)
         
-        // تحديث حالة المهمة في قائمة الانتظار إلى "فاشلة"
         if (taskId.isNotEmpty()) {
             try {
                 appDatabase.updateTaskStatus(taskId, "FAILED")
@@ -176,7 +189,6 @@ class AgentBrain(private val modelManager: ModelManager, private val context: Co
         return finalMessage
     }
 
-    // دالة التأمل الذاتي (Self-Reflection)
     private suspend fun performSelfReflection(goal: String, result: String, history: String, status: String, steps: Int, latency: Long) {
         try {
             val reflectionPrompt = """
@@ -204,7 +216,6 @@ class AgentBrain(private val modelManager: ModelManager, private val context: Co
                 val reflectionNote = json.optString("reflection", "لا توجد ملاحظات.")
                 val solution = json.optString("solution", "لا يوجد حل.")
 
-                // حفظ التقييم في قاعدة البيانات
                 appDatabase.insertPerformanceLog(
                     goal = goal,
                     status = status,
