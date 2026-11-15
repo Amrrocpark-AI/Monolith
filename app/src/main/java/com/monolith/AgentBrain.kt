@@ -8,7 +8,6 @@ class AgentBrain(private val modelManager: ModelManager) {
 
     private val TAG = "MonolithAgent"
 
-    // التوجيه الأساسي (System Prompt) الذي يعطي النموذج هويته وأدواته
     private val systemPrompt = """
         أنت Monolith، وكيل ذكاء اصطناعي سيادي تعمل على هاتف أندرويد.
         مهمتك إنجاز طلبات المستخدم بالتحكم في الشاشة.
@@ -23,8 +22,8 @@ class AgentBrain(private val modelManager: ModelManager) {
         قاعدة صارمة: لا ترد بأي كلام آخر غير JSON. إذا لم تجد العنصر، جرب التمرير.
     """.trimIndent()
 
-    // الحلقة الرئيسية للوكيل
-    suspend fun executeTask(userGoal: String, maxSteps: Int = 5): String {
+    // تم تعديل الدالة لتستقبل agentId (الافتراضي 0 للوكيل الرئيسي)
+    suspend fun executeTask(userGoal: String, maxSteps: Int = 5, agentId: Int = 0): String {
         val a11yService = MonolithAccessibilityService.instance
             ?: return "خطأ: خدمة إمكانية الوصول (Accessibility) غير مفعلة. يرجى تفعيلها من إعدادات الهاتف."
 
@@ -33,12 +32,10 @@ class AgentBrain(private val modelManager: ModelManager) {
 
         while (currentStep < maxSteps) {
             currentStep++
-            Log.d(TAG, "--- Step $currentStep ---")
+            Log.d(TAG, "--- Agent $agentId - Step $currentStep ---")
 
-            // 1. قراءة الشاشة الحالية (العيون)
             val screenJson = a11yService.getScreenTree()
             
-            // 2. بناء الطلب للنموذج
             val prompt = """
                 $systemPrompt
                 
@@ -48,13 +45,11 @@ class AgentBrain(private val modelManager: ModelManager) {
                 ما هي خطوتك التالية (JSON فقط)؟
             """.trimIndent()
 
-            // 3. التفكير (توليد الرد من النموذج المحلي)
-            val response = modelManager.generateResponse(prompt)
+            // تمرير agentId إلى المحرك
+            val response = modelManager.generateResponse(prompt, agentId)
             Log.d(TAG, "Model Response: $response")
 
-            // 4. تحليل الرد وتنفيذ الإجراء
             try {
-                // استخراج JSON من الرد (حماية من النصوص الزائدة)
                 val jsonStart = response.indexOf("{")
                 val jsonEnd = response.lastIndexOf("}") + 1
                 if (jsonStart == -1 || jsonEnd == 0) {
@@ -70,17 +65,13 @@ class AgentBrain(private val modelManager: ModelManager) {
                         val target = jsonAction.optString("target")
                         Log.d(TAG, "Executing: Click on $target")
                         
-                        // جلب إحداثيات العنصر
                         val coords = a11yService.getCoordinatesByText(target)
                         
                         if (coords != null) {
-                            // رسم المؤشر وتأثير النقر قبل التنفيذ
                             AgentOverlayService.instance?.showClick(coords.first, coords.second, currentStep)
-                            delay(500) // انتظار بسيط ليرى المستخدم المؤشر (نصف ثانية)
-                            
-                            // النقر على الإحداثيات
+                            delay(500)
                             a11yService.clickByCoordinates(coords.first, coords.second)
-                            delay(1500) // انتظار انتقال الشاشة
+                            delay(1500)
                         } else {
                             Log.d(TAG, "Coordinates not found, trying programmatic click...")
                             if (!a11yService.clickNodeByText(target)) {
