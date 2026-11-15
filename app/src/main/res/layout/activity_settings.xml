@@ -11,6 +11,8 @@
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
+        <!-- ... (كل الأقسام السابقة كما هي) ... -->
+
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -335,6 +337,32 @@
             android:textColor="#FFFFFF"
             android:textStyle="bold"
             android:layout_marginBottom="16dp" />
+
+        <!-- ========================================================= -->
+        <!-- القسم الجديد: المبادئ التوجيهية للوكيل -->
+        <!-- ========================================================= -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#333333"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="32dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="المبادئ التوجيهية للوكيل"
+            android:textColor="#00D4FF"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="16dp" />
+
+        <!-- هذا هو الوعاء الذي سنضع فيه المبادئ التوجيهية برمجياً -->
+        <LinearLayout
+            android:id="@+id/containerDirectives"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
 
     </LinearLayout>
 </ScrollView>
