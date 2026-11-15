@@ -448,22 +448,23 @@ class ChatActivity : AppCompatActivity() {
     private fun checkAndLoadModelOnStartup() {
         val modelFile = File(filesDir, "model.gguf")
         if (modelFile.exists()) {
-            Toast.makeText(this, "جاري تحميل النموذج المحفوظ...", Toast.LENGTH_SHORT).show()
-            modelManager.loadModel(modelFile.absolutePath, 
-                onSuccess = {
-                    runOnUiThread {
-                        isModelLoaded = true
-                        btnLoadModel.setColorFilter(Color.GREEN)
-                        Toast.makeText(this@ChatActivity, "تم التحميل التلقائي للنموذج!", Toast.LENGTH_SHORT).show()
+            lifecycleScope.launch(Dispatchers.IO) {
+                modelManager.loadModel(modelFile.absolutePath, 
+                    onSuccess = {
+                        runOnUiThread {
+                            isModelLoaded = true
+                            btnLoadModel.setColorFilter(Color.GREEN)
+                            Toast.makeText(this@ChatActivity, "تم التحميل التلقائي للنموذج!", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    onError = { error ->
+                        runOnUiThread {
+                            isModelLoaded = false
+                            btnLoadModel.setColorFilter(Color.RED)
+                        }
                     }
-                },
-                onError = { error ->
-                    runOnUiThread {
-                        isModelLoaded = false
-                        btnLoadModel.setColorFilter(Color.RED)
-                    }
-                }
-            )
+                )
+            }
         }
     }
     
@@ -575,35 +576,18 @@ class ChatActivity : AppCompatActivity() {
                 
                 scrollToBottom()
 
-                // ========================================================
-                // 1. وضع الوكيل (يبدأ بـ #)
-                // ========================================================
-                if (message.startsWith("#")) {
-                    val task = message.substring(1).trim()
-                    
-                    if (!isModelLoaded) {
-                        Toast.makeText(this, "يرجى تحميل النموذج أولاً بالضغط على الزر العلوي", Toast.LENGTH_LONG).show()
-                        return
-                    }
-
-                    if (MonolithAccessibilityService.instance == null) {
-                        Toast.makeText(this, "يرجى تفعيل Monolith Agent من الإعدادات", Toast.LENGTH_LONG).show()
-                        val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-                        startActivity(intent)
-                        return
-                    }
-
+                if (isModelLoaded) {
                     lifecycleScope.launch {
                         val agentPrefix = if (activeAgentId == 0) "" else "[الوكيل $activeAgentId] "
-                        val thinkingMsg = ChatMessage(role = MessageRole.AI, content = "${agentPrefix}جاري تنفيذ المهمة...", colorHex = "#1A1A1A", isThinking = true)
+                        val thinkingMsg = ChatMessage(role = MessageRole.AI, content = "${agentPrefix}جاري التفكير...", colorHex = "#1A1A1A", isThinking = true)
                         messageList.add(thinkingMsg)
                         val thinkingIndex = messageList.size - 1
                         chatAdapter.updateMessages(messageList)
                         scrollToBottom()
 
-                        val result = agentBrain.executeTask(task, agentId = activeAgentId)
+                        val result = agentBrain.executeTask(message, agentId = activeAgentId)
                         
-                        val updatedThinking = thinkingMsg.copy(content = "${agentPrefix}النتيجة: $result", isThinking = false)
+                        val updatedThinking = thinkingMsg.copy(content = "${agentPrefix}$result", isThinking = false)
                         messageList[thinkingIndex] = updatedThinking
                         saveMessageToDb(updatedThinking)
                         chatAdapter.updateMessages(messageList)
@@ -612,42 +596,14 @@ class ChatActivity : AppCompatActivity() {
                     return
                 }
 
-                // ========================================================
-                // 2. وضع الدردشة العادية (بدون #)
-                // ========================================================
                 val apiKey = securePrefs.getString("api_key", null)
                 val selectedModel = securePrefs.getString("selected_model", null)
                 
-                // *** الحل: إذا لم يوجد API، نستخدم النموذج المحلي للرد ***
                 if (apiKey.isNullOrEmpty() || selectedModel.isNullOrEmpty()) {
-                    if (isModelLoaded) {
-                        // الرد عبر النموذج المحلي
-                        lifecycleScope.launch {
-                            val aiMsg = ChatMessage(role = MessageRole.AI, content = "جاري التفكير محلياً...", colorHex = "#2A2A2A")
-                            messageList.add(aiMsg)
-                            val aiMsgIndex = messageList.size - 1
-                            chatAdapter.updateMessages(messageList)
-                            scrollToBottom()
-
-                            val memoriesContext = getMemoriesContext()
-                            val finalPrompt = if (memoriesContext.isNotEmpty()) "$memoriesContext\n\n$message" else message
-                            
-                            val reply = modelManager.generateResponse(finalPrompt, 0)
-                            
-                            val updatedMsg = aiMsg.copy(content = reply)
-                            messageList[aiMsgIndex] = updatedMsg
-                            saveMessageToDb(updatedMsg)
-                            chatAdapter.updateMessages(messageList)
-                            scrollToBottom()
-                        }
-                        return
-                    } else {
-                        Toast.makeText(this, "تم حفظ رسالتك. يرجى تهيئة المحرك من الإعدادات للرد، أو تحميل نموذج محلي.", Toast.LENGTH_LONG).show()
-                        return
-                    }
+                    Toast.makeText(this, "الرجاء تحميل نموذج محلي أو تهيئة السحابة من الإعدادات.", Toast.LENGTH_LONG).show()
+                    return
                 }
 
-                // الرد عبر السحابة (API)
                 analyzeUserMessage(message)
 
                 val enableThinking = securePrefs.getBoolean("enable_thinking", true)
