@@ -50,6 +50,7 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var chatAdapter: ChatAdapter
     private lateinit var tvAppTitle: TextView
     private lateinit var btnLoadModel: ImageButton
+    private lateinit var btnAgents: ImageButton
 
     private var themeColorHex = "#00D4FF"
     private lateinit var securePrefs: androidx.security.crypto.EncryptedSharedPreferences
@@ -61,6 +62,7 @@ class ChatActivity : AppCompatActivity() {
     
     private var ttsManager: TtsManager? = null
     private var isModelLoaded = false
+    private var activeAgentId = 0 // 0 هو الوكيل الرئيسي
 
     private val pickImagesLauncher = registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris: List<Uri> ->
         if (uris.isNotEmpty()) {
@@ -100,7 +102,6 @@ class ChatActivity : AppCompatActivity() {
                     val inputStream = contentResolver.openInputStream(uri)
                     val modelFile = File(filesDir, "model.gguf")
                     
-                    // نسخ الملف فقط إذا لم يكن موجوداً لتوفير المساحة
                     if (!modelFile.exists()) {
                         val outputStream = FileOutputStream(modelFile)
                         inputStream?.copyTo(outputStream)
@@ -113,6 +114,7 @@ class ChatActivity : AppCompatActivity() {
                             runOnUiThread {
                                 isModelLoaded = true
                                 btnLoadModel.setColorFilter(Color.GREEN)
+                                activeAgentId = 0 // إعادة تعيين للوكيل الرئيسي عند تحميل نموذج جديد
                                 Toast.makeText(this@ChatActivity, "تم تحميل النموذج بنجاح!", Toast.LENGTH_SHORT).show()
                             }
                         },
@@ -197,16 +199,25 @@ class ChatActivity : AppCompatActivity() {
         val rootLayout = findViewById<LinearLayout>(R.id.rootLayout)
         val topBar = rootLayout.getChildAt(0) as LinearLayout
 
+        // زر تحميل النموذج
         btnLoadModel = ImageButton(this).apply {
             setImageResource(android.R.drawable.ic_menu_save)
             setBackgroundColor(Color.TRANSPARENT)
             setColorFilter(Color.GRAY)
             layoutParams = LinearLayout.LayoutParams(dpToPx(48), dpToPx(48))
-            setOnClickListener {
-                pickModelLauncher.launch(arrayOf("*/*"))
-            }
+            setOnClickListener { pickModelLauncher.launch(arrayOf("*/*")) }
         }
         topBar.addView(btnLoadModel, topBar.childCount - 1)
+
+        // زر الوكلاء المتعددين (الجديد)
+        btnAgents = ImageButton(this).apply {
+            setImageResource(android.R.drawable.ic_menu_add) // يمكنك تغيير الأيقونة
+            setBackgroundColor(Color.TRANSPARENT)
+            setColorFilter(Color.parseColor("#FFAA00")) // لون برتقالي للتمييز
+            layoutParams = LinearLayout.LayoutParams(dpToPx(48), dpToPx(48))
+            setOnClickListener { showAgentsBottomSheet() }
+        }
+        topBar.addView(btnAgents, topBar.childCount - 1)
         
         val btnPinnedBox = ImageButton(this).apply {
             setImageResource(R.drawable.ic_pinned)
@@ -265,6 +276,50 @@ class ChatActivity : AppCompatActivity() {
         checkAndLoadModelOnStartup()
     }
 
+    private fun showAgentsBottomSheet() {
+        val bottomSheetDialog = BottomSheetDialog(this)
+        val view = layoutInflater.inflate(android.R.layout.list_content, null)
+        val listView = view.findViewById<ListView>(android.R.id.list)
+        
+        val items = arrayOf(
+            "الوكيل الرئيسي (نشط حالياً)",
+            "إنشاء وكيل فرعي جديد (يتطلب ذاكرة كافية)",
+            "بدء خادم التعاون (P2P) بين الهواتف"
+        )
+        
+        listView.adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, items)
+        listView.setOnItemClickListener { _, _, position, _ ->
+            when(position) {
+                0 -> {
+                    activeAgentId = 0
+                    Toast.makeText(this, "تم التبديل للوكيل الرئيسي", Toast.LENGTH_SHORT).show()
+                    bottomSheetDialog.dismiss()
+                }
+                1 -> {
+                    if (!isModelLoaded) {
+                        Toast.makeText(this, "يرجى تحميل النموذج أولاً", Toast.LENGTH_SHORT).show()
+                        return@setOnItemClickListener
+                    }
+                    val newId = modelManager.createSubAgent()
+                    if (newId > 0) {
+                        activeAgentId = newId
+                        Toast.makeText(this, "تم إنشاء الوكيل $newId وتفعيله", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(this, "فشل إنشاء الوكيل (نفدت الذاكرة؟)", Toast.LENGTH_SHORT).show()
+                    }
+                    bottomSheetDialog.dismiss()
+                }
+                2 -> {
+                    NetworkManager.startP2PServer()
+                    Toast.makeText(this, "تم تفعيل خادم التعاون (قيد التطوير)", Toast.LENGTH_SHORT).show()
+                    bottomSheetDialog.dismiss()
+                }
+            }
+        }
+        bottomSheetDialog.setContentView(view)
+        bottomSheetDialog.show()
+    }
+
     private fun checkAndLoadModelOnStartup() {
         val modelFile = File(filesDir, "model.gguf")
         if (modelFile.exists()) {
@@ -294,10 +349,7 @@ class ChatActivity : AppCompatActivity() {
 
     private fun initTtsIfNeeded() {
         if (ttsManager == null) {
-            ttsManager = TtsManager(this) {
-                runOnUiThread {
-                }
-            }
+            ttsManager = TtsManager(this) { runOnUiThread { } }
         }
     }
 
@@ -414,15 +466,17 @@ class ChatActivity : AppCompatActivity() {
                     }
 
                     lifecycleScope.launch {
-                        val thinkingMsg = ChatMessage(role = MessageRole.AI, content = "جاري تنفيذ المهمة عبر الوكيل...", colorHex = "#1A1A1A", isThinking = true)
+                        val agentPrefix = if (activeAgentId == 0) "" else "[الوكيل $activeAgentId] "
+                        val thinkingMsg = ChatMessage(role = MessageRole.AI, content = "${agentPrefix}جاري تنفيذ المهمة...", colorHex = "#1A1A1A", isThinking = true)
                         messageList.add(thinkingMsg)
                         val thinkingIndex = messageList.size - 1
                         chatAdapter.updateMessages(messageList)
                         scrollToBottom()
 
-                        val result = agentBrain.executeTask(task)
+                        // تمرير activeAgentId إلى العقل
+                        val result = agentBrain.executeTask(task, agentId = activeAgentId)
                         
-                        val updatedThinking = thinkingMsg.copy(content = "النتيجة: $result", isThinking = false)
+                        val updatedThinking = thinkingMsg.copy(content = "${agentPrefix}النتيجة: $result", isThinking = false)
                         messageList[thinkingIndex] = updatedThinking
                         saveMessageToDb(updatedThinking)
                         chatAdapter.updateMessages(messageList)
@@ -451,9 +505,9 @@ class ChatActivity : AppCompatActivity() {
                 val persona = securePrefs.getString("persona", "default") ?: "default"
                 
                 val personaPrompt = when (persona) {
-                    "analytical" -> "أنت Monolith، في وضع المحلل النقدي. مهمتك هي تحدي أفكار المستخدم، وكشف الثغرات، واقتراح بدائل جذرية. لا توافق على أي شيء دون نقد."
-                    "objective" -> "أنت Monolith، في وضع الموضوعي. رد بالبيانات والأرقام فقط، بدون عواطف."
-                    "innovator" -> "أنت Monolith، في وضع المبتكر. رد بأفكار غير تقليدية، وخيال واسع."
+                    "analytical" -> "أنت Monolith، في وضع المحلل النقدي..."
+                    "objective" -> "أنت Monolith، في وضع الموضوعي..."
+                    "innovator" -> "أنت Monolith، في وضع المبتكر..."
                     else -> "أنت Monolith، ذكاء اصطناعي سيادي متقدم."
                 }
 
