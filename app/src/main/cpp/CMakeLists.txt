@@ -4,7 +4,12 @@ project("monolith")
 include(FetchContent)
 find_package(Threads REQUIRED)
 
-# 1. جلب llama.cpp بأحدث إصدار لضمان وجود mtmd
+# إجبار بناء أدوات llama.cpp (لضمان وجود mtmd) والمكتبة المشتركة (common)
+set(LLAMA_BUILD_TOOLS ON CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_COMMON ON CACHE BOOL "" FORCE)
+set(LLAMA_CURL OFF CACHE BOOL "" FORCE)
+
+# 1. جلب llama.cpp
 FetchContent_Declare(
     llama
     GIT_REPOSITORY https://github.com/ggml-org/llama.cpp.git
