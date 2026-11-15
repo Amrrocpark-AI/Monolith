@@ -202,6 +202,16 @@ class ChatActivity : AppCompatActivity() {
         val rootLayout = findViewById<LinearLayout>(R.id.rootLayout)
         val topBar = rootLayout.getChildAt(0) as LinearLayout
 
+        // زر مشاركة المحادثة كاملة (جديد)
+        val btnShareChat = ImageButton(this).apply {
+            setImageResource(android.R.drawable.ic_menu_share)
+            setBackgroundColor(Color.TRANSPARENT)
+            setColorFilter(Color.WHITE)
+            layoutParams = LinearLayout.LayoutParams(dpToPx(48), dpToPx(48))
+            setOnClickListener { shareFullConversation() }
+        }
+        topBar.addView(btnShareChat, topBar.childCount - 1)
+
         btnLoadModel = ImageButton(this).apply {
             setImageResource(android.R.drawable.ic_menu_save)
             setBackgroundColor(Color.TRANSPARENT)
@@ -284,6 +294,28 @@ class ChatActivity : AppCompatActivity() {
         }
         
         checkAndLoadModelOnStartup()
+    }
+
+    private fun shareFullConversation() {
+        if (messageList.isEmpty()) {
+            Toast.makeText(this, "لا توجد رسائل لمشاركتها", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val sb = StringBuilder()
+        sb.append("سجل محادثة Monolith:\n\n")
+        for (msg in messageList) {
+            val sender = if (msg.role == MessageRole.USER) "أنت" else "Monolith"
+            sb.append("$sender: ${msg.content}\n")
+            if (!msg.attachmentUris.isNullOrEmpty()) {
+                sb.append("[مرفق: ${msg.attachmentUris.size} ملفات]\n")
+            }
+            sb.append("\n")
+        }
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, sb.toString())
+        }
+        startActivity(Intent.createChooser(shareIntent, "مشاركة سجل المحادثة"))
     }
 
     private fun showThreadsBottomSheet() {
