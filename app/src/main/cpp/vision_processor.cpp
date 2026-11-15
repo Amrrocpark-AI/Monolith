@@ -112,10 +112,9 @@ Java_com_monolith_VisionProcessor_nativeAnalyzeFrame(JNIEnv* env, jobject, jobje
     }
 
     // 3. تقييم الـ chunks (توليد الرد)
-    llama_batch batch = llama_batch_init(512, 0, 1);
-    if (mtmd_helper_eval_chunks(mtmd_ctx, vision_ctx, chunks, 0, 0, 512, true, &batch) != 0) {
+    llama_pos new_n_past = 0;
+    if (mtmd_helper_eval_chunks(mtmd_ctx, vision_ctx, chunks, 0, 0, 512, true, &new_n_past) != 0) {
         mtmd_input_chunks_free(chunks);
-        llama_batch_free(batch);
         return env->NewStringUTF("{\"error\":\"Evaluation failed\"}");
     }
 
@@ -138,7 +137,6 @@ Java_com_monolith_VisionProcessor_nativeAnalyzeFrame(JNIEnv* env, jobject, jobje
     }
 
     llama_sampler_free(smpl);
-    llama_batch_free(batch);
     mtmd_input_chunks_free(chunks);
 
     return env->NewStringUTF(result.c_str());
