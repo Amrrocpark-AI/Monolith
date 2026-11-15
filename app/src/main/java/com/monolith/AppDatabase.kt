@@ -6,9 +6,10 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import java.util.UUID
 
-class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_database", null, 1) {
+class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_database", null, 2) { // تم رفع الإصدار إلى 2
 
     override fun onCreate(db: SQLiteDatabase) {
+        // الجداول القديمة
         db.execSQL("CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, conversationId TEXT, senderId TEXT, role TEXT, content TEXT, timestamp INTEGER, attachmentUris TEXT, isEncrypted INTEGER, reactionType TEXT, reactionColor TEXT, linkedMessageIds TEXT, isPinned INTEGER, pinCategory TEXT, iconType TEXT, pathColor TEXT, uuid TEXT, modelName TEXT, isEdited INTEGER, originalContent TEXT, editReason TEXT, editedTimestamp INTEGER)")
         db.execSQL("CREATE TABLE IF NOT EXISTS memories (id TEXT PRIMARY KEY, type TEXT, content TEXT, timestamp INTEGER, confidence REAL)")
         db.execSQL("CREATE TABLE IF NOT EXISTS notes (id TEXT PRIMARY KEY, title TEXT, content TEXT, type TEXT, timestamp INTEGER, dueDate INTEGER, reminderTime INTEGER, isPinned INTEGER, colorHex TEXT, coverPattern TEXT, coverSticker TEXT)")
@@ -19,9 +20,17 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
         db.execSQL("CREATE TABLE IF NOT EXISTS encrypted_files (id TEXT PRIMARY KEY, originalName TEXT, encryptedPath TEXT, uniquePasswordEncrypted TEXT, isSteganography INTEGER, carrierImagePath TEXT, fileSize INTEGER, dateEncrypted INTEGER)")
         db.execSQL("CREATE TABLE IF NOT EXISTS virtual_albums (id TEXT PRIMARY KEY, name TEXT, coverUri TEXT, createdAt INTEGER, isVault INTEGER, sortOrder INTEGER)")
         db.execSQL("CREATE TABLE IF NOT EXISTS album_media_cross_ref (albumId TEXT, mediaUri TEXT, PRIMARY KEY(albumId, mediaUri))")
+
+        // الجداول الجديدة (دستور الوكيل)
+        db.execSQL("CREATE TABLE IF NOT EXISTS skills (id TEXT PRIMARY KEY, name TEXT, description TEXT, action_json TEXT, success_count INTEGER, timestamp INTEGER)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS blind_spots (id TEXT PRIMARY KEY, x INTEGER, y INTEGER, width INTEGER, height INTEGER, context TEXT, confidence REAL, timestamp INTEGER)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS code_vault (id TEXT PRIMARY KEY, file_name TEXT, content TEXT, version INTEGER, timestamp INTEGER)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS audio_memory (id TEXT PRIMARY KEY, file_path TEXT, transcription TEXT, duration INTEGER, timestamp INTEGER)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS file_memory (id TEXT PRIMARY KEY, file_path TEXT, file_type TEXT, description TEXT, timestamp INTEGER)")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        // حذف الجداول القديمة
         db.execSQL("DROP TABLE IF EXISTS messages")
         db.execSQL("DROP TABLE IF EXISTS memories")
         db.execSQL("DROP TABLE IF EXISTS notes")
@@ -32,8 +41,20 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
         db.execSQL("DROP TABLE IF EXISTS encrypted_files")
         db.execSQL("DROP TABLE IF EXISTS virtual_albums")
         db.execSQL("DROP TABLE IF EXISTS album_media_cross_ref")
+        
+        // حذف الجداول الجديدة
+        db.execSQL("DROP TABLE IF EXISTS skills")
+        db.execSQL("DROP TABLE IF EXISTS blind_spots")
+        db.execSQL("DROP TABLE IF EXISTS code_vault")
+        db.execSQL("DROP TABLE IF EXISTS audio_memory")
+        db.execSQL("DROP TABLE IF EXISTS file_memory")
+        
         onCreate(db)
     }
+
+    // ==========================================
+    // الدوال القديمة (لم يتم تغييرها)
+    // ==========================================
 
     fun insertMessage(message: MessageEntity) {
         val db = writableDatabase
@@ -300,7 +321,6 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
         db.close()
     }
 
-    // --- الدالة الجديدة التي تمت إضافتها ---
     fun getAllVirtualAlbums(): List<VirtualAlbumEntity> {
         val db = readableDatabase
         val cursor = db.rawQuery("SELECT * FROM virtual_albums", null)
@@ -320,5 +340,114 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
         cursor.close()
         db.close()
         return list
+    }
+
+    // ==========================================
+    // الدوال الجديدة (دستور الوكيل)
+    // ==========================================
+
+    // 1. المهارات
+    fun insertSkill(id: String, name: String, description: String, actionJson: String, successCount: Int) {
+        val db = writableDatabase
+        val values = ContentValues().apply {
+            put("id", id)
+            put("name", name)
+            put("description", description)
+            put("action_json", actionJson)
+            put("success_count", successCount)
+            put("timestamp", System.currentTimeMillis())
+        }
+        db.insertWithOnConflict("skills", null, values, SQLiteDatabase.CONFLICT_REPLACE)
+        db.close()
+    }
+
+    fun getAllSkills(): List<Map<String, String>> {
+        val db = readableDatabase
+        val cursor = db.rawQuery("SELECT * FROM skills ORDER BY success_count DESC", null)
+        val list = mutableListOf<Map<String, String>>()
+        if (cursor.moveToFirst()) {
+            do {
+                val map = mutableMapOf<String, String>()
+                map["id"] = cursor.getString(cursor.getColumnIndexOrThrow("id"))
+                map["name"] = cursor.getString(cursor.getColumnIndexOrThrow("name"))
+                map["description"] = cursor.getString(cursor.getColumnIndexOrThrow("description"))
+                map["action_json"] = cursor.getString(cursor.getColumnIndexOrThrow("action_json"))
+                list.add(map)
+            } while (cursor.moveToNext())
+        }
+        cursor.close()
+        db.close()
+        return list
+    }
+
+    // 2. النقاط العمياء
+    fun insertBlindSpot(x: Int, y: Int, width: Int, height: Int, context: String, confidence: Float) {
+        val db = writableDatabase
+        val values = ContentValues().apply {
+            put("id", UUID.randomUUID().toString())
+            put("x", x)
+            put("y", y)
+            put("width", width)
+            put("height", height)
+            put("context", context)
+            put("confidence", confidence)
+            put("timestamp", System.currentTimeMillis())
+        }
+        db.insert("blind_spots", null, values)
+        db.close()
+    }
+
+    // 3. خزنة الكود
+    fun insertCode(fileName: String, content: String, version: Int) {
+        val db = writableDatabase
+        val values = ContentValues().apply {
+            put("id", UUID.randomUUID().toString())
+            put("file_name", fileName)
+            put("content", content)
+            put("version", version)
+            put("timestamp", System.currentTimeMillis())
+        }
+        db.insert("code_vault", null, values)
+        db.close()
+    }
+
+    fun getLatestCode(fileName: String): String? {
+        val db = readableDatabase
+        val cursor = db.rawQuery("SELECT content FROM code_vault WHERE file_name = ? ORDER BY version DESC LIMIT 1", arrayOf(fileName))
+        var content: String? = null
+        if (cursor.moveToFirst()) {
+            content = cursor.getString(cursor.getColumnIndexOrThrow("content"))
+        }
+        cursor.close()
+        db.close()
+        return content
+    }
+
+    // 4. ذاكرة الصوت
+    fun insertAudioMemory(filePath: String, transcription: String, duration: Int) {
+        val db = writableDatabase
+        val values = ContentValues().apply {
+            put("id", UUID.randomUUID().toString())
+            put("file_path", filePath)
+            put("transcription", transcription)
+            put("duration", duration)
+            put("timestamp", System.currentTimeMillis())
+        }
+        db.insert("audio_memory", null, values)
+        db.close()
+    }
+
+    // 5. ذاكرة الملفات
+    fun insertFileMemory(filePath: String, fileType: String, description: String) {
+        val db = writableDatabase
+        val values = ContentValues().apply {
+            put("id", UUID.randomUUID().toString())
+            put("file_path", filePath)
+            put("file_type", fileType)
+            put("description", description)
+            put("timestamp", System.currentTimeMillis())
+        }
+        db.insert("file_memory", null, values)
+        db.close()
     }
 }
