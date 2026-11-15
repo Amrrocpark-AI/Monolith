@@ -68,7 +68,6 @@ class AgentOverlayService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 }
 
-// كلاس الرسم المخصص
 class AgentOverlayView(context: Context) : View(context) {
     
     private val cursorPaint = Paint().apply {
@@ -86,7 +85,7 @@ class AgentOverlayView(context: Context) : View(context) {
 
     private val textPaint = Paint().apply {
         color = Color.WHITE
-        textSize = 40f
+        textSize = 50f
         isAntiAlias = true
         textAlign = Paint.Align.CENTER
         setShadowLayer(5f, 0f, 0f, Color.BLACK)
@@ -102,10 +101,10 @@ class AgentOverlayView(context: Context) : View(context) {
     private val animationRunnable = object : Runnable {
         override fun run() {
             val now = System.currentTimeMillis()
-            clickEvents.removeAll { now - it.startTime > 1000 } // إزالة التأثيرات بعد ثانية
+            clickEvents.removeAll { now - it.startTime > 1000 }
             if (isCursorVisible || clickEvents.isNotEmpty()) {
                 invalidate()
-                handler.postDelayed(this, 16) // ~60fps
+                handler.postDelayed(this, 16)
             }
         }
     }
@@ -118,7 +117,6 @@ class AgentOverlayView(context: Context) : View(context) {
         handler.removeCallbacks(animationRunnable)
         handler.post(animationRunnable)
         
-        // إخفاء المؤشر بعد فترة قصيرة
         handler.postDelayed({
             isCursorVisible = false
         }, 1500)
@@ -128,24 +126,21 @@ class AgentOverlayView(context: Context) : View(context) {
         super.onDraw(canvas)
         val now = System.currentTimeMillis()
 
-        // 1. رسم المؤشر (الفأرة)
         if (isCursorVisible) {
-            canvas.drawCircle(cursorX, cursorY, 20f, cursorPaint)
+            canvas.drawCircle(cursorX, cursorY, 25f, cursorPaint)
         }
 
-        // 2. رسم تأثيرات النقر والأرقام
         for (event in clickEvents) {
             val elapsed = now - event.startTime
             if (elapsed < 1000) {
                 val progress = elapsed / 1000f
-                val radius = 20f + (100f * progress)
+                val radius = 25f + (100f * progress)
                 ripplePaint.alpha = (255 * (1f - progress)).toInt()
                 
                 canvas.drawCircle(event.x, event.y, radius, ripplePaint)
                 
-                // رسم الرقم التسلسلي
                 textPaint.alpha = (255 * (1f - progress)).toInt()
-                canvas.drawText(event.step.toString(), event.x, event.y - 60f, textPaint)
+                canvas.drawText(event.step.toString(), event.x, event.y - 70f, textPaint)
             }
         }
     }
