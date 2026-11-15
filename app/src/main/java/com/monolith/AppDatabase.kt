@@ -6,7 +6,7 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import java.util.UUID
 
-class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_database", null, 3) { // تم رفع الإصدار إلى 3
+class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_database", null, 4) { // تم رفع الإصدار إلى 4
 
     override fun onCreate(db: SQLiteDatabase) {
         // الجداول القديمة (من الإصدار 1)
@@ -32,6 +32,10 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
         db.execSQL("CREATE TABLE IF NOT EXISTS chromatic_nodes (id TEXT PRIMARY KEY, color_hex TEXT, name TEXT, definition TEXT, timestamp INTEGER)")
         db.execSQL("CREATE TABLE IF NOT EXISTS message_threads (id TEXT PRIMARY KEY, source_msg_id TEXT, target_msg_id TEXT, node_id TEXT, timestamp INTEGER)")
         db.execSQL("CREATE TABLE IF NOT EXISTS thread_annotations (id TEXT PRIMARY KEY, thread_id TEXT, content TEXT, timestamp INTEGER)")
+
+        // الجداول الجديدة (الإصدار 4 - تتبع حياة الوكيل وتقييم الأداء)
+        db.execSQL("CREATE TABLE IF NOT EXISTS agent_lifecycle_log (id TEXT PRIMARY KEY, event_type TEXT, reason TEXT, timestamp INTEGER, duration_active INTEGER)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS agent_performance_log (id TEXT PRIMARY KEY, goal TEXT, status TEXT, steps_taken INTEGER, latency_ms INTEGER, self_rating INTEGER, reflection_note TEXT, suggested_solution TEXT, timestamp INTEGER)")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -48,6 +52,11 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
             db.execSQL("CREATE TABLE IF NOT EXISTS chromatic_nodes (id TEXT PRIMARY KEY, color_hex TEXT, name TEXT, definition TEXT, timestamp INTEGER)")
             db.execSQL("CREATE TABLE IF NOT EXISTS message_threads (id TEXT PRIMARY KEY, source_msg_id TEXT, target_msg_id TEXT, node_id TEXT, timestamp INTEGER)")
             db.execSQL("CREATE TABLE IF NOT EXISTS thread_annotations (id TEXT PRIMARY KEY, thread_id TEXT, content TEXT, timestamp INTEGER)")
+        }
+        // هجرة آمنة للإصدار 4 (بدون حذف بيانات)
+        if (oldVersion < 4) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS agent_lifecycle_log (id TEXT PRIMARY KEY, event_type TEXT, reason TEXT, timestamp INTEGER, duration_active INTEGER)")
+            db.execSQL("CREATE TABLE IF NOT EXISTS agent_performance_log (id TEXT PRIMARY KEY, goal TEXT, status TEXT, steps_taken INTEGER, latency_ms INTEGER, self_rating INTEGER, reflection_note TEXT, suggested_solution TEXT, timestamp INTEGER)")
         }
     }
 
@@ -444,7 +453,6 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
     // الدوال الجديدة (للخيوط اللونية والعقد والتعليقات)
     // ==========================================
 
-    // 1. دوال العقد (الألوان وتعريفاتها)
     fun insertChromaticNode(id: String = UUID.randomUUID().toString(), colorHex: String, name: String, definition: String) {
         val db = writableDatabase
         val values = ContentValues().apply {
@@ -477,7 +485,6 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
         return list
     }
 
-    // 2. دوال الخيوط (الروابط بين الرسائل)
     fun insertMessageThread(sourceMsgId: String, targetMsgId: String, nodeId: String) {
         val db = writableDatabase
         val values = ContentValues().apply {
@@ -510,7 +517,6 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
         return list
     }
 
-    // 3. دوال التعليقات المستقلة على الخيوط
     fun insertThreadAnnotation(threadId: String, content: String) {
         val db = writableDatabase
         val values = ContentValues().apply {
@@ -530,6 +536,86 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
         if (cursor.moveToFirst()) {
             do {
                 list.add(cursor.getString(cursor.getColumnIndexOrThrow("content")))
+            } while (cursor.moveToNext())
+        }
+        cursor.close()
+        db.close()
+        return list
+    }
+
+    // ==========================================
+    // الدوال الجديدة (الإصدار 4 - تتبع حياة الوكيل وتقييم الأداء)
+    // ==========================================
+
+    // 1. دوال سجل حياة الوكيل (AgentLifecycleLog)
+    fun insertLifecycleEvent(eventType: String, reason: String, durationActive: Int) {
+        val db = writableDatabase
+        val values = ContentValues().apply {
+            put("id", UUID.randomUUID().toString())
+            put("event_type", eventType)
+            put("reason", reason)
+            put("timestamp", System.currentTimeMillis())
+            put("duration_active", durationActive)
+        }
+        db.insert("agent_lifecycle_log", null, values)
+        db.close()
+    }
+
+    fun getRecentLifecycleEvents(limit: Int = 10): List<Map<String, String>> {
+        val db = readableDatabase
+        val cursor = db.rawQuery("SELECT * FROM agent_lifecycle_log ORDER BY timestamp DESC LIMIT ?", arrayOf(limit.toString()))
+        val list = mutableListOf<Map<String, String>>()
+        if (cursor.moveToFirst()) {
+            do {
+                val map = mutableMapOf<String, String>()
+                map["id"] = cursor.getString(cursor.getColumnIndexOrThrow("id"))
+                map["event_type"] = cursor.getString(cursor.getColumnIndexOrThrow("event_type"))
+                map["reason"] = cursor.getString(cursor.getColumnIndexOrThrow("reason"))
+                map["timestamp"] = cursor.getLong(cursor.getColumnIndexOrThrow("timestamp")).toString()
+                map["duration_active"] = cursor.getInt(cursor.getColumnIndexOrThrow("duration_active")).toString()
+                list.add(map)
+            } while (cursor.moveToNext())
+        }
+        cursor.close()
+        db.close()
+        return list
+    }
+
+    // 2. دوال تقييم الأداء (AgentPerformanceLog)
+    fun insertPerformanceLog(goal: String, status: String, steps: Int, latencyMs: Long, selfRating: Int, reflection: String, solution: String) {
+        val db = writableDatabase
+        val values = ContentValues().apply {
+            put("id", UUID.randomUUID().toString())
+            put("goal", goal)
+            put("status", status)
+            put("steps_taken", steps)
+            put("latency_ms", latencyMs)
+            put("self_rating", selfRating)
+            put("reflection_note", reflection)
+            put("suggested_solution", solution)
+            put("timestamp", System.currentTimeMillis())
+        }
+        db.insert("agent_performance_log", null, values)
+        db.close()
+    }
+
+    fun getRecentPerformanceLogs(limit: Int = 10): List<Map<String, String>> {
+        val db = readableDatabase
+        val cursor = db.rawQuery("SELECT * FROM agent_performance_log ORDER BY timestamp DESC LIMIT ?", arrayOf(limit.toString()))
+        val list = mutableListOf<Map<String, String>>()
+        if (cursor.moveToFirst()) {
+            do {
+                val map = mutableMapOf<String, String>()
+                map["id"] = cursor.getString(cursor.getColumnIndexOrThrow("id"))
+                map["goal"] = cursor.getString(cursor.getColumnIndexOrThrow("goal"))
+                map["status"] = cursor.getString(cursor.getColumnIndexOrThrow("status"))
+                map["steps_taken"] = cursor.getInt(cursor.getColumnIndexOrThrow("steps_taken")).toString()
+                map["latency_ms"] = cursor.getLong(cursor.getColumnIndexOrThrow("latency_ms")).toString()
+                map["self_rating"] = cursor.getInt(cursor.getColumnIndexOrThrow("self_rating")).toString()
+                map["reflection_note"] = cursor.getString(cursor.getColumnIndexOrThrow("reflection_note"))
+                map["suggested_solution"] = cursor.getString(cursor.getColumnIndexOrThrow("suggested_solution"))
+                map["timestamp"] = cursor.getLong(cursor.getColumnIndexOrThrow("timestamp")).toString()
+                list.add(map)
             } while (cursor.moveToNext())
         }
         cursor.close()
