@@ -18,4 +18,9 @@ object VisionProcessor {
 
     // 4. تحرير محرك الرؤية
     external fun nativeFreeVision()
+
+    // 5. دالة الربط لـ ChatActivity
+    fun initVision(textModelPath: String, mmprojPath: String): Boolean {
+        return nativeInitVision(textModelPath, mmprojPath)
+    }
 }
