@@ -9,7 +9,7 @@
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
 static llama_model* model = nullptr;
-static llama_context* ctx = nullptr;
+static std::vector<llama_context*> contexts;
 static const llama_vocab* vocab = nullptr;
 
 extern "C" JNIEXPORT jstring JNICALL
@@ -20,8 +20,6 @@ Java_com_monolith_ModelManager_nativeLoadModel(JNIEnv* env, jobject, jstring mod
     llama_backend_init();
     llama_model_params model_params = llama_model_default_params();
     
-    // تم حذف use_mmap لأن الإصدار 0.9.0 يفعله تلقائياً
-
     model = llama_model_load_from_file(path, model_params);
     env->ReleaseStringUTFChars(modelPath, path);
 
@@ -29,29 +27,51 @@ Java_com_monolith_ModelManager_nativeLoadModel(JNIEnv* env, jobject, jstring mod
         return env->NewStringUTF("فشل تحميل النموذج. تأكد من صيغة GGUF.");
     }
 
-    // الحصول على المفردات (Vocab)
     vocab = llama_model_get_vocab(model);
 
+    // إنشاء السياق الرئيسي (الوكيل 0)
     llama_context_params ctx_params = llama_context_default_params();
     ctx_params.n_ctx = 2048; 
     ctx_params.n_threads = 4;
     
-    ctx = llama_init_from_model(model, ctx_params);
-
-    if (ctx == nullptr) {
+    llama_context* main_ctx = llama_init_from_model(model, ctx_params);
+    
+    if (main_ctx == nullptr) {
         llama_model_free(model);
         model = nullptr;
-        return env->NewStringUTF("فشل إنشاء السياق.");
+        return env->NewStringUTF("فشل إنشاء السياق الرئيسي.");
     }
+    
+    contexts.clear();
+    contexts.push_back(main_ctx); // الوكيل الرئيسي دائماً index 0
 
     return env->NewStringUTF("تم تحميل النموذج بنجاح.");
 }
 
-extern "C" JNIEXPORT jstring JNICALL
-Java_com_monolith_ModelManager_nativeGenerate(JNIEnv* env, jobject, jstring prompt) {
-    if (model == nullptr || ctx == nullptr || vocab == nullptr) {
-        return env->NewStringUTF("النموذج غير محمل.");
+// دالة جديدة لإنشاء وكيل فرعي
+extern "C" JNIEXPORT jint JNICALL
+Java_com_monolith_ModelManager_nativeCreateSubAgent(JNIEnv* env, jobject) {
+    if (model == nullptr) return -1;
+    
+    llama_context_params ctx_params = llama_context_default_params();
+    ctx_params.n_ctx = 1024; // سياق أصغر للوكيل الفرعي لتوفير الذاكرة
+    ctx_params.n_threads = 2; // خيوط أقل لتجنب اختناق المعالج
+    
+    llama_context* sub_ctx = llama_init_from_model(model, ctx_params);
+    if (sub_ctx != nullptr) {
+        contexts.push_back(sub_ctx);
+        return contexts.size() - 1; // إرجاع معرف الوكيل الجديد
     }
+    return -1;
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_monolith_ModelManager_nativeGenerate(JNIEnv* env, jobject, jstring prompt, jint agent_id) {
+    if (model == nullptr || vocab == nullptr || agent_id < 0 || agent_id >= contexts.size()) {
+        return env->NewStringUTF("النموذج أو الوكيل غير محمل.");
+    }
+
+    llama_context* ctx = contexts[agent_id];
 
     const char* promptStr = env->GetStringUTFChars(prompt, nullptr);
 
@@ -68,7 +88,6 @@ Java_com_monolith_ModelManager_nativeGenerate(JNIEnv* env, jobject, jstring prom
     }
     env->ReleaseStringUTFChars(prompt, promptStr);
 
-    // إدخال الرموز الأولية (Prompt) - المعاملان 2 فقط
     llama_batch batch = llama_batch_get_one(tokens.data(), tokens.size());
     if (llama_decode(ctx, batch) != 0) {
         return env->NewStringUTF("فشل في معالجة النص.");
@@ -100,7 +119,6 @@ Java_com_monolith_ModelManager_nativeGenerate(JNIEnv* env, jobject, jstring prom
             result.append(buf, n);
         }
 
-        // إدخال الرمز الجديد - المعاملان 2 فقط
         llama_batch single_batch = llama_batch_get_one(&id, 1);
         n_cur++;
         
@@ -116,10 +134,13 @@ Java_com_monolith_ModelManager_nativeGenerate(JNIEnv* env, jobject, jstring prom
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_monolith_ModelManager_nativeUnloadModel(JNIEnv*, jobject) {
-    if (ctx != nullptr) {
-        llama_free(ctx);
-        ctx = nullptr;
+    for (auto ctx : contexts) {
+        if (ctx != nullptr) {
+            llama_free(ctx);
+        }
     }
+    contexts.clear();
+
     if (model != nullptr) {
         llama_model_free(model);
         model = nullptr;
