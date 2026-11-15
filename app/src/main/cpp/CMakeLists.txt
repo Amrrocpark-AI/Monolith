@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.22.1)
 project("monolith")
 
 include(FetchContent)
+find_package(Threads REQUIRED)
 
 # 1. جلب llama.cpp بأحدث إصدار لضمان وجود mtmd
 FetchContent_Declare(
