@@ -6,7 +6,7 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import java.util.UUID
 
-class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_database", null, 5) { // تم رفع الإصدار إلى 5
+class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_database", null, 6) { // تم رفع الإصدار إلى 6
 
     override fun onCreate(db: SQLiteDatabase) {
         // الجداول القديمة (من الإصدار 1)
@@ -39,6 +39,9 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
 
         // الجداول الجديدة (الإصدار 5 - استكمال المهام)
         db.execSQL("CREATE TABLE IF NOT EXISTS agent_task_queue (id TEXT PRIMARY KEY, task_goal TEXT, current_step INTEGER, status TEXT, timestamp INTEGER)")
+
+        // الجداول الجديدة (الإصدار 6 - مدير المهام المتوازية)
+        db.execSQL("CREATE TABLE IF NOT EXISTS agent_tasks (id TEXT PRIMARY KEY, parent_task_id TEXT, task_type TEXT, goal TEXT, status TEXT, priority TEXT, payload TEXT, result TEXT, timestamp INTEGER, updated_at INTEGER)")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -64,6 +67,10 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
         // هجرة آمنة للإصدار 5 (بدون حذف بيانات)
         if (oldVersion < 5) {
             db.execSQL("CREATE TABLE IF NOT EXISTS agent_task_queue (id TEXT PRIMARY KEY, task_goal TEXT, current_step INTEGER, status TEXT, timestamp INTEGER)")
+        }
+        // هجرة آمنة للإصدار 6 (بدون حذف بيانات)
+        if (oldVersion < 6) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS agent_tasks (id TEXT PRIMARY KEY, parent_task_id TEXT, task_type TEXT, goal TEXT, status TEXT, priority TEXT, payload TEXT, result TEXT, timestamp INTEGER, updated_at INTEGER)")
         }
     }
 
@@ -665,6 +672,62 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
             put("status", status)
         }
         db.update("agent_task_queue", values, "id = ?", arrayOf(taskId))
+        db.close()
+    }
+
+    // ==========================================
+    // الدوال الجديدة (الإصدار 6 - مدير المهام المتوازية)
+    // ==========================================
+    
+    fun insertManagedTask(parentTaskId: String?, taskType: String, goal: String, priority: String, payload: String = "") {
+        val db = writableDatabase
+        val values = ContentValues().apply {
+            put("id", UUID.randomUUID().toString())
+            put("parent_task_id", parentTaskId)
+            put("task_type", taskType) // FOREGROUND, BACKGROUND, PLANNING
+            put("goal", goal)
+            put("status", "PENDING") // PENDING, RUNNING, COMPLETED, FAILED, PAUSED
+            put("priority", priority) // HIGH, MEDIUM, LOW
+            put("payload", payload)
+            put("result", "")
+            put("timestamp", System.currentTimeMillis())
+            put("updated_at", System.currentTimeMillis())
+        }
+        db.insert("agent_tasks", null, values)
+        db.close()
+    }
+
+    fun getTasksByTypeAndStatus(taskType: String, status: String, limit: Int = 5): List<Map<String, String>> {
+        val db = readableDatabase
+        val cursor = db.rawQuery("SELECT * FROM agent_tasks WHERE task_type = ? AND status = ? ORDER BY priority DESC, timestamp ASC LIMIT ?", arrayOf(taskType, status, limit.toString()))
+        val list = mutableListOf<Map<String, String>>()
+        if (cursor.moveToFirst()) {
+            do {
+                val map = mutableMapOf<String, String>()
+                map["id"] = cursor.getString(cursor.getColumnIndexOrThrow("id"))
+                map["parent_task_id"] = cursor.getString(cursor.getColumnIndexOrThrow("parent_task_id")) ?: ""
+                map["task_type"] = cursor.getString(cursor.getColumnIndexOrThrow("task_type"))
+                map["goal"] = cursor.getString(cursor.getColumnIndexOrThrow("goal"))
+                map["status"] = cursor.getString(cursor.getColumnIndexOrThrow("status"))
+                map["priority"] = cursor.getString(cursor.getColumnIndexOrThrow("priority"))
+                map["payload"] = cursor.getString(cursor.getColumnIndexOrThrow("payload"))
+                map["result"] = cursor.getString(cursor.getColumnIndexOrThrow("result"))
+                list.add(map)
+            } while (cursor.moveToNext())
+        }
+        cursor.close()
+        db.close()
+        return list
+    }
+
+    fun updateManagedTaskStatus(taskId: String, status: String, result: String = "") {
+        val db = writableDatabase
+        val values = ContentValues().apply {
+            put("status", status)
+            put("result", result)
+            put("updated_at", System.currentTimeMillis())
+        }
+        db.update("agent_tasks", values, "id = ?", arrayOf(taskId))
         db.close()
     }
 }
