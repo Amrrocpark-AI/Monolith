@@ -145,7 +145,8 @@ class ChatActivity : AppCompatActivity() {
         
         appDatabase = AppDatabase(applicationContext)
         modelManager = ModelManager(applicationContext)
-        agentBrain = AgentBrain(modelManager)
+        // التعديل هنا: تمرير applicationContext إلى AgentBrain
+        agentBrain = AgentBrain(modelManager, applicationContext)
         
         lifecycleScope.launch(Dispatchers.IO) {
             withContext(Dispatchers.Main) {
