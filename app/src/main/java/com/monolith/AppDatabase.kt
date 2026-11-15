@@ -6,7 +6,7 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import java.util.UUID
 
-class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_database", null, 2) { // تم رفع الإصدار إلى 2
+class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_database", null, 2) {
 
     override fun onCreate(db: SQLiteDatabase) {
         // الجداول القديمة
@@ -21,7 +21,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
         db.execSQL("CREATE TABLE IF NOT EXISTS virtual_albums (id TEXT PRIMARY KEY, name TEXT, coverUri TEXT, createdAt INTEGER, isVault INTEGER, sortOrder INTEGER)")
         db.execSQL("CREATE TABLE IF NOT EXISTS album_media_cross_ref (albumId TEXT, mediaUri TEXT, PRIMARY KEY(albumId, mediaUri))")
 
-        // الجداول الجديدة (دستور الوكيل)
+        // الجداول الجديدة
         db.execSQL("CREATE TABLE IF NOT EXISTS skills (id TEXT PRIMARY KEY, name TEXT, description TEXT, action_json TEXT, success_count INTEGER, timestamp INTEGER)")
         db.execSQL("CREATE TABLE IF NOT EXISTS blind_spots (id TEXT PRIMARY KEY, x INTEGER, y INTEGER, width INTEGER, height INTEGER, context TEXT, confidence REAL, timestamp INTEGER)")
         db.execSQL("CREATE TABLE IF NOT EXISTS code_vault (id TEXT PRIMARY KEY, file_name TEXT, content TEXT, version INTEGER, timestamp INTEGER)")
@@ -30,31 +30,14 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // حذف الجداول القديمة
-        db.execSQL("DROP TABLE IF EXISTS messages")
-        db.execSQL("DROP TABLE IF EXISTS memories")
-        db.execSQL("DROP TABLE IF EXISTS notes")
-        db.execSQL("DROP TABLE IF EXISTS tags")
-        db.execSQL("DROP TABLE IF EXISTS note_tag_cross_ref")
-        db.execSQL("DROP TABLE IF EXISTS conversations")
-        db.execSQL("DROP TABLE IF EXISTS user_profile")
-        db.execSQL("DROP TABLE IF EXISTS encrypted_files")
-        db.execSQL("DROP TABLE IF EXISTS virtual_albums")
-        db.execSQL("DROP TABLE IF EXISTS album_media_cross_ref")
-        
-        // حذف الجداول الجديدة
-        db.execSQL("DROP TABLE IF EXISTS skills")
-        db.execSQL("DROP TABLE IF EXISTS blind_spots")
-        db.execSQL("DROP TABLE IF EXISTS code_vault")
-        db.execSQL("DROP TABLE IF EXISTS audio_memory")
-        db.execSQL("DROP TABLE IF EXISTS file_memory")
-        
-        onCreate(db)
+        if (oldVersion < 2) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS skills (id TEXT PRIMARY KEY, name TEXT, description TEXT, action_json TEXT, success_count INTEGER, timestamp INTEGER)")
+            db.execSQL("CREATE TABLE IF NOT EXISTS blind_spots (id TEXT PRIMARY KEY, x INTEGER, y INTEGER, width INTEGER, height INTEGER, context TEXT, confidence REAL, timestamp INTEGER)")
+            db.execSQL("CREATE TABLE IF NOT EXISTS code_vault (id TEXT PRIMARY KEY, file_name TEXT, content TEXT, version INTEGER, timestamp INTEGER)")
+            db.execSQL("CREATE TABLE IF NOT EXISTS audio_memory (id TEXT PRIMARY KEY, file_path TEXT, transcription TEXT, duration INTEGER, timestamp INTEGER)")
+            db.execSQL("CREATE TABLE IF NOT EXISTS file_memory (id TEXT PRIMARY KEY, file_path TEXT, file_type TEXT, description TEXT, timestamp INTEGER)")
+        }
     }
-
-    // ==========================================
-    // الدوال القديمة (لم يتم تغييرها)
-    // ==========================================
 
     fun insertMessage(message: MessageEntity) {
         val db = writableDatabase
@@ -342,11 +325,6 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
         return list
     }
 
-    // ==========================================
-    // الدوال الجديدة (دستور الوكيل)
-    // ==========================================
-
-    // 1. المهارات
     fun insertSkill(id: String, name: String, description: String, actionJson: String, successCount: Int) {
         val db = writableDatabase
         val values = ContentValues().apply {
@@ -380,7 +358,6 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
         return list
     }
 
-    // 2. النقاط العمياء
     fun insertBlindSpot(x: Int, y: Int, width: Int, height: Int, context: String, confidence: Float) {
         val db = writableDatabase
         val values = ContentValues().apply {
@@ -397,7 +374,6 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
         db.close()
     }
 
-    // 3. خزنة الكود
     fun insertCode(fileName: String, content: String, version: Int) {
         val db = writableDatabase
         val values = ContentValues().apply {
@@ -423,7 +399,6 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
         return content
     }
 
-    // 4. ذاكرة الصوت
     fun insertAudioMemory(filePath: String, transcription: String, duration: Int) {
         val db = writableDatabase
         val values = ContentValues().apply {
@@ -437,7 +412,6 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
         db.close()
     }
 
-    // 5. ذاكرة الملفات
     fun insertFileMemory(filePath: String, fileType: String, description: String) {
         val db = writableDatabase
         val values = ContentValues().apply {
