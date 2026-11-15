@@ -44,9 +44,11 @@ class MonolithAccessibilityService : AccessibilityService() {
         val rootNode = rootInActiveWindow ?: return "[]"
         try {
             val jsonArray = JSONArray()
-            val children = rootNode.children
-            for (i in 0 until children.size) {
-                val child = children.get(i)
+            
+            // *** تصحيح الخطأ هنا: استخدام childCount و getChild بدلاً من children ***
+            val childCount = rootNode.childCount
+            for (i in 0 until childCount) {
+                val child = rootNode.getChild(i)
                 if (child != null) {
                     val nodeJson = parseNode(child)
                     if (nodeJson != null) {
@@ -54,6 +56,7 @@ class MonolithAccessibilityService : AccessibilityService() {
                     }
                 }
             }
+            
             return jsonArray.toString()
         } catch (e: Exception) {
             Log.e(TAG, "Error parsing tree", e)
@@ -110,7 +113,6 @@ class MonolithAccessibilityService : AccessibilityService() {
     // 2. الأيادي: تنفيذ الإجراءات
     // ==========================================
 
-    // النقر على عنصر بناءً على الإحداثيات (الطريقة الأضمن للألعاب والـ Canvas)
     fun clickByCoordinates(x: Int, y: Int): Boolean {
         try {
             val path = Path()
@@ -124,7 +126,6 @@ class MonolithAccessibilityService : AccessibilityService() {
         }
     }
 
-    // النقر على عنصر برمجياً (أسرع وأدق للتطبيقات العادية)
     fun clickNodeByText(text: String): Boolean {
         val rootNode = rootInActiveWindow ?: return false
         val nodes = rootNode.findAccessibilityNodeInfosByText(text)
@@ -142,7 +143,6 @@ class MonolithAccessibilityService : AccessibilityService() {
         return false
     }
 
-    // *** الدالة الجديدة: جلب إحداثيات عنصر بناءً على النص (لرسم المؤشر) ***
     fun getCoordinatesByText(text: String): Pair<Int, Int>? {
         val rootNode = rootInActiveWindow ?: return null
         val nodes = rootNode.findAccessibilityNodeInfosByText(text)
@@ -154,10 +154,8 @@ class MonolithAccessibilityService : AccessibilityService() {
         return null
     }
 
-    // كتابة نص في حقل إدخال
     fun typeText(text: String): Boolean {
         val rootNode = rootInActiveWindow ?: return false
-        // البحث عن أول عنصر قابل للكتابة
         val focusableNode = findEditableNode(rootNode) ?: return false
         
         val arguments = Bundle()
@@ -175,7 +173,6 @@ class MonolithAccessibilityService : AccessibilityService() {
         return null
     }
 
-    // التمرير (Scroll)
     fun scroll(forward: Boolean = true): Boolean {
         val rootNode = rootInActiveWindow ?: return false
         return rootNode.performAction(
