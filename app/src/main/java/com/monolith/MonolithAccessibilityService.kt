@@ -142,6 +142,18 @@ class MonolithAccessibilityService : AccessibilityService() {
         return false
     }
 
+    // *** الدالة الجديدة: جلب إحداثيات عنصر بناءً على النص (لرسم المؤشر) ***
+    fun getCoordinatesByText(text: String): Pair<Int, Int>? {
+        val rootNode = rootInActiveWindow ?: return null
+        val nodes = rootNode.findAccessibilityNodeInfosByText(text)
+        if (nodes.isNotEmpty()) {
+            val bounds = android.graphics.Rect()
+            nodes[0].getBoundsInScreen(bounds)
+            return Pair(bounds.centerX(), bounds.centerY())
+        }
+        return null
+    }
+
     // كتابة نص في حقل إدخال
     fun typeText(text: String): Boolean {
         val rootNode = rootInActiveWindow ?: return false
