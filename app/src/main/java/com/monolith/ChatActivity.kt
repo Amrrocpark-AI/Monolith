@@ -10,6 +10,7 @@ import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.Gravity
@@ -48,6 +49,7 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var recyclerViewChat: RecyclerView
     private lateinit var chatAdapter: ChatAdapter
     private lateinit var tvAppTitle: TextView
+    private lateinit var btnLoadModel: ImageButton
 
     private var themeColorHex = "#00D4FF"
     private lateinit var securePrefs: androidx.security.crypto.EncryptedSharedPreferences
@@ -60,7 +62,6 @@ class ChatActivity : AppCompatActivity() {
     private var ttsManager: TtsManager? = null
     private var isModelLoaded = false
 
-    // اختيار الصور
     private val pickImagesLauncher = registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris: List<Uri> ->
         if (uris.isNotEmpty()) {
             selectedImageUris.addAll(uris)
@@ -68,7 +69,6 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    // اختيار المستندات النصية
     private val pickDocumentLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) {
             try {
@@ -89,34 +89,37 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    // *** اختيار ملف النموذج (GGUF) ***
     private val pickModelLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) {
             lifecycleScope.launch(Dispatchers.IO) {
                 try {
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(this@ChatActivity, "جاري نسخ الملف وتحميله... قد يستغرق بعض الوقت", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this@ChatActivity, "جاري تحميل النموذج...", Toast.LENGTH_SHORT).show()
                     }
 
-                    // نسخ الملف إلى الذاكرة الداخلية للتطبيق
                     val inputStream = contentResolver.openInputStream(uri)
                     val modelFile = File(filesDir, "model.gguf")
-                    val outputStream = FileOutputStream(modelFile)
-                    inputStream?.copyTo(outputStream)
-                    inputStream?.close()
-                    outputStream.close()
+                    
+                    // نسخ الملف فقط إذا لم يكن موجوداً لتوفير المساحة
+                    if (!modelFile.exists()) {
+                        val outputStream = FileOutputStream(modelFile)
+                        inputStream?.copyTo(outputStream)
+                        inputStream?.close()
+                        outputStream.close()
+                    }
 
-                    // استدعاء المحرك C++ لتحميل النموذج
                     modelManager.loadModel(modelFile.absolutePath, 
                         onSuccess = {
                             runOnUiThread {
                                 isModelLoaded = true
-                                Toast.makeText(this@ChatActivity, "تم تحميل النموذج في الذاكرة بنجاح!", Toast.LENGTH_SHORT).show()
+                                btnLoadModel.setColorFilter(Color.GREEN)
+                                Toast.makeText(this@ChatActivity, "تم تحميل النموذج بنجاح!", Toast.LENGTH_SHORT).show()
                             }
                         },
                         onError = { error ->
                             runOnUiThread {
                                 isModelLoaded = false
+                                btnLoadModel.setColorFilter(Color.RED)
                                 Toast.makeText(this@ChatActivity, "فشل التحميل: $error", Toast.LENGTH_LONG).show()
                             }
                         }
@@ -194,27 +197,23 @@ class ChatActivity : AppCompatActivity() {
         val rootLayout = findViewById<LinearLayout>(R.id.rootLayout)
         val topBar = rootLayout.getChildAt(0) as LinearLayout
 
-        // *** زر تحميل النموذج الجديد ***
-        val btnLoadModel = ImageButton(this).apply {
-            setImageResource(android.R.drawable.ic_menu_save) // أيقونة الحفظ
+        btnLoadModel = ImageButton(this).apply {
+            setImageResource(android.R.drawable.ic_menu_save)
             setBackgroundColor(Color.TRANSPARENT)
-            setColorFilter(Color.parseColor("#00FF00")) // لون أخضر لتمييزه
+            setColorFilter(Color.GRAY)
             layoutParams = LinearLayout.LayoutParams(dpToPx(48), dpToPx(48))
             setOnClickListener {
                 pickModelLauncher.launch(arrayOf("*/*"))
             }
         }
         topBar.addView(btnLoadModel, topBar.childCount - 1)
-        // ==================================
         
         val btnPinnedBox = ImageButton(this).apply {
             setImageResource(R.drawable.ic_pinned)
             setBackgroundColor(Color.TRANSPARENT)
             setColorFilter(Color.WHITE)
             layoutParams = LinearLayout.LayoutParams(dpToPx(48), dpToPx(48))
-            setOnClickListener {
-                showPinnedMessagesBottomSheet()
-            }
+            setOnClickListener { showPinnedMessagesBottomSheet() }
         }
         topBar.addView(btnPinnedBox, topBar.childCount - 1)
 
@@ -223,9 +222,7 @@ class ChatActivity : AppCompatActivity() {
             setBackgroundColor(Color.TRANSPARENT)
             setColorFilter(Color.WHITE)
             layoutParams = LinearLayout.LayoutParams(dpToPx(48), dpToPx(48))
-            setOnClickListener {
-                showControlsBottomSheet()
-            }
+            setOnClickListener { showControlsBottomSheet() }
         }
         topBar.addView(btnControls, topBar.childCount - 1)
 
@@ -234,9 +231,7 @@ class ChatActivity : AppCompatActivity() {
             setBackgroundColor(Color.TRANSPARENT)
             setColorFilter(Color.WHITE)
             layoutParams = LinearLayout.LayoutParams(dpToPx(48), dpToPx(48))
-            setOnClickListener {
-                startActivity(Intent(this@ChatActivity, NotesActivity::class.java))
-            }
+            setOnClickListener { startActivity(Intent(this@ChatActivity, NotesActivity::class.java)) }
         }
         topBar.addView(btnNotes, topBar.childCount - 1)
 
@@ -261,14 +256,34 @@ class ChatActivity : AppCompatActivity() {
 
         btnBack.setOnClickListener { finish() }
         btnSettings.setOnClickListener { startActivity(Intent(this, SettingsActivity::class.java)) }
-        
-        btnDashboard.setOnClickListener {
-            showDashboardBottomSheet()
-        }
-
+        btnDashboard.setOnClickListener { showDashboardBottomSheet() }
         btnSend.setOnClickListener { sendMessage() }
         etMessage.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_SEND) { sendMessage(); true } else { false }
+        }
+        
+        checkAndLoadModelOnStartup()
+    }
+
+    private fun checkAndLoadModelOnStartup() {
+        val modelFile = File(filesDir, "model.gguf")
+        if (modelFile.exists()) {
+            Toast.makeText(this, "جاري تحميل النموذج المحفوظ...", Toast.LENGTH_SHORT).show()
+            modelManager.loadModel(modelFile.absolutePath, 
+                onSuccess = {
+                    runOnUiThread {
+                        isModelLoaded = true
+                        btnLoadModel.setColorFilter(Color.GREEN)
+                        Toast.makeText(this@ChatActivity, "تم التحميل التلقائي للنموذج!", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                onError = { error ->
+                    runOnUiThread {
+                        isModelLoaded = false
+                        btnLoadModel.setColorFilter(Color.RED)
+                    }
+                }
+            )
         }
     }
     
@@ -383,14 +398,18 @@ class ChatActivity : AppCompatActivity() {
                 
                 scrollToBottom()
 
-                // ========================================================
-                // تفعيل الوكيل الحقيقي (Agent Mode) عند كتابة # في البداية
-                // ========================================================
                 if (message.startsWith("#")) {
                     val task = message.substring(1).trim()
                     
                     if (!isModelLoaded) {
-                        Toast.makeText(this, "يرجى تحميل النموذج أولاً بالضغط على الزر الأخضر في الأعلى", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this, "يرجى تحميل النموذج أولاً بالضغط على الزر العلوي", Toast.LENGTH_LONG).show()
+                        return
+                    }
+
+                    if (MonolithAccessibilityService.instance == null) {
+                        Toast.makeText(this, "يرجى تفعيل Monolith Agent من الإعدادات", Toast.LENGTH_LONG).show()
+                        val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                        startActivity(intent)
                         return
                     }
 
@@ -411,13 +430,12 @@ class ChatActivity : AppCompatActivity() {
                     }
                     return
                 }
-                // ========================================================
 
                 val apiKey = securePrefs.getString("api_key", null)
                 val selectedModel = securePrefs.getString("selected_model", null)
                 
                 if (apiKey.isNullOrEmpty()) {
-                    Toast.makeText(this, "تم حفظ رسالتك محلياً. يرجى تهيئة المحرك من الإعدادات للرد.", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, "تم حفظ رسالتك. يرجى تهيئة المحرك من الإعدادات للرد.", Toast.LENGTH_LONG).show()
                     return
                 }
                 
