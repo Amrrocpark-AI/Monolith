@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.delay
 import org.json.JSONObject
+import java.util.UUID
 
 class AgentBrain(private val modelManager: ModelManager, private val context: Context) {
 
@@ -34,8 +35,33 @@ class AgentBrain(private val modelManager: ModelManager, private val context: Co
         val a11yService = MonolithAccessibilityService.instance
             ?: return "خطأ: خدمة إمكانية الوصول (Accessibility) غير مفعلة. يرجى تفعيلها من إعدادات الهاتف."
 
+        // ========================================================
+        // استكمال المهام (Task Continuation)
+        // فحص إذا كانت هناك مهمة معلقة من جلسة سابقة
+        // ========================================================
+        var currentGoal = userGoal
+        var startStep = 0
+        var taskId = ""
+
+        try {
+            val pendingTask = appDatabase.getPendingTask()
+            if (pendingTask != null && pendingTask["task_goal"] == userGoal) {
+                Log.d(TAG, "استئناف المهمة من الخطوة ${pendingTask["current_step"]}")
+                startStep = pendingTask["current_step"]?.toIntOrNull() ?: 0
+                taskId = pendingTask["id"] ?: ""
+            } else {
+                // مهمة جديدة، نحفظها في قائمة الانتظار
+                appDatabase.insertTaskToQueue(userGoal)
+                val newTask = appDatabase.getPendingTask()
+                taskId = newTask?.get("id") ?: ""
+                Log.d(TAG, "مهمة جديدة تم حفظها في قائمة الانتظار بالمعرف: $taskId")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "خطأ في قائمة انتظار المهام، سنكمل بدونها", e)
+        }
+
         val startTime = System.currentTimeMillis()
-        var currentStep = 0
+        var currentStep = startStep
         var finalMessage = "لم يتم إنجاز المهمة."
         val actionHistory = StringBuilder()
 
@@ -48,7 +74,7 @@ class AgentBrain(private val modelManager: ModelManager, private val context: Co
             val prompt = """
                 $systemPrompt
                 
-                هدف المستخدم: $userGoal
+                هدف المستخدم: $currentGoal
                 حالة الشاشة الحالية (JSON): $screenJson
                 
                 ما هي خطوتك التالية (JSON فقط)؟
@@ -62,7 +88,7 @@ class AgentBrain(private val modelManager: ModelManager, private val context: Co
                 val jsonEnd = response.lastIndexOf("}") + 1
                 
                 if (jsonStart == -1 || jsonEnd == 0) {
-                    // إذا لم يخرج النموذج JSON، نعتبره رداً نصياً عادياً ولا نسجل له أداء (لأنه مجرد دردشة)
+                    // إذا لم يخرج النموذج JSON، نعتبره رداً نصياً عادياً
                     return response.trim()
                 }
 
@@ -114,7 +140,16 @@ class AgentBrain(private val modelManager: ModelManager, private val context: Co
                         
                         // المهمة انتهت بنجاح: نقوم بتقييم الأداء
                         val latency = System.currentTimeMillis() - startTime
-                        performSelfReflection(userGoal, finalMessage, actionHistory.toString(), "SUCCESS", currentStep, latency)
+                        performSelfReflection(currentGoal, finalMessage, actionHistory.toString(), "SUCCESS", currentStep, latency)
+                        
+                        // تحديث حالة المهمة في قائمة الانتظار إلى "مكتملة"
+                        if (taskId.isNotEmpty()) {
+                            try {
+                                appDatabase.updateTaskStatus(taskId, "COMPLETED")
+                            } catch (e: Exception) {
+                                Log.e(TAG, "فشل تحديث حالة المهمة", e)
+                            }
+                        }
                         
                         return finalMessage
                     }
@@ -127,7 +162,16 @@ class AgentBrain(private val modelManager: ModelManager, private val context: Co
         
         // انتهت الخطوات دون إنجاز: نقوم بتقييم الفشل
         val latency = System.currentTimeMillis() - startTime
-        performSelfReflection(userGoal, "فشل في إنجاز المهمة خلال $maxSteps خطوات.", actionHistory.toString(), "FAILED", currentStep, latency)
+        performSelfReflection(currentGoal, "فشل في إنجاز المهمة خلال $maxSteps خطوات.", actionHistory.toString(), "FAILED", currentStep, latency)
+        
+        // تحديث حالة المهمة في قائمة الانتظار إلى "فاشلة"
+        if (taskId.isNotEmpty()) {
+            try {
+                appDatabase.updateTaskStatus(taskId, "FAILED")
+            } catch (e: Exception) {
+                Log.e(TAG, "فشل تحديث حالة المهمة", e)
+            }
+        }
         
         return finalMessage
     }
