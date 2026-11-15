@@ -59,6 +59,7 @@ class FloatingService : Service() {
     // --- إضافات جديدة للدردشة العائمة ---
     private lateinit var modelManager: ModelManager
     private lateinit var agentBrain: AgentBrain
+    private lateinit var appDatabase: AppDatabase
     private val serviceScope = CoroutineScope(Dispatchers.IO)
 
     override fun onCreate() {
@@ -69,9 +70,10 @@ class FloatingService : Service() {
             val safeSavedScale = if (savedScale < 50) 50 else if (savedScale > 150) 150 else savedScale
             bubbleScale = safeSavedScale / 100f
 
-            // تهيئة العقل المدبر (تم تعديل هذا السطر لتمرير applicationContext)
+            // تهيئة العقل المدبر وقاعدة البيانات
             modelManager = ModelManager(applicationContext)
             agentBrain = AgentBrain(modelManager, applicationContext)
+            appDatabase = AppDatabase(applicationContext)
 
             startForegroundService()
             setupFloatingBubble() 
@@ -485,6 +487,9 @@ class FloatingService : Service() {
             val chatContainer = agentChatView?.findViewById<LinearLayout>(R.id.chatContainerAgent)
             val scrollView = agentChatView?.findViewById<ScrollView>(R.id.scrollViewAgentChat)
 
+            // تحميل الرسائل السابقة
+            loadFloatingMessages(chatContainer, scrollView)
+
             btnSend?.setOnClickListener {
                 val message = etMessage?.text.toString().trim()
                 if (message.isNotEmpty()) {
@@ -497,7 +502,7 @@ class FloatingService : Service() {
                             addAgentMessage(chatContainer, scrollView, "Monolith: جاري التفكير...", false)
                         }
 
-                        // تنفيذ المهمة (الوكيل سيقرر هل يرد نصياً أم يتحكم بالشاشة)
+                        // تنفيذ المهمة
                         val result = agentBrain.executeTask(message)
 
                         Handler(Looper.getMainLooper()).post {
@@ -513,7 +518,25 @@ class FloatingService : Service() {
         }
     }
 
-    private fun addAgentMessage(container: LinearLayout?, scrollView: ScrollView?, text: String, isUser: Boolean) {
+    private fun loadFloatingMessages(container: LinearLayout?, scrollView: ScrollView?) {
+        if (container == null) return
+        container.removeAllViews()
+        val messages = appDatabase.getMessagesForConversation("floating_chat")
+        for (msg in messages) {
+            val isUser = msg.role == "USER"
+            val displayText = if (isUser) "أنت: ${msg.content}" else "Monolith: ${msg.content}"
+            val textView = TextView(this).apply {
+                text = displayText
+                setTextColor(if (isUser) 0xFF00FF00.toInt() else 0xFFFFFFFF.toInt())
+                textSize = 14f
+                setPadding(8, 8, 8, 8)
+            }
+            container.addView(textView)
+        }
+        scrollView?.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+    }
+
+    private fun addAgentMessage(container: LinearLayout?, scrollView: ScrollView?, text: String, isUser: Boolean, saveToDb: Boolean = true) {
         if (container == null) return
         val textView = TextView(this).apply {
             this.text = text
@@ -523,6 +546,13 @@ class FloatingService : Service() {
         }
         container.addView(textView)
         scrollView?.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+        
+        if (saveToDb) {
+            val cleanText = text.replace("أنت: ", "").replace("Monolith: ", "")
+            val role = if (isUser) "USER" else "AI"
+            val msgEntity = MessageEntity(conversationId = "floating_chat", senderId = if (isUser) "me" else "ai", role = role, content = cleanText, timestamp = System.currentTimeMillis())
+            appDatabase.insertMessage(msgEntity)
+        }
     }
 
     override fun onDestroy() {
