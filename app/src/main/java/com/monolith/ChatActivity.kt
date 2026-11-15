@@ -52,7 +52,7 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var tvAppTitle: TextView
     private lateinit var btnLoadModel: ImageButton
     private lateinit var btnAgents: ImageButton
-    private lateinit var btnThreads: ImageButton // زر الخيوط اللونية الجديد
+    private lateinit var btnThreads: ImageButton
 
     private var themeColorHex = "#00D4FF"
     private lateinit var securePrefs: androidx.security.crypto.EncryptedSharedPreferences
@@ -219,9 +219,8 @@ class ChatActivity : AppCompatActivity() {
         }
         topBar.addView(btnAgents, topBar.childCount - 1)
 
-        // زر الخيوط اللونية الجديد
         btnThreads = ImageButton(this).apply {
-            setImageResource(android.R.drawable.ic_menu_agenda) // أيقونة قائمة
+            setImageResource(android.R.drawable.ic_menu_agenda)
             setBackgroundColor(Color.TRANSPARENT)
             setColorFilter(Color.parseColor("#00D4FF"))
             layoutParams = LinearLayout.LayoutParams(dpToPx(48), dpToPx(48))
@@ -286,9 +285,6 @@ class ChatActivity : AppCompatActivity() {
         checkAndLoadModelOnStartup()
     }
 
-    // ========================================================
-    // إدارة الخيوط اللونية والعقد
-    // ========================================================
     private fun showThreadsBottomSheet() {
         val bottomSheetDialog = BottomSheetDialog(this)
         val view = layoutInflater.inflate(android.R.layout.list_content, null)
@@ -373,18 +369,15 @@ class ChatActivity : AppCompatActivity() {
             return
         }
 
-        // 1. اختيار الرسالة المصدر
         val msgOptions = messageList.mapIndexed { index, msg -> "$index: ${msg.content.take(20)}..." }.toTypedArray()
         
         AlertDialog.Builder(this)
             .setTitle("اختر الرسالة المصدر")
             .setItems(msgOptions) { _, sourceIndex ->
-                // 2. اختيار الرسالة الهدف
                 AlertDialog.Builder(this)
                     .setTitle("اختر الرسالة الهدف")
                     .setItems(msgOptions) { _, targetIndex ->
                         if (sourceIndex != targetIndex) {
-                            // 3. اختيار اللون (العقدة)
                             val nodeOptions = nodes.map { it["name"] ?: "لون" }.toTypedArray()
                             AlertDialog.Builder(this)
                                 .setTitle("اختر لون الخيط")
@@ -396,7 +389,6 @@ class ChatActivity : AppCompatActivity() {
                                     appDatabase.insertMessageThread(sourceId, targetId, nodeId)
                                     Toast.makeText(this, "تم ربط الرسالتين بنجاح", Toast.LENGTH_SHORT).show()
                                     
-                                    // تحديث الواجهة (اختياري، يمكننا إضافة مؤشر بصري لاحقاً)
                                     chatAdapter.notifyDataSetChanged()
                                 }
                                 .show()
@@ -408,7 +400,6 @@ class ChatActivity : AppCompatActivity() {
             }
             .show()
     }
-    // ========================================================
 
     private fun showAgentsBottomSheet() {
         val bottomSheetDialog = BottomSheetDialog(this)
@@ -584,6 +575,9 @@ class ChatActivity : AppCompatActivity() {
                 
                 scrollToBottom()
 
+                // ========================================================
+                // 1. وضع الوكيل (يبدأ بـ #)
+                // ========================================================
                 if (message.startsWith("#")) {
                     val task = message.substring(1).trim()
                     
@@ -618,19 +612,42 @@ class ChatActivity : AppCompatActivity() {
                     return
                 }
 
+                // ========================================================
+                // 2. وضع الدردشة العادية (بدون #)
+                // ========================================================
                 val apiKey = securePrefs.getString("api_key", null)
                 val selectedModel = securePrefs.getString("selected_model", null)
                 
-                if (apiKey.isNullOrEmpty()) {
-                    Toast.makeText(this, "تم حفظ رسالتك. يرجى تهيئة المحرك من الإعدادات للرد.", Toast.LENGTH_LONG).show()
-                    return
-                }
-                
-                if (selectedModel.isNullOrEmpty()) {
-                    Toast.makeText(this, "يرجى اختيار نموذج من الإعدادات أولاً", Toast.LENGTH_LONG).show()
-                    return
+                // *** الحل: إذا لم يوجد API، نستخدم النموذج المحلي للرد ***
+                if (apiKey.isNullOrEmpty() || selectedModel.isNullOrEmpty()) {
+                    if (isModelLoaded) {
+                        // الرد عبر النموذج المحلي
+                        lifecycleScope.launch {
+                            val aiMsg = ChatMessage(role = MessageRole.AI, content = "جاري التفكير محلياً...", colorHex = "#2A2A2A")
+                            messageList.add(aiMsg)
+                            val aiMsgIndex = messageList.size - 1
+                            chatAdapter.updateMessages(messageList)
+                            scrollToBottom()
+
+                            val memoriesContext = getMemoriesContext()
+                            val finalPrompt = if (memoriesContext.isNotEmpty()) "$memoriesContext\n\n$message" else message
+                            
+                            val reply = modelManager.generateResponse(finalPrompt, 0)
+                            
+                            val updatedMsg = aiMsg.copy(content = reply)
+                            messageList[aiMsgIndex] = updatedMsg
+                            saveMessageToDb(updatedMsg)
+                            chatAdapter.updateMessages(messageList)
+                            scrollToBottom()
+                        }
+                        return
+                    } else {
+                        Toast.makeText(this, "تم حفظ رسالتك. يرجى تهيئة المحرك من الإعدادات للرد، أو تحميل نموذج محلي.", Toast.LENGTH_LONG).show()
+                        return
+                    }
                 }
 
+                // الرد عبر السحابة (API)
                 analyzeUserMessage(message)
 
                 val enableThinking = securePrefs.getBoolean("enable_thinking", true)
