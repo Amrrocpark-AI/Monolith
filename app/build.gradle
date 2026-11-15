@@ -130,10 +130,13 @@ dependencies {
     
     implementation 'com.google.android.gms:play-services-mlkit-subject-segmentation:16.0.0-beta1'
 
-    // --- مكتبات Markwon لعرض النصوص المنسقة ---
-    implementation "io.noties.markwon:core:4.18.0"
-    implementation "io.noties.markwon:ext-tables:4.18.0"
-    implementation "io.noties.markwon:syntax-highlight:4.18.0"
-    implementation "io.noties.markwon:image:4.18.0"
-    implementation "io.noties.markwon:html:4.18.0"
+    // --- مكتبات Markwon الصحيحة (الإصدار 4.6.2) ---
+    implementation "io.noties.markwon:core:4.6.2"
+    implementation "io.noties.markwon:ext-tables:4.6.2"
+    implementation "io.noties.markwon:syntax-highlight:4.6.2"
+    implementation "io.noties.markwon:image:4.6.2"
+    implementation "io.noties.markwon:html:4.6.2"
+    
+    // --- مكتبة prism4j المطلوبة لتلوين الأكواد ---
+    implementation "io.noties:prism4j:2.0.0"
 }
