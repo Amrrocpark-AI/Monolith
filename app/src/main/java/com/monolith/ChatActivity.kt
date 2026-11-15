@@ -51,6 +51,7 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var securePrefs: androidx.security.crypto.EncryptedSharedPreferences
     private lateinit var appDatabase: AppDatabase
     private lateinit var modelManager: ModelManager
+    private lateinit var agentBrain: AgentBrain // العقل الجديد
     private var messageList: MutableList<ChatMessage> = mutableListOf()
     private val currentConversationId = "main_chat" 
     
@@ -91,6 +92,7 @@ class ChatActivity : AppCompatActivity() {
         
         appDatabase = AppDatabase(applicationContext)
         modelManager = ModelManager(applicationContext)
+        agentBrain = AgentBrain(modelManager) // تهيئة العقل
         
         lifecycleScope.launch(Dispatchers.IO) {
             withContext(Dispatchers.Main) {
@@ -321,6 +323,30 @@ class ChatActivity : AppCompatActivity() {
                 hideKeyboard()
                 
                 scrollToBottom()
+
+                // ========================================================
+                // تفعيل الوكيل الحقيقي (Agent Mode) عند كتابة # في البداية
+                // ========================================================
+                if (message.startsWith("#")) {
+                    val task = message.substring(1).trim()
+                    lifecycleScope.launch {
+                        val thinkingMsg = ChatMessage(role = MessageRole.AI, content = "جاري تنفيذ المهمة عبر الوكيل...", colorHex = "#1A1A1A", isThinking = true)
+                        messageList.add(thinkingMsg)
+                        val thinkingIndex = messageList.size - 1
+                        chatAdapter.updateMessages(messageList)
+                        scrollToBottom()
+
+                        val result = agentBrain.executeTask(task)
+                        
+                        val updatedThinking = thinkingMsg.copy(content = "النتيجة: $result", isThinking = false)
+                        messageList[thinkingIndex] = updatedThinking
+                        saveMessageToDb(updatedThinking)
+                        chatAdapter.updateMessages(messageList)
+                        scrollToBottom()
+                    }
+                    return
+                }
+                // ========================================================
 
                 val apiKey = securePrefs.getString("api_key", null)
                 val selectedModel = securePrefs.getString("selected_model", null)
