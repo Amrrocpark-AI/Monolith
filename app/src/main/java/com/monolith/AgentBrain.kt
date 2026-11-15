@@ -8,22 +8,28 @@ class AgentBrain(private val modelManager: ModelManager) {
 
     private val TAG = "MonolithAgent"
 
+    // الدستور الجديد: يسمح بالدردشة والتحكم في نفس الوقت
     private val systemPrompt = """
-        أنت Monolith، وكيل ذكاء اصطناعي سيادي تعمل على هاتف أندرويد.
-        مهمتك إنجاز طلبات المستخدم بالتحكم في الشاشة.
-        
-        لديك الأدوات التالية (يجب أن ترد بصيغة JSON فقط):
-        1. {"action": "click", "target": "نص الزر أو الإحداثيات"}
-        2. {"action": "type", "text": "النص المراد كتابته"}
-        3. {"action": "scroll", "direction": "down"} (أو up)
-        4. {"action": "wait"} (انتظار تحميل)
-        5. {"action": "finish", "message": "رسالة النجاح"}
-        
-        قاعدة صارمة: لا ترد بأي كلام آخر غير JSON. إذا لم تجد العنصر، جرب التمرير.
+        أنت Monolith، وكيل ذكاء اصطناعي سيادي يعمل على هاتف أندرويد.
+        مهمتك التحدث مع المستخدم بلغة طبيعية أو إنجاز طلباته بالتحكم في الشاشة.
+
+        يجب أن ترد دائماً بصيغة JSON فقط، بدون أي كلام إضافي أو علامات Markdown.
+        اختر الإجراء المناسب من القائمة التالية:
+        1. للدردشة العادية أو الإجابة على الأسئلة: {"action": "chat", "message": "نص الرد هنا"}
+        2. للنقر على زر أو عنصر: {"action": "click", "target": "نص الزر الموجود على الشاشة"}
+        3. لكتابة نص في حقل إدخال: {"action": "type", "text": "النص المراد كتابته"}
+        4. للتمرير في الشاشة: {"action": "scroll", "direction": "down"} (أو up)
+        5. للانتظار (مثلاً انتظار تحميل تطبيق): {"action": "wait"}
+        6. لإنهاء المهمة وإخبار المستخدم بالنتيجة: {"action": "finish", "message": "رسالة النجاح النهائية"}
+
+        قواعد صارمة:
+        - إذا كان طلب المستخدم يحتاج إلى التحكم في الهاتف، استخدم الأدوات (click, type, scroll).
+        - إذا كان طلب المستخدم مجرد سؤال أو دردشة، استخدم (chat) فوراً.
+        - لا ترد بأي كلام خارج الـ JSON.
+        - إذا لم تجد العنصر المطلوب، استخدم أداة التمرير (scroll) للبحث عنه.
     """.trimIndent()
 
-    // تم تعديل الدالة لتستقبل agentId (الافتراضي 0 للوكيل الرئيسي)
-    suspend fun executeTask(userGoal: String, maxSteps: Int = 5, agentId: Int = 0): String {
+    suspend fun executeTask(userGoal: String, maxSteps: Int = 10, agentId: Int = 0): String {
         val a11yService = MonolithAccessibilityService.instance
             ?: return "خطأ: خدمة إمكانية الوصول (Accessibility) غير مفعلة. يرجى تفعيلها من إعدادات الهاتف."
 
@@ -34,8 +40,10 @@ class AgentBrain(private val modelManager: ModelManager) {
             currentStep++
             Log.d(TAG, "--- Agent $agentId - Step $currentStep ---")
 
+            // 1. قراءة الشاشة الحالية
             val screenJson = a11yService.getScreenTree()
             
+            // 2. بناء الطلب للنموذج
             val prompt = """
                 $systemPrompt
                 
@@ -45,15 +53,18 @@ class AgentBrain(private val modelManager: ModelManager) {
                 ما هي خطوتك التالية (JSON فقط)؟
             """.trimIndent()
 
-            // تمرير agentId إلى المحرك
+            // 3. توليد الرد
             val response = modelManager.generateResponse(prompt, agentId)
             Log.d(TAG, "Model Response: $response")
 
+            // 4. تحليل الرد وتنفيذ الإجراء
             try {
                 val jsonStart = response.indexOf("{")
                 val jsonEnd = response.lastIndexOf("}") + 1
+                
+                // حماية: إذا لم يخرج النموذج JSON، نعتبره رداً نصياً عادياً
                 if (jsonStart == -1 || jsonEnd == 0) {
-                    return "فشل النموذج في إخراج صيغة JSON صحيحة."
+                    return response.trim()
                 }
 
                 val jsonString = response.substring(jsonStart, jsonEnd)
@@ -61,12 +72,15 @@ class AgentBrain(private val modelManager: ModelManager) {
                 val action = jsonAction.optString("action")
 
                 when (action) {
+                    "chat" -> {
+                        // إذا كان رداً نصياً، نعيده فوراً للواجهة
+                        return jsonAction.optString("message", "...")
+                    }
                     "click" -> {
                         val target = jsonAction.optString("target")
                         Log.d(TAG, "Executing: Click on $target")
                         
                         val coords = a11yService.getCoordinatesByText(target)
-                        
                         if (coords != null) {
                             AgentOverlayService.instance?.showClick(coords.first, coords.second, currentStep)
                             delay(500)
@@ -110,7 +124,8 @@ class AgentBrain(private val modelManager: ModelManager) {
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error parsing action JSON", e)
-                return "حدث خطأ في فهم استجابة النموذج."
+                // إذا فشل التحليل، نعيد النص كما هو كإجابة
+                return response.trim()
             }
         }
         return finalMessage
