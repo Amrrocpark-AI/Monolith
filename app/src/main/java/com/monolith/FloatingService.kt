@@ -10,7 +10,9 @@ import android.graphics.Color
 import android.graphics.PixelFormat
 import android.media.AudioManager
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.Vibrator
 import android.view.Gravity
 import android.view.LayoutInflater
@@ -26,6 +28,9 @@ import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlin.math.abs
 
 class FloatingService : Service() {
@@ -51,6 +56,11 @@ class FloatingService : Service() {
     private var agentChatView: View? = null
     private var agentChatParams: WindowManager.LayoutParams? = null
 
+    // --- إضافات جديدة للدردشة العائمة ---
+    private lateinit var modelManager: ModelManager
+    private lateinit var agentBrain: AgentBrain
+    private val serviceScope = CoroutineScope(Dispatchers.IO)
+
     override fun onCreate() {
         super.onCreate()
         try {
@@ -58,6 +68,10 @@ class FloatingService : Service() {
             val savedScale = prefs.getInt("bubble_scale_int", 100)
             val safeSavedScale = if (savedScale < 50) 50 else if (savedScale > 150) 150 else savedScale
             bubbleScale = safeSavedScale / 100f
+
+            // تهيئة العقل المدبر
+            modelManager = ModelManager(applicationContext)
+            agentBrain = AgentBrain(modelManager)
 
             startForegroundService()
             setupFloatingBubble() 
@@ -476,6 +490,20 @@ class FloatingService : Service() {
                 if (message.isNotEmpty()) {
                     addAgentMessage(chatContainer, scrollView, "أنت: $message", true)
                     etMessage?.text?.clear()
+
+                    // --- إرسال الرسالة إلى العقل المدبر ---
+                    serviceScope.launch {
+                        Handler(Looper.getMainLooper()).post {
+                            addAgentMessage(chatContainer, scrollView, "Monolith: جاري التفكير...", false)
+                        }
+
+                        // تنفيذ المهمة (الوكيل سيقرر هل يرد نصياً أم يتحكم بالشاشة)
+                        val result = agentBrain.executeTask(message)
+
+                        Handler(Looper.getMainLooper()).post {
+                            addAgentMessage(chatContainer, scrollView, "Monolith: $result", false)
+                        }
+                    }
                 }
             }
 
@@ -509,6 +537,5 @@ class FloatingService : Service() {
         agentChatView?.let { windowManager.removeView(it) }
     }
 
-    // السطر الوحيد الذي تمت إضافته
     override fun onBind(intent: Intent?): IBinder? = null
 }
