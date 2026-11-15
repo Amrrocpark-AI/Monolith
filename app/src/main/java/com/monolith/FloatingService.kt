@@ -69,9 +69,9 @@ class FloatingService : Service() {
             val safeSavedScale = if (savedScale < 50) 50 else if (savedScale > 150) 150 else savedScale
             bubbleScale = safeSavedScale / 100f
 
-            // تهيئة العقل المدبر
+            // تهيئة العقل المدبر (تم تعديل هذا السطر لتمرير applicationContext)
             modelManager = ModelManager(applicationContext)
-            agentBrain = AgentBrain(modelManager)
+            agentBrain = AgentBrain(modelManager, applicationContext)
 
             startForegroundService()
             setupFloatingBubble() 
