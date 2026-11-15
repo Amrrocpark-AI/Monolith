@@ -16,6 +16,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import io.noties.markwon.Markwon
 import io.noties.markwon.ext.tables.TablePlugin
+import io.noties.markwon.ext.tables.TableTheme
 
 class ChatAdapter(
     private val context: Context,
@@ -27,15 +28,16 @@ class ChatAdapter(
     private val themeColorHex: String
 ) : RecyclerView.Adapter<ChatAdapter.ChatViewHolder>() {
 
-    // *** إصلاح الخطأ: استخدام TablePlugin.ThemeConfigure بدلاً من TableTheme.builder() ***
-    private val tablePlugin = TablePlugin.create(object : TablePlugin.ThemeConfigure {
-        override fun tableCellPadding(): Int = 16
-        override fun tableBorderWidth(): Int = 2
-        override fun tableBorderColor(): Int = Color.parseColor("#444444")
-        override fun tableHeaderRowBackgroundColor(): Int = Color.parseColor("#333333")
-        override fun tableOddRowBackgroundColor(): Int = Color.parseColor("#2A2A2A")
-        override fun tableEvenRowBackgroundColor(): Int = Color.parseColor("#222222")
-    })
+    // *** إصلاح الخطأ: استخدام TablePlugin.create مع lambda (builder) ***
+    private val tablePlugin = TablePlugin.create { builder: TableTheme.Builder ->
+        builder
+            .tableCellPadding(16)
+            .tableBorderWidth(2)
+            .tableBorderColor(Color.parseColor("#444444"))
+            .tableHeaderRowBackgroundColor(Color.parseColor("#333333"))
+            .tableOddRowBackgroundColor(Color.parseColor("#2A2A2A"))
+            .tableEvenRowBackgroundColor(Color.parseColor("#222222"))
+    }
 
     private val markwon = Markwon.builder(context)
         .usePlugin(tablePlugin)
