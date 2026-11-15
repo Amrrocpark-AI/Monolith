@@ -1,26 +1,26 @@
 package com.monolith
 
-import android.app.AlertDialog
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.PorterDuff
-import android.graphics.drawable.AnimatedVectorDrawable
 import android.graphics.drawable.GradientDrawable
-import android.text.Selection
-import android.text.Spannable
-import android.view.ActionMode
+import android.text.method.LinkMovementMethod
 import android.view.Gravity
-import android.view.Menu
-import android.view.MenuItem
+import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.webkit.WebView
-import android.webkit.WebViewClient
 import android.widget.*
-import androidx.appcompat.widget.AppCompatTextView
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
-import com.google.android.material.card.MaterialCardView
+import io.noties.markwon.Markwon
+import io.noties.markwon.ext.tables.TablePlugin
+import io.noties.markwon.ext.tables.TableTheme
+import io.noties.markwon.syntax.Prism4jTheme
+import io.noties.markwon.syntax.SyntaxHighlightPlugin
+import io.noties.prism4j.Prism4j
 
 class ChatAdapter(
     private val context: Context,
@@ -32,45 +32,81 @@ class ChatAdapter(
     private val themeColorHex: String
 ) : RecyclerView.Adapter<ChatAdapter.ChatViewHolder>() {
 
+    // إعداد محرك عرض النصوص Markdown مع جداول مخصصة
+    private val tableTheme = TableTheme.create(context).apply {
+        tableCellPadding(16)
+        tableBorderWidth(2)
+        tableBorderColor(Color.parseColor("#444444"))
+        tableHeaderRowBackgroundColor(Color.parseColor("#333333"))
+        tableOddRowBackgroundColor(Color.parseColor("#2A2A2A"))
+        tableEvenRowBackgroundColor(Color.parseColor("#222222"))
+    }
+
+    private val markwon = Markwon.builder(context)
+        .usePlugin(TablePlugin.create(tableTheme))
+        // يمكن إضافة ملون للأكواد هنا إذا أردت لاحقاً
+        .build()
+
+    companion object {
+        private const val VIEW_TYPE_USER = 1
+        private const val VIEW_TYPE_AI = 2
+    }
+
+    override fun getItemViewType(position: Int): Int {
+        return if (messages[position].role == MessageRole.USER) VIEW_TYPE_USER else VIEW_TYPE_AI
+    }
+
     inner class ChatViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-        val messageLayout: LinearLayout = itemView as LinearLayout
+        val rootLayout: LinearLayout = itemView as LinearLayout
+        val cardView: androidx.cardview.widget.CardView = rootLayout.getChildAt(0) as androidx.cardview.widget.CardView
+        val tvMessageContent: TextView = cardView.getChildAt(0) as TextView
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ChatViewHolder {
-        val view = LinearLayout(parent.context).apply {
-            layoutParams = RecyclerView.LayoutParams(
-                RecyclerView.LayoutParams.MATCH_PARENT,
-                RecyclerView.LayoutParams.WRAP_CONTENT
-            )
-            orientation = LinearLayout.VERTICAL
-            setPadding(0, dpToPx(8), 0, dpToPx(8))
+        val layoutRes = if (viewType == VIEW_TYPE_USER) {
+            R.layout.item_message_user
+        } else {
+            R.layout.item_message_ai
         }
+        val view = LayoutInflater.from(parent.context).inflate(layoutRes, parent, false)
         return ChatViewHolder(view)
     }
 
     override fun onBindViewHolder(holder: ChatViewHolder, position: Int) {
         val msg = messages[position]
-        val container = holder.messageLayout
-        container.removeAllViews()
+        val isUser = msg.role == MessageRole.USER
 
-        val messageLayout = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            )
+        // 1. إعداد النص باستخدام Markwon لعرض التنسيق والجداول والأكواد
+        if (msg.content.isNotEmpty()) {
+            markwon.setMarkdown(holder.tvMessageContent, msg.content)
+            holder.tvMessageContent.movementMethod = LinkMovementMethod.getInstance() // لجعل الروابط قابلة للنقر
+            holder.tvMessageContent.visibility = View.VISIBLE
+            holder.cardView.visibility = View.VISIBLE
+        } else {
+            holder.tvMessageContent.visibility = View.GONE
+            holder.cardView.visibility = View.GONE
         }
 
+        // 2. إضافة الصور (إذا وجدت)
+        // نقوم بإزالة أي صور قديمة (بسبب إعادة تدوير العناصر)
+        holder.rootLayout.removeAllViews()
+        holder.rootLayout.addView(holder.cardView) // إعادة إضافة الفقاعة الأساسية
+
         if (!msg.attachmentUris.isNullOrEmpty()) {
+            val imageContainer = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                // إذا كانت رسالة المستخدم، اجعل الصور على اليمين
+                gravity = if (isUser) Gravity.END else Gravity.START 
+                setPadding(0, 0, 0, dpToPx(8))
+            }
             val scrollView = HorizontalScrollView(context)
-            val imageContainer = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
-            val imageSizePx = dpToPx(180)
+            val imageSizePx = dpToPx(150)
 
             for (uriString in msg.attachmentUris) {
                 val imageView = ImageView(context).apply {
-                    layoutParams = LinearLayout.LayoutParams(imageSizePx, imageSizePx).apply { setMargins(0, 0, 16, 16) }
+                    layoutParams = LinearLayout.LayoutParams(imageSizePx, imageSizePx).apply { setMargins(0, 0, 16, 0) }
                     scaleType = ImageView.ScaleType.CENTER_CROP
-                    val clip = GradientDrawable().apply { cornerRadius = dpToPx(16).toFloat(); setColor(Color.TRANSPARENT) }
+                    val clip = GradientDrawable().apply { cornerRadius = dpToPx(12).toFloat(); setColor(Color.TRANSPARENT) }
                     background = clip
                     clipToOutline = true
                 }
@@ -78,59 +114,50 @@ class ChatAdapter(
                 imageContainer.addView(imageView)
             }
             scrollView.addView(imageContainer)
-            messageLayout.addView(scrollView)
+            // إضافة الصور فوق الفقاعة
+            holder.rootLayout.addView(scrollView, 0)
         }
 
-        if (msg.content.isNotEmpty()) {
-            val webView = WebView(context).apply {
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                )
-                setBackgroundColor(Color.TRANSPARENT)
-                settings.javaScriptEnabled = false
-                settings.loadWithOverviewMode = true
-                settings.useWideViewPort = true
-                webViewClient = WebViewClient()
+        // 3. إضافة شريط الإجراءات (أزرار النسخ، الصوت، التفاعل) أسفل الفقاعة
+        // نقوم بإزالة الشريط القديم إن وجد
+        if (holder.rootLayout.childCount > 1) {
+            for (i in holder.rootLayout.childCount - 1 downTo 1) {
+                holder.rootLayout.removeViewAt(i)
             }
-
-            val isUser = msg.role == MessageRole.USER
-            val bubbleColor = if (isUser) themeColorHex else "#2A2A2A"
-            val textColor = if (isUser) "#000000" else "#FFFFFF"
-            
-            val htmlContent = buildHtml(msg.content, bubbleColor, textColor)
-            webView.loadDataWithBaseURL(null, htmlContent, "text/html", "UTF-8", null)
-            messageLayout.addView(webView)
         }
 
         if (msg.content.isNotEmpty() && msg.content != "جاري التفكير..." && !msg.isThinking) {
             val actionBar = LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(dpToPx(8), dpToPx(8), dpToPx(8), 0)
+                setPadding(dpToPx(4), dpToPx(8), dpToPx(4), 0)
             }
 
+            // دالة مساعدة لإنشاء الأزرار
             fun createActionIcon(resId: Int, tintColor: Int, onClick: () -> Unit): ImageView {
                 return ImageView(context).apply {
                     setImageResource(resId)
                     setColorFilter(tintColor)
-                    val params = LinearLayout.LayoutParams(dpToPx(22), dpToPx(22))
+                    val params = LinearLayout.LayoutParams(dpToPx(20), dpToPx(20))
                     params.setMargins(0, 0, dpToPx(16), 0)
                     layoutParams = params
                     setOnClickListener { onClick() }
                 }
             }
 
+            // زر النسخ
             actionBar.addView(createActionIcon(R.drawable.ic_copy, Color.parseColor("#88FFFFFF")) {
-                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Monolith", msg.content))
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("Monolith", msg.content))
                 Toast.makeText(context, "تم نسخ الرسالة", Toast.LENGTH_SHORT).show()
             })
 
+            // زر النطق
             actionBar.addView(createActionIcon(R.drawable.ic_volume_up, Color.parseColor("#88FFFFFF")) {
                 onSpeakClick(msg.content)
             })
 
+            // زر التفاعل
             val thumbIcon = createActionIcon(R.drawable.ic_thumb_hybrid, Color.parseColor("#88FFFFFF")) {
                 onReactionClick(msg)
             }
@@ -140,18 +167,15 @@ class ChatAdapter(
             }
             actionBar.addView(thumbIcon)
 
-            val heartIcon = createActionIcon(R.drawable.ic_heart, if (msg.reactionColor != null) Color.parseColor(msg.reactionColor) else Color.parseColor("#88FFFFFF")) {
-                onReactionClick(msg)
-            }
-            actionBar.addView(heartIcon)
-            
+            // زر التثبيت
             val pinIcon = createActionIcon(R.drawable.ic_pinned, if (msg.isPinned) Color.parseColor("#00D4FF") else Color.parseColor("#88FFFFFF")) {
                 onPinClick(msg)
             }
             actionBar.addView(pinIcon)
 
+            // زر المزيد
             actionBar.addView(createActionIcon(R.drawable.ic_more_vert, Color.parseColor("#88FFFFFF")) {
-                val popup = PopupMenu(context, actionBar.getChildAt(5))
+                val popup = PopupMenu(context, actionBar.getChildAt(actionBar.childCount - 1))
                 popup.menu.add("🔄 إعادة توليد")
                 popup.menu.add("📤 مشاركة")
                 popup.menu.add("✏️ تعديل")
@@ -159,34 +183,25 @@ class ChatAdapter(
                     when(item.title) {
                         "🔄 إعادة توليد" -> Toast.makeText(context, "سيتم التوليد قريباً", Toast.LENGTH_SHORT).show()
                         "📤 مشاركة" -> {
-                            val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(android.content.Intent.EXTRA_TEXT, msg.content) }
-                            context.startActivity(android.content.Intent.createChooser(intent, "مشاركة"))
+                            val intent = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, msg.content) }
+                            context.startActivity(Intent.createChooser(intent, "مشاركة"))
                         }
-                        "✏️ تعديل" -> {
-                            onEditClick(msg)
-                        }
+                        "✏️ تعديل" -> onEditClick(msg)
                     }
                     true
                 }
                 popup.show()
             })
 
-            if (msg.role == MessageRole.USER) {
+            // محاذاة شريط الإجراءات
+            if (isUser) {
                 actionBar.gravity = Gravity.END
             } else {
                 actionBar.gravity = Gravity.START
             }
 
-            messageLayout.addView(actionBar)
+            holder.rootLayout.addView(actionBar)
         }
-
-        if (msg.role == MessageRole.USER) { 
-            messageLayout.gravity = Gravity.END
-        } else { 
-            messageLayout.gravity = Gravity.START
-        }
-        
-        container.addView(messageLayout)
     }
 
     override fun getItemCount(): Int = messages.size
@@ -194,61 +209,6 @@ class ChatAdapter(
     fun updateMessages(newMessages: List<ChatMessage>) {
         this.messages = newMessages
         notifyDataSetChanged()
-    }
-
-    private fun buildHtml(content: String, bubbleColor: String, textColor: String): String {
-        return """
-            <html>
-            <head>
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <style>
-                body {
-                    background-color: $bubbleColor;
-                    color: $textColor;
-                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-                    margin: 0;
-                    padding: 12px;
-                    border-radius: 20px;
-                    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-                    word-wrap: break-word;
-                    font-size: 16px;
-                    line-height: 1.5;
-                }
-                pre {
-                    background-color: #1A1A1A;
-                    padding: 12px;
-                    border-radius: 8px;
-                    overflow-x: auto;
-                    color: #00FF00;
-                    font-size: 14px;
-                }
-                code {
-                    font-family: 'Courier New', Courier, monospace;
-                    background-color: #1A1A1A;
-                    padding: 2px 4px;
-                    border-radius: 4px;
-                }
-                table {
-                    border-collapse: collapse;
-                    width: 100%;
-                    margin-top: 10px;
-                    margin-bottom: 10px;
-                }
-                th, td {
-                    border: 1px solid #444;
-                    padding: 8px;
-                    text-align: left;
-                }
-                th {
-                    background-color: #333;
-                }
-            </style>
-            </head>
-            <body>
-                $content
-            </body>
-            </html>
-        """.trimIndent()
     }
 
     private fun dpToPx(dp: Int): Int = (dp * context.resources.displayMetrics.density).toInt()
