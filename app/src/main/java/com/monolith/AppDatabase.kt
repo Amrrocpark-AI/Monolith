@@ -6,10 +6,10 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import java.util.UUID
 
-class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_database", null, 2) {
+class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_database", null, 3) { // تم رفع الإصدار إلى 3
 
     override fun onCreate(db: SQLiteDatabase) {
-        // الجداول القديمة
+        // الجداول القديمة (من الإصدار 1)
         db.execSQL("CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, conversationId TEXT, senderId TEXT, role TEXT, content TEXT, timestamp INTEGER, attachmentUris TEXT, isEncrypted INTEGER, reactionType TEXT, reactionColor TEXT, linkedMessageIds TEXT, isPinned INTEGER, pinCategory TEXT, iconType TEXT, pathColor TEXT, uuid TEXT, modelName TEXT, isEdited INTEGER, originalContent TEXT, editReason TEXT, editedTimestamp INTEGER)")
         db.execSQL("CREATE TABLE IF NOT EXISTS memories (id TEXT PRIMARY KEY, type TEXT, content TEXT, timestamp INTEGER, confidence REAL)")
         db.execSQL("CREATE TABLE IF NOT EXISTS notes (id TEXT PRIMARY KEY, title TEXT, content TEXT, type TEXT, timestamp INTEGER, dueDate INTEGER, reminderTime INTEGER, isPinned INTEGER, colorHex TEXT, coverPattern TEXT, coverSticker TEXT)")
@@ -21,15 +21,21 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
         db.execSQL("CREATE TABLE IF NOT EXISTS virtual_albums (id TEXT PRIMARY KEY, name TEXT, coverUri TEXT, createdAt INTEGER, isVault INTEGER, sortOrder INTEGER)")
         db.execSQL("CREATE TABLE IF NOT EXISTS album_media_cross_ref (albumId TEXT, mediaUri TEXT, PRIMARY KEY(albumId, mediaUri))")
 
-        // الجداول الجديدة
+        // الجداول الجديدة (من الإصدار 2)
         db.execSQL("CREATE TABLE IF NOT EXISTS skills (id TEXT PRIMARY KEY, name TEXT, description TEXT, action_json TEXT, success_count INTEGER, timestamp INTEGER)")
         db.execSQL("CREATE TABLE IF NOT EXISTS blind_spots (id TEXT PRIMARY KEY, x INTEGER, y INTEGER, width INTEGER, height INTEGER, context TEXT, confidence REAL, timestamp INTEGER)")
         db.execSQL("CREATE TABLE IF NOT EXISTS code_vault (id TEXT PRIMARY KEY, file_name TEXT, content TEXT, version INTEGER, timestamp INTEGER)")
         db.execSQL("CREATE TABLE IF NOT EXISTS audio_memory (id TEXT PRIMARY KEY, file_path TEXT, transcription TEXT, duration INTEGER, timestamp INTEGER)")
         db.execSQL("CREATE TABLE IF NOT EXISTS file_memory (id TEXT PRIMARY KEY, file_path TEXT, file_type TEXT, description TEXT, timestamp INTEGER)")
+
+        // الجداول الجديدة (الإصدار 3 - الخيوط اللونية)
+        db.execSQL("CREATE TABLE IF NOT EXISTS chromatic_nodes (id TEXT PRIMARY KEY, color_hex TEXT, name TEXT, definition TEXT, timestamp INTEGER)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS message_threads (id TEXT PRIMARY KEY, source_msg_id TEXT, target_msg_id TEXT, node_id TEXT, timestamp INTEGER)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS thread_annotations (id TEXT PRIMARY KEY, thread_id TEXT, content TEXT, timestamp INTEGER)")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        // هجرة آمنة للإصدار 2 (بدون حذف بيانات)
         if (oldVersion < 2) {
             db.execSQL("CREATE TABLE IF NOT EXISTS skills (id TEXT PRIMARY KEY, name TEXT, description TEXT, action_json TEXT, success_count INTEGER, timestamp INTEGER)")
             db.execSQL("CREATE TABLE IF NOT EXISTS blind_spots (id TEXT PRIMARY KEY, x INTEGER, y INTEGER, width INTEGER, height INTEGER, context TEXT, confidence REAL, timestamp INTEGER)")
@@ -37,8 +43,17 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
             db.execSQL("CREATE TABLE IF NOT EXISTS audio_memory (id TEXT PRIMARY KEY, file_path TEXT, transcription TEXT, duration INTEGER, timestamp INTEGER)")
             db.execSQL("CREATE TABLE IF NOT EXISTS file_memory (id TEXT PRIMARY KEY, file_path TEXT, file_type TEXT, description TEXT, timestamp INTEGER)")
         }
+        // هجرة آمنة للإصدار 3 (بدون حذف بيانات)
+        if (oldVersion < 3) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS chromatic_nodes (id TEXT PRIMARY KEY, color_hex TEXT, name TEXT, definition TEXT, timestamp INTEGER)")
+            db.execSQL("CREATE TABLE IF NOT EXISTS message_threads (id TEXT PRIMARY KEY, source_msg_id TEXT, target_msg_id TEXT, node_id TEXT, timestamp INTEGER)")
+            db.execSQL("CREATE TABLE IF NOT EXISTS thread_annotations (id TEXT PRIMARY KEY, thread_id TEXT, content TEXT, timestamp INTEGER)")
+        }
     }
 
+    // ==========================================
+    // الدوال القديمة (لم يتم تغييرها إطلاقاً)
+    // ==========================================
     fun insertMessage(message: MessageEntity) {
         val db = writableDatabase
         val values = ContentValues().apply {
@@ -423,5 +438,102 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
         }
         db.insert("file_memory", null, values)
         db.close()
+    }
+
+    // ==========================================
+    // الدوال الجديدة (للخيوط اللونية والعقد والتعليقات)
+    // ==========================================
+
+    // 1. دوال العقد (الألوان وتعريفاتها)
+    fun insertChromaticNode(id: String = UUID.randomUUID().toString(), colorHex: String, name: String, definition: String) {
+        val db = writableDatabase
+        val values = ContentValues().apply {
+            put("id", id)
+            put("color_hex", colorHex)
+            put("name", name)
+            put("definition", definition)
+            put("timestamp", System.currentTimeMillis())
+        }
+        db.insertWithOnConflict("chromatic_nodes", null, values, SQLiteDatabase.CONFLICT_REPLACE)
+        db.close()
+    }
+
+    fun getAllChromaticNodes(): List<Map<String, String>> {
+        val db = readableDatabase
+        val cursor = db.rawQuery("SELECT * FROM chromatic_nodes", null)
+        val list = mutableListOf<Map<String, String>>()
+        if (cursor.moveToFirst()) {
+            do {
+                val map = mutableMapOf<String, String>()
+                map["id"] = cursor.getString(cursor.getColumnIndexOrThrow("id"))
+                map["color_hex"] = cursor.getString(cursor.getColumnIndexOrThrow("color_hex"))
+                map["name"] = cursor.getString(cursor.getColumnIndexOrThrow("name"))
+                map["definition"] = cursor.getString(cursor.getColumnIndexOrThrow("definition"))
+                list.add(map)
+            } while (cursor.moveToNext())
+        }
+        cursor.close()
+        db.close()
+        return list
+    }
+
+    // 2. دوال الخيوط (الروابط بين الرسائل)
+    fun insertMessageThread(sourceMsgId: String, targetMsgId: String, nodeId: String) {
+        val db = writableDatabase
+        val values = ContentValues().apply {
+            put("id", UUID.randomUUID().toString())
+            put("source_msg_id", sourceMsgId)
+            put("target_msg_id", targetMsgId)
+            put("node_id", nodeId)
+            put("timestamp", System.currentTimeMillis())
+        }
+        db.insert("message_threads", null, values)
+        db.close()
+    }
+
+    fun getThreadsForMessage(messageId: String): List<Map<String, String>> {
+        val db = readableDatabase
+        val cursor = db.rawQuery("SELECT * FROM message_threads WHERE source_msg_id = ? OR target_msg_id = ?", arrayOf(messageId, messageId))
+        val list = mutableListOf<Map<String, String>>()
+        if (cursor.moveToFirst()) {
+            do {
+                val map = mutableMapOf<String, String>()
+                map["id"] = cursor.getString(cursor.getColumnIndexOrThrow("id"))
+                map["source_msg_id"] = cursor.getString(cursor.getColumnIndexOrThrow("source_msg_id"))
+                map["target_msg_id"] = cursor.getString(cursor.getColumnIndexOrThrow("target_msg_id"))
+                map["node_id"] = cursor.getString(cursor.getColumnIndexOrThrow("node_id"))
+                list.add(map)
+            } while (cursor.moveToNext())
+        }
+        cursor.close()
+        db.close()
+        return list
+    }
+
+    // 3. دوال التعليقات المستقلة على الخيوط
+    fun insertThreadAnnotation(threadId: String, content: String) {
+        val db = writableDatabase
+        val values = ContentValues().apply {
+            put("id", UUID.randomUUID().toString())
+            put("thread_id", threadId)
+            put("content", content)
+            put("timestamp", System.currentTimeMillis())
+        }
+        db.insert("thread_annotations", null, values)
+        db.close()
+    }
+
+    fun getAnnotationsForThread(threadId: String): List<String> {
+        val db = readableDatabase
+        val cursor = db.rawQuery("SELECT content FROM thread_annotations WHERE thread_id = ? ORDER BY timestamp ASC", arrayOf(threadId))
+        val list = mutableListOf<String>()
+        if (cursor.moveToFirst()) {
+            do {
+                list.add(cursor.getString(cursor.getColumnIndexOrThrow("content")))
+            } while (cursor.moveToNext())
+        }
+        cursor.close()
+        db.close()
+        return list
     }
 }
