@@ -32,13 +32,13 @@ class AgentBrain(private val modelManager: ModelManager, private val context: Co
     """.trimIndent()
 
     suspend fun executeTask(userGoal: String, maxSteps: Int = 10, agentId: Int = 0): String {
+        // لم نعد نجبر المستخدم على تفعيل إمكانية الوصول لمجرد الدردشة
         val a11yService = MonolithAccessibilityService.instance
-            ?: return "خطأ: خدمة إمكانية الوصول (Accessibility) غير مفعلة. يرجى تفعيلها من إعدادات الهاتف."
-
+        
         var currentGoal = userGoal
         var startStep = 0
         var taskId = ""
-        var visionContext = "" // سياق الرؤية للخطوات القادمة
+        var visionContext = ""
 
         try {
             val pendingTask = appDatabase.getPendingTask()
@@ -65,7 +65,8 @@ class AgentBrain(private val modelManager: ModelManager, private val context: Co
             currentStep++
             Log.d(TAG, "--- Agent $agentId - Step $currentStep ---")
 
-            val screenJson = a11yService.getScreenTree()
+            // جلب شجرة الشاشة فقط إذا كانت الخدمة متاحة
+            val screenJson = a11yService?.getScreenTree() ?: "غير متاح (خدمة إمكانية الوصول معطلة)"
             
             val prompt = """
                 $systemPrompt
@@ -98,34 +99,39 @@ class AgentBrain(private val modelManager: ModelManager, private val context: Co
 
                 when (action) {
                     "chat" -> {
+                        // الدردشة تعمل بدون الحاجة لإمكانية الوصول
                         return jsonAction.optString("message", "...")
                     }
-                    "click" -> {
-                        val target = jsonAction.optString("target")
-                        val coords = a11yService.getCoordinatesByText(target)
-                        if (coords != null) {
-                            AgentOverlayService.instance?.showClick(coords.first, coords.second, currentStep)
-                            delay(500)
-                            a11yService.clickByCoordinates(coords.first, coords.second)
-                            delay(1500)
+                    "click", "type", "scroll" -> {
+                        if (a11yService == null) {
+                            visionContext = "فشل التنفيذ: خدمة إمكانية الوصول معطلة. لا يمكن التحكم في الشاشة."
                         } else {
-                            if (!a11yService.clickNodeByText(target)) {
-                                a11yService.scroll(true)
+                            if (action == "click") {
+                                val target = jsonAction.optString("target")
+                                val coords = a11yService.getCoordinatesByText(target)
+                                if (coords != null) {
+                                    AgentOverlayService.instance?.showClick(coords.first, coords.second, currentStep)
+                                    delay(500)
+                                    a11yService.clickByCoordinates(coords.first, coords.second)
+                                    delay(1500)
+                                } else {
+                                    if (!a11yService.clickNodeByText(target)) {
+                                        a11yService.scroll(true)
+                                        delay(1000)
+                                    } else {
+                                        delay(1500)
+                                    }
+                                }
+                            } else if (action == "type") {
+                                val text = jsonAction.optString("text")
+                                a11yService.typeText(text)
                                 delay(1000)
-                            } else {
-                                delay(1500)
+                            } else if (action == "scroll") {
+                                val dir = jsonAction.optString("direction")
+                                a11yService.scroll(dir == "down")
+                                delay(1000)
                             }
                         }
-                    }
-                    "type" -> {
-                        val text = jsonAction.optString("text")
-                        a11yService.typeText(text)
-                        delay(1000)
-                    }
-                    "scroll" -> {
-                        val dir = jsonAction.optString("direction")
-                        a11yService.scroll(dir == "down")
-                        delay(1000)
                     }
                     "wait" -> {
                         delay(2000)
