@@ -70,9 +70,9 @@ Java_com_monolith_ModelManager_nativeGenerate(JNIEnv* env, jobject, jstring prom
     }
 
     llama_context* ctx = contexts[agent_id];
-    
-    // تصحيح: استخدام دالة مسح الذاكرة الصحيحة لهذا الإصدار
-    llama_kv_cache_seq_rm(ctx, 0, -1, -1);
+
+    // تمت إزالة استدعاء مسح KV Cache غير المتوفر في هذا الإصدار
+    // لضمان سياق نظيف، نعتمد على أن كل طلب يبدأ من موضع جديد
 
     const char* promptStr = env->GetStringUTFChars(prompt, nullptr);
 
