@@ -29,7 +29,6 @@ Java_com_monolith_ModelManager_nativeLoadModel(JNIEnv* env, jobject, jstring mod
 
     vocab = llama_model_get_vocab(model);
 
-    // إنشاء السياق الرئيسي (الوكيل 0)
     llama_context_params ctx_params = llama_context_default_params();
     ctx_params.n_ctx = 2048; 
     ctx_params.n_threads = 4;
@@ -43,24 +42,23 @@ Java_com_monolith_ModelManager_nativeLoadModel(JNIEnv* env, jobject, jstring mod
     }
     
     contexts.clear();
-    contexts.push_back(main_ctx); // الوكيل الرئيسي دائماً index 0
+    contexts.push_back(main_ctx);
 
     return env->NewStringUTF("تم تحميل النموذج بنجاح.");
 }
 
-// دالة جديدة لإنشاء وكيل فرعي
 extern "C" JNIEXPORT jint JNICALL
 Java_com_monolith_ModelManager_nativeCreateSubAgent(JNIEnv* env, jobject) {
     if (model == nullptr) return -1;
     
     llama_context_params ctx_params = llama_context_default_params();
-    ctx_params.n_ctx = 1024; // سياق أصغر للوكيل الفرعي لتوفير الذاكرة
-    ctx_params.n_threads = 2; // خيوط أقل لتجنب اختناق المعالج
+    ctx_params.n_ctx = 1024;
+    ctx_params.n_threads = 2;
     
     llama_context* sub_ctx = llama_init_from_model(model, ctx_params);
     if (sub_ctx != nullptr) {
         contexts.push_back(sub_ctx);
-        return contexts.size() - 1; // إرجاع معرف الوكيل الجديد
+        return contexts.size() - 1;
     }
     return -1;
 }
@@ -72,38 +70,50 @@ Java_com_monolith_ModelManager_nativeGenerate(JNIEnv* env, jobject, jstring prom
     }
 
     llama_context* ctx = contexts[agent_id];
+    
+    // 1. مسح الذاكرة القديمة لمنع تلوث السياق
+    llama_kv_cache_clear(ctx);
 
     const char* promptStr = env->GetStringUTFChars(prompt, nullptr);
 
-    int n_prompt = -llama_tokenize(vocab, promptStr, strlen(promptStr), NULL, 0, true, true);
+    // 2. إضافة قالب محادثة بسيط (يفيد النماذج المدربة على التعليمات)
+    std::string formatted_prompt = "<|im_start|>user\n" + std::string(promptStr) + "<|im_end|>\n<|im_start|>assistant\n";
+    
+    int n_prompt = -llama_tokenize(vocab, formatted_prompt.c_str(), formatted_prompt.length(), NULL, 0, true, true);
     if (n_prompt < 0) {
         env->ReleaseStringUTFChars(prompt, promptStr);
         return env->NewStringUTF("فشل حساب عدد الرموز.");
     }
 
+    int n_ctx = llama_n_ctx(ctx);
+    if (n_prompt >= n_ctx - 4) {
+        env->ReleaseStringUTFChars(prompt, promptStr);
+        return env->NewStringUTF("النص طويل جداً بالنسبة لسعة النموذج.");
+    }
+
     std::vector<llama_token> tokens(n_prompt);
-    if (llama_tokenize(vocab, promptStr, strlen(promptStr), tokens.data(), tokens.size(), true, true) < 0) {
+    if (llama_tokenize(vocab, formatted_prompt.c_str(), formatted_prompt.length(), tokens.data(), tokens.size(), true, true) < 0) {
         env->ReleaseStringUTFChars(prompt, promptStr);
         return env->NewStringUTF("فشل تحويل النص إلى رموز.");
     }
     env->ReleaseStringUTFChars(prompt, promptStr);
 
-    llama_batch batch = llama_batch_get_one(tokens.data(), tokens.size());
-    if (llama_decode(ctx, batch) != 0) {
+    // 3. معالجة النص الأولي
+    llama_batch prompt_batch = llama_batch_get_one(tokens.data(), tokens.size());
+    if (llama_decode(ctx, prompt_batch) != 0) {
         return env->NewStringUTF("فشل في معالجة النص.");
     }
 
     std::string result = "";
-    int n_predict = 256;
-    int n_cur = tokens.size();
-    int n_ctx = llama_n_ctx(ctx); 
+    int n_predict = 512;
+    int n_cur = tokens.size(); // تتبع الموقع الحالي في الذاكرة
 
     llama_sampler* smpl = llama_sampler_chain_init(llama_sampler_chain_default_params());
     llama_sampler_chain_add(smpl, llama_sampler_init_greedy());
 
     for (int i = 0; i < n_predict; i++) {
         if (n_cur >= n_ctx - 4) {
-            LOGI("Context limit reached. Stopping generation.");
+            LOGI("Context limit reached.");
             break; 
         }
 
@@ -119,12 +129,22 @@ Java_com_monolith_ModelManager_nativeGenerate(JNIEnv* env, jobject, jstring prom
             result.append(buf, n);
         }
 
-        llama_batch single_batch = llama_batch_get_one(&id, 1);
+        // 4. إصلاح جوهري: إنشاء batch يدوي وتحديد الموقع (pos) بدقة
+        llama_batch gen_batch = llama_batch_init(1, 0, 1);
+        gen_batch.n_tokens = 1;
+        gen_batch.token[0] = id;
+        gen_batch.pos[0] = n_cur;       // تحديد الموقع الصحيح
+        gen_batch.seq_id[0][0] = 0;
+        gen_batch.n_seq_id[0] = 1;
+        gen_batch.logits[0] = true;
+        
         n_cur++;
         
-        if (llama_decode(ctx, single_batch) != 0) {
+        if (llama_decode(ctx, gen_batch) != 0) {
+            llama_batch_free(gen_batch);
             break;
         }
+        llama_batch_free(gen_batch); // تحرير الذاكرة المؤقتة
     }
 
     llama_sampler_free(smpl);
