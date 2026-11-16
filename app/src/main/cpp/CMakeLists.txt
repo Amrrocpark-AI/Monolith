@@ -27,11 +27,12 @@ target_include_directories(monolith PRIVATE
 )
 
 # 2. ربط مكتبات الرؤية والذكاء الاصطناعي
+# تم تغيير "common" إلى "llama-common" ليتوافق مع الاسم الجديد على أندرويد
 target_link_libraries(monolith
     mtmd
     llama
     ggml
-    common
+    llama-common
     android
     log
     Threads::Threads
