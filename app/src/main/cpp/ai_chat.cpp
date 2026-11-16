@@ -71,12 +71,12 @@ Java_com_monolith_ModelManager_nativeGenerate(JNIEnv* env, jobject, jstring prom
 
     llama_context* ctx = contexts[agent_id];
     
-    // 1. مسح الذاكرة القديمة لمنع تلوث السياق
-    llama_kv_cache_clear(ctx);
+    // تصحيح: استخدام دالة مسح الذاكرة الصحيحة لهذا الإصدار
+    llama_kv_cache_seq_rm(ctx, 0, -1, -1);
 
     const char* promptStr = env->GetStringUTFChars(prompt, nullptr);
 
-    // 2. إضافة قالب محادثة بسيط (يفيد النماذج المدربة على التعليمات)
+    // إضافة قالب محادثة بسيط
     std::string formatted_prompt = "<|im_start|>user\n" + std::string(promptStr) + "<|im_end|>\n<|im_start|>assistant\n";
     
     int n_prompt = -llama_tokenize(vocab, formatted_prompt.c_str(), formatted_prompt.length(), NULL, 0, true, true);
@@ -98,7 +98,6 @@ Java_com_monolith_ModelManager_nativeGenerate(JNIEnv* env, jobject, jstring prom
     }
     env->ReleaseStringUTFChars(prompt, promptStr);
 
-    // 3. معالجة النص الأولي
     llama_batch prompt_batch = llama_batch_get_one(tokens.data(), tokens.size());
     if (llama_decode(ctx, prompt_batch) != 0) {
         return env->NewStringUTF("فشل في معالجة النص.");
@@ -106,7 +105,7 @@ Java_com_monolith_ModelManager_nativeGenerate(JNIEnv* env, jobject, jstring prom
 
     std::string result = "";
     int n_predict = 512;
-    int n_cur = tokens.size(); // تتبع الموقع الحالي في الذاكرة
+    int n_cur = tokens.size(); 
 
     llama_sampler* smpl = llama_sampler_chain_init(llama_sampler_chain_default_params());
     llama_sampler_chain_add(smpl, llama_sampler_init_greedy());
@@ -129,11 +128,10 @@ Java_com_monolith_ModelManager_nativeGenerate(JNIEnv* env, jobject, jstring prom
             result.append(buf, n);
         }
 
-        // 4. إصلاح جوهري: إنشاء batch يدوي وتحديد الموقع (pos) بدقة
         llama_batch gen_batch = llama_batch_init(1, 0, 1);
         gen_batch.n_tokens = 1;
         gen_batch.token[0] = id;
-        gen_batch.pos[0] = n_cur;       // تحديد الموقع الصحيح
+        gen_batch.pos[0] = n_cur;       
         gen_batch.seq_id[0][0] = 0;
         gen_batch.n_seq_id[0] = 1;
         gen_batch.logits[0] = true;
@@ -144,7 +142,7 @@ Java_com_monolith_ModelManager_nativeGenerate(JNIEnv* env, jobject, jstring prom
             llama_batch_free(gen_batch);
             break;
         }
-        llama_batch_free(gen_batch); // تحرير الذاكرة المؤقتة
+        llama_batch_free(gen_batch); 
     }
 
     llama_sampler_free(smpl);
