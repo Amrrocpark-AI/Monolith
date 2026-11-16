@@ -4,7 +4,7 @@ project("monolith")
 include(FetchContent)
 find_package(Threads REQUIRED)
 
-# 1. تعطيل بناء أدوات سطر الأوامر (السبب الرئيسي للفشل الحالي)
+# 1. تعطيل بناء أدوات سطر الأوامر
 set(LLAMA_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
 set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(LLAMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
@@ -35,12 +35,12 @@ target_include_directories(monolith PRIVATE
     ${llama_SOURCE_DIR}/tools/mtmd
 )
 
-# 5. ربط المكتبات (common بالاسم الصحيح لهذا الإصدار)
+# 5. ربط المكتبات (تم تغيير common إلى llama-common)
 target_link_libraries(monolith
     mtmd
     llama
     ggml
-    common
+    llama-common
     android
     log
     Threads::Threads
