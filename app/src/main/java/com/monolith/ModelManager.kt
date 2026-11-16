@@ -13,7 +13,7 @@ class ModelManager(private val context: Context) {
     }
 
     // ==========================================
-    // دوال النموذج النصي (كما هي)
+    // دوال النموذج النصي
     // ==========================================
     private external fun nativeLoadModel(modelPath: String): String
     private external fun nativeGenerate(prompt: String, agentId: Int): String
@@ -37,6 +37,21 @@ class ModelManager(private val context: Context) {
             }
         } catch (e: Exception) {
             onError("فشل تحميل النموذج: ${e.message}")
+        }
+    }
+
+    // دالة جديدة لجلب تفاصيل النموذج للتأكيد البصري
+    fun getModelDetails(modelPath: String): String {
+        return try {
+            val file = File(modelPath)
+            if (file.exists()) {
+                val sizeMB = file.length() / (1024 * 1024)
+                "الاسم: ${file.name}\nالحجم: $sizeMB ميجابايت"
+            } else {
+                "الملف غير موجود"
+            }
+        } catch (e: Exception) {
+            "خطأ في قراءة الملف"
         }
     }
 
@@ -67,13 +82,8 @@ class ModelManager(private val context: Context) {
     }
 
     // ==========================================
-    // دوال الرؤية الحاسوبية (VLM) - جديدة
+    // دوال الرؤية الحاسوبية (VLM)
     // ==========================================
-
-    /**
-     * تحميل محرك الرؤية (نموذج GGUF + ملف mmproj)
-     * يعيد true إذا نجح التحميل
-     */
     fun loadVisionModel(visionModelPath: String, mmprojPath: String, onResult: (Boolean) -> Unit) {
         try {
             val modelFile = File(visionModelPath)
@@ -96,14 +106,6 @@ class ModelManager(private val context: Context) {
         }
     }
 
-    /**
-     * تحليل إطار من الشاشة باستخدام نموذج الرؤية
-     * @param buffer: ByteBuffer يحتوي على بيانات RGBA
-     * @param width: عرض الإطار
-     * @param height: ارتفاع الإطار
-     * @param prompt: السؤال المطروح على الصورة (مثلاً: "ماذا ترى على الشاشة؟")
-     * @return: الوصف النصي من النموذج
-     */
     suspend fun analyzeScreenFrame(buffer: ByteBuffer, width: Int, height: Int, prompt: String): String {
         return withContext(Dispatchers.IO) {
             try {
@@ -114,9 +116,6 @@ class ModelManager(private val context: Context) {
         }
     }
 
-    /**
-     * تحرير ذاكرة محرك الرؤية
-     */
     fun unloadVisionModel() {
         try {
             VisionProcessor.nativeFreeVision()
