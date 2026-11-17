@@ -1,1259 +1,1233 @@
 
-package com.monolith
+#include <jni.h>
+#include <android/log.h>
 
-import android.content.Context
-import android.util.Log
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
-import org.json.JSONObject
-import java.io.EOFException
-import java.io.File
-import java.io.IOException
-import java.io.RandomAccessFile
-import java.nio.ByteBuffer
-import java.nio.charset.StandardCharsets
+#include <string>
+#include <vector>
+#include <mutex>
+#include <memory>
+#include <cstdint>
+#include <climits>
+#include <algorithm>
+#include <limits>
 
-class ModelManager(context: Context) : AgentModel {
+#include "llama.h"
 
-    companion object {
-        private const val TAG = "ModelManager"
+#define LOG_TAG "MonolithNative"
 
-        private const val GGUF_VERSION_MIN = 2L
-        private const val GGUF_VERSION_MAX = 3L
+#define LOGI(...) \
+    __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 
-        private const val MAX_METADATA_ENTRIES = 100_000L
-        private const val MAX_TENSORS = 1_000_000L
-        private const val MAX_METADATA_KEY_BYTES = 4096L
-        private const val MAX_METADATA_STRING_BYTES = 4L * 1024L * 1024L
-        private const val MAX_ARRAY_ITEMS = 10_000_000L
+#define LOGE(...) \
+    __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
-        @Volatile
-        private var sharedInstance: ModelManager? = null
+namespace Monolith {
 
-        fun getInstance(context: Context): ModelManager {
-            return sharedInstance ?: synchronized(this) {
-                sharedInstance ?: ModelManager(
-                    context.applicationContext
-                ).also {
-                    sharedInstance = it
-                }
-            }
-        }
-    }
+// =========================================================
+// Engine State
+// =========================================================
 
-    private val callbackScope = CoroutineScope(
-        SupervisorJob() + Dispatchers.IO
-    )
+static std::mutex engine_mutex;
 
-    private val nativeEngineReady: Boolean = try {
-        System.loadLibrary("monolith")
-        true
-    } catch (e: UnsatisfiedLinkError) {
-        Log.e(TAG, "Native library loading failed", e)
-        false
-    } catch (e: SecurityException) {
-        Log.e(TAG, "Native library access denied", e)
-        false
-    }
+static llama_model* model = nullptr;
+static const llama_vocab* vocab = nullptr;
 
-    private external fun nativeLoadModel(modelPath: String): String
+static std::vector<llama_context*> contexts;
 
-    private external fun nativeGenerate(
-        prompt: String,
-        agentId: Int
-    ): String
+static bool backend_initialized = false;
 
-    private external fun nativeUnloadModel()
+// =========================================================
+// Configuration
+// =========================================================
 
-    private external fun nativeCreateSubAgent(): Int
+static constexpr uint32_t MAIN_CONTEXT_SIZE = 2048;
+static constexpr uint32_t AGENT_CONTEXT_SIZE = 1024;
 
-    private val engineMutex = Mutex()
+static constexpr uint32_t MAX_BATCH_SIZE = 512;
 
-    @Volatile
-    private var textModelLoaded = false
+static constexpr int MAIN_THREADS = 4;
+static constexpr int AGENT_THREADS = 2;
 
-    @Volatile
-    private var visionModelLoaded = false
+static constexpr int MAX_GENERATION_TOKENS = 512;
 
-    @Volatile
-    private var closed = false
+// =========================================================
+// JNI Helpers
+// =========================================================
 
-    val isTextModelLoaded: Boolean
-        get() = textModelLoaded
+static jstring makeResult(
+    JNIEnv* env,
+    const char* message
+) {
+    return env->NewStringUTF(message);
+}
 
-    val isVisionModelLoaded: Boolean
-        get() = visionModelLoaded
+// Convert standard UTF-8 into UTF-16.
+// JNI NewString expects UTF-16, avoiding problems with
+// supplementary Unicode characters and emoji.
 
-    val isEngineReady: Boolean
-        get() = nativeEngineReady && !closed
+static void appendUtf16(
+    std::u16string& output,
+    uint32_t codepoint
+) {
+    if (codepoint <= 0xFFFF) {
+        output.push_back(
+            static_cast<char16_t>(codepoint)
+        );
+    } else {
+        codepoint -= 0x10000;
 
-    // =========================================================
-    // File validation
-    // =========================================================
-
-    private fun validateModelFile(path: String): File? {
-        if (path.isBlank()) return null
-
-        return try {
-            File(path).canonicalFile.takeIf {
-                it.exists() &&
-                    it.isFile &&
-                    it.canRead() &&
-                    it.length() > 0L
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Model file validation failed", e)
-            null
-        }
-    }
-
-    // =========================================================
-    // GGUF inspection
-    // =========================================================
-
-    private data class GgufInspection(
-        val version: Long,
-        val tensorCount: Long,
-        val metadataCount: Long,
-        val architecture: String,
-        val modelName: String?,
-        val contextLength: Long?,
-        val embeddingLength: Long?,
-        val blockCount: Long?,
-        val chatTemplateAvailable: Boolean,
-        val alignment: Long,
-        val dataOffset: Long
-    )
-
-    private fun readU8(
-        input: RandomAccessFile
-    ): Int {
-        val value = input.read()
-        if (value < 0) {
-            throw EOFException("Unexpected end of GGUF file")
-        }
-        return value
-    }
-
-    private fun readU16(
-        input: RandomAccessFile
-    ): Long {
-        val a = readU8(input).toLong()
-        val b = readU8(input).toLong()
-
-        return a or (b shl 8)
-    }
-
-    private fun readU32(
-        input: RandomAccessFile
-    ): Long {
-        var value = 0L
-
-        repeat(4) { index ->
-            value = value or (
-                readU8(input).toLong() shl (index * 8)
+        output.push_back(
+            static_cast<char16_t>(
+                0xD800 + (codepoint >> 10)
             )
-        }
+        );
 
-        return value
-    }
-
-    private fun readI64(
-        input: RandomAccessFile
-    ): Long {
-        var value = 0L
-
-        repeat(8) { index ->
-            value = value or (
-                readU8(input).toLong() shl (index * 8)
+        output.push_back(
+            static_cast<char16_t>(
+                0xDC00 + (codepoint & 0x3FF)
             )
-        }
-
-        return value
-    }
-
-    private fun readU64(
-        input: RandomAccessFile
-    ): Long {
-        val value = readI64(input)
-
-        if (value < 0L) {
-            throw IOException(
-                "GGUF unsigned value exceeds supported range"
-            )
-        }
-
-        return value
-    }
-
-    private fun ensureRemaining(
-        input: RandomAccessFile,
-        count: Long
-    ) {
-        if (count < 0L) {
-            throw IOException("Invalid GGUF data length")
-        }
-
-        val position = input.filePointer
-        val fileLength = input.length()
-
-        if (
-            position < 0L ||
-            position > fileLength ||
-            count > fileLength - position
-        ) {
-            throw EOFException(
-                "GGUF file is truncated or contains invalid lengths"
-            )
-        }
-    }
-
-    private fun skipChecked(
-        input: RandomAccessFile,
-        count: Long
-    ) {
-        ensureRemaining(input, count)
-
-        input.seek(
-            input.filePointer + count
-        )
-    }
-
-    private fun readUtf8(
-        input: RandomAccessFile,
-        maximumBytes: Long
-    ): String {
-        val length = readU64(input)
-
-        if (length > maximumBytes) {
-            throw IOException(
-                "GGUF string exceeds allowed size"
-            )
-        }
-
-        ensureRemaining(input, length)
-
-        val bytes = ByteArray(length.toInt())
-        input.readFully(bytes)
-
-        return String(
-            bytes,
-            StandardCharsets.UTF_8
-        )
-    }
-
-    private fun skipString(
-        input: RandomAccessFile
-    ) {
-        val length = readU64(input)
-        skipChecked(input, length)
-    }
-
-    private fun isRelevantMetadataKey(
-        key: String
-    ): Boolean {
-        return key == "general.name" ||
-            key == "general.architecture" ||
-            key == "general.alignment" ||
-            key == "tokenizer.chat_template" ||
-            key == "tokenizer.ggml.model" ||
-            key.endsWith(".context_length") ||
-            key.endsWith(".embedding_length") ||
-            key.endsWith(".block_count")
-    }
-
-    private fun readMetadataValue(
-        input: RandomAccessFile,
-        type: Long,
-        key: String
-    ): Any? {
-
-        return when (type) {
-
-            // UINT8
-            0L -> readU8(input).toLong()
-
-            // INT8
-            1L -> {
-                readU8(input).toByte().toLong()
-            }
-
-            // UINT16
-            2L -> readU16(input)
-
-            // INT16
-            3L -> {
-                readU16(input).toShort().toLong()
-            }
-
-            // UINT32
-            4L -> readU32(input)
-
-            // INT32
-            5L -> {
-                readU32(input).toInt().toLong()
-            }
-
-            // FLOAT32
-            6L -> {
-                val bits = readU32(input).toInt()
-                java.lang.Float.intBitsToFloat(bits).toDouble()
-            }
-
-            // BOOL
-            7L -> {
-                val value = readU8(input)
-
-                if (value != 0 && value != 1) {
-                    throw IOException(
-                        "Invalid GGUF boolean value"
-                    )
-                }
-
-                value == 1
-            }
-
-            // STRING
-            8L -> {
-                val length = readU64(input)
-
-                if (
-                    key == "tokenizer.chat_template" &&
-                    length > 0L
-                ) {
-                    skipChecked(input, length)
-                    return ChatTemplateMarker
-                }
-
-                if (
-                    key == "general.name" ||
-                    key == "general.architecture" ||
-                    key == "tokenizer.ggml.model"
-                ) {
-                    if (length > MAX_METADATA_STRING_BYTES) {
-                        throw IOException(
-                            "GGUF metadata string is too large: $key"
-                        )
-                    }
-
-                    ensureRemaining(input, length)
-
-                    val bytes = ByteArray(length.toInt())
-                    input.readFully(bytes)
-
-                    String(
-                        bytes,
-                        StandardCharsets.UTF_8
-                    )
-                } else {
-                    skipChecked(input, length)
-                    null
-                }
-            }
-
-            // ARRAY
-            9L -> {
-                skipArray(input)
-                null
-            }
-
-            // UINT64
-            10L -> readU64(input)
-
-            // INT64
-            11L -> readI64(input)
-
-            // FLOAT64
-            12L -> {
-                java.lang.Double.longBitsToDouble(
-                    readI64(input)
-                )
-            }
-
-            else -> {
-                throw IOException(
-                    "Unsupported GGUF metadata type: $type"
-                )
-            }
-        }
-    }
-
-    private object ChatTemplateMarker
-
-    private fun skipArray(
-        input: RandomAccessFile
-    ) {
-        val elementType = readU32(input)
-        val count = readU64(input)
-
-        if (count > MAX_ARRAY_ITEMS) {
-            throw IOException(
-                "GGUF metadata array is too large"
-            )
-        }
-
-        if (elementType == 9L) {
-            throw IOException(
-                "Nested GGUF arrays are invalid"
-            )
-        }
-
-        val elementSize = when (elementType) {
-            0L, 1L, 7L -> 1L
-            2L, 3L -> 2L
-            4L, 5L, 6L -> 4L
-            10L, 11L, 12L -> 8L
-            8L -> -1L
-            else -> {
-                throw IOException(
-                    "Unsupported GGUF array element type"
-                )
-            }
-        }
-
-        if (elementSize >= 0L) {
-            if (
-                count > 0L &&
-                elementSize > Long.MAX_VALUE / count
-            ) {
-                throw IOException(
-                    "GGUF array size overflow"
-                )
-            }
-
-            skipChecked(
-                input,
-                count * elementSize
-            )
-        } else {
-            repeat(count.toInt()) {
-                skipString(input)
-            }
-        }
-    }
-
-    private fun alignPosition(
-        position: Long,
-        alignment: Long
-    ): Long {
-        if (
-            alignment <= 0L ||
-            alignment > 4096L ||
-            alignment and (alignment - 1L) != 0L
-        ) {
-            throw IOException(
-                "Invalid GGUF alignment"
-            )
-        }
-
-        val remainder = position % alignment
-
-        if (remainder == 0L) {
-            return position
-        }
-
-        val addition = alignment - remainder
-
-        if (position > Long.MAX_VALUE - addition) {
-            throw IOException(
-                "GGUF alignment overflow"
-            )
-        }
-
-        return position + addition
-    }
-
-    private fun inspectGgufFile(
-        file: File
-    ): GgufInspection {
-
-        RandomAccessFile(file, "r").use { input ->
-
-            val fileLength = input.length()
-
-            if (fileLength < 24L) {
-                throw IOException(
-                    "GGUF file is too small"
-                )
-            }
-
-            // -------------------------------------------------
-            // Header
-            // -------------------------------------------------
-
-            val magic = ByteArray(4)
-            input.readFully(magic)
-
-            if (
-                magic[0] != 'G'.code.toByte() ||
-                magic[1] != 'G'.code.toByte() ||
-                magic[2] != 'U'.code.toByte() ||
-                magic[3] != 'F'.code.toByte()
-            ) {
-                throw IOException(
-                    "Invalid GGUF magic header"
-                )
-            }
-
-            val version = readU32(input)
-
-            if (
-                version < GGUF_VERSION_MIN ||
-                version > GGUF_VERSION_MAX
-            ) {
-                throw IOException(
-                    "Unsupported GGUF version: $version"
-                )
-            }
-
-            val tensorCount = readU64(input)
-            val metadataCount = readU64(input)
-
-            if (
-                tensorCount == 0L ||
-                tensorCount > MAX_TENSORS
-            ) {
-                throw IOException(
-                    "Invalid GGUF tensor count"
-                )
-            }
-
-            if (
-                metadataCount == 0L ||
-                metadataCount > MAX_METADATA_ENTRIES
-            ) {
-                throw IOException(
-                    "Invalid GGUF metadata count"
-                )
-            }
-
-            // -------------------------------------------------
-            // Metadata
-            // -------------------------------------------------
-
-            val metadata = HashMap<String, Any>()
-
-            var chatTemplateAvailable = false
-
-            repeat(metadataCount.toInt()) {
-
-                val key = readUtf8(
-                    input,
-                    MAX_METADATA_KEY_BYTES
-                )
-
-                if (key.isBlank()) {
-                    throw IOException(
-                        "GGUF contains an empty metadata key"
-                    )
-                }
-
-                if (metadata.containsKey(key)) {
-                    throw IOException(
-                        "Duplicate GGUF metadata key: $key"
-                    )
-                }
-
-                val valueType = readU32(input)
-
-                val value = readMetadataValue(
-                    input,
-                    valueType,
-                    key
-                )
-
-                if (value === ChatTemplateMarker) {
-                    chatTemplateAvailable = true
-                } else if (
-                    value != null &&
-                    isRelevantMetadataKey(key)
-                ) {
-                    metadata[key] = value
-                }
-            }
-
-            val architecture = (
-                metadata["general.architecture"] as? String
-            )?.trim().orEmpty()
-
-            if (architecture.isBlank()) {
-                throw IOException(
-                    "GGUF architecture metadata is missing"
-                )
-            }
-
-            val modelName = (
-                metadata["general.name"] as? String
-            )?.takeIf {
-                it.isNotBlank()
-            }
-
-            val alignment = (
-                metadata["general.alignment"] as? Number
-            )?.toLong() ?: 32L
-
-            // -------------------------------------------------
-            // Tensor descriptors
-            // -------------------------------------------------
-
-            repeat(tensorCount.toInt()) {
-
-                val tensorName = readUtf8(
-                    input,
-                    MAX_METADATA_KEY_BYTES
-                )
-
-                if (tensorName.isBlank()) {
-                    throw IOException(
-                        "GGUF contains an empty tensor name"
-                    )
-                }
-
-                val dimensions = readU32(input)
-
-                if (
-                    dimensions < 1L ||
-                    dimensions > 4L
-                ) {
-                    throw IOException(
-                        "Invalid GGUF tensor dimensions"
-                    )
-                }
-
-                repeat(dimensions.toInt()) {
-                    val dimension = readU64(input)
-
-                    if (dimension == 0L) {
-                        throw IOException(
-                            "Invalid GGUF tensor shape"
-                        )
-                    }
-                }
-
-                // Tensor data type.
-                readU32(input)
-
-                // Offset relative to the tensor data section.
-                val tensorOffset = readU64(input)
-
-                if (
-                    tensorOffset >= fileLength
-                ) {
-                    throw IOException(
-                        "GGUF tensor offset is outside the file"
-                    )
-                }
-
-                if (tensorOffset % alignment != 0L) {
-                    throw IOException(
-                        "GGUF tensor offset is not aligned"
-                    )
-                }
-            }
-
-            // -------------------------------------------------
-            // Tensor data section
-            // -------------------------------------------------
-
-            val dataOffset = alignPosition(
-                input.filePointer,
-                alignment
-            )
-
-            if (dataOffset >= fileLength) {
-                throw IOException(
-                    "GGUF tensor data section is missing"
-                )
-            }
-
-            // Validate every tensor offset against the data
-            // section, not just against the absolute file size.
-            input.seek(dataOffset)
-
-            // -------------------------------------------------
-            // Extract architecture-specific metadata
-            // -------------------------------------------------
-
-            fun findArchitectureValue(
-                suffix: String
-            ): Long? {
-                val key = "$architecture.$suffix"
-
-                return (
-                    metadata[key] as? Number
-                )?.toLong()
-            }
-
-            val contextLength = findArchitectureValue(
-                "context_length"
-            )
-
-            val embeddingLength = findArchitectureValue(
-                "embedding_length"
-            )
-
-            val blockCount = findArchitectureValue(
-                "block_count"
-            )
-
-            return GgufInspection(
-                version = version,
-                tensorCount = tensorCount,
-                metadataCount = metadataCount,
-                architecture = architecture,
-                modelName = modelName,
-                contextLength = contextLength,
-                embeddingLength = embeddingLength,
-                blockCount = blockCount,
-                chatTemplateAvailable = chatTemplateAvailable,
-                alignment = alignment,
-                dataOffset = dataOffset
-            )
-        }
-    }
-
-    // =========================================================
-    // Model classification
-    // =========================================================
-
-    private fun classifyModel(
-        architecture: String
-    ): String {
-
-        val arch = architecture.lowercase()
-
-        val multimodalArchitectures = setOf(
-            "llava",
-            "llava15",
-            "llava16",
-            "qwen2vl",
-            "qwen2_vl",
-            "qwen2.5vl",
-            "qwen2_5_vl",
-            "qwen3vl",
-            "minicpmv",
-            "pixtral",
-            "gemma3",
-            "mllama",
-            "internvl",
-            "smolvlm",
-            "idefics",
-            "idefics2",
-            "llama4"
-        )
-
-        if (
-            arch in multimodalArchitectures ||
-            arch.contains("vision")
-        ) {
-            return "multimodal"
-        }
-
-        val textArchitectures = setOf(
-            "llama",
-            "llama2",
-            "llama3",
-            "qwen",
-            "qwen2",
-            "qwen3",
-            "mistral",
-            "mixtral",
-            "gemma",
-            "gemma2",
-            "phi2",
-            "phi3",
-            "phi3small",
-            "phi4",
-            "deepseek",
-            "deepseek2",
-            "deepseek3",
-            "command-r",
-            "chatglm",
-            "internlm2",
-            "falcon",
-            "baichuan",
-            "starcoder2",
-            "stablelm",
-            "granite",
-            "nemotron",
-            "solar",
-            "olmo",
-            "mamba",
-            "rwkv"
-        )
-
-        if (
-            arch in textArchitectures ||
-            arch.startsWith("llama")
-        ) {
-            return "text"
-        }
-
-        return "unknown"
-    }
-
-    // =========================================================
-    // Text model loading
-    // =========================================================
-
-    suspend fun loadModelAsync(
-        modelPath: String
-    ): Result<Unit> {
-
-        return withContext(Dispatchers.IO) {
-            engineMutex.withLock {
-                try {
-                    if (!nativeEngineReady || closed) {
-                        return@withLock Result.failure(
-                            IllegalStateException(
-                                "Native engine is unavailable"
-                            )
-                        )
-                    }
-
-                    val file = validateModelFile(modelPath)
-                        ?: return@withLock Result.failure(
-                            IllegalArgumentException(
-                                "Invalid model file: $modelPath"
-                            )
-                        )
-
-                    // Do not pass arbitrary files to the native
-                    // engine. Inspect GGUF before loading.
-                    val inspection = try {
-                        inspectGgufFile(file)
-                    } catch (e: Exception) {
-                        Log.e(
-                            TAG,
-                            "GGUF inspection failed",
-                            e
-                        )
-
-                        return@withLock Result.failure(
-                            IllegalArgumentException(
-                                "GGUF validation failed: " +
-                                    (e.message ?: "Unknown format error"),
-                                e
-                            )
-                        )
-                    }
-
-                    Log.i(
-                        TAG,
-                        "GGUF validated: " +
-                            "architecture=${inspection.architecture}, " +
-                            "tensors=${inspection.tensorCount}, " +
-                            "version=${inspection.version}"
-                    )
-
-                    textModelLoaded = false
-
-                    val response = nativeLoadModel(
-                        file.absolutePath
-                    )
-
-                    if (
-                        response.contains(
-                            "بنجاح",
-                            ignoreCase = true
-                        ) ||
-                        response.contains(
-                            "success",
-                            ignoreCase = true
-                        )
-                    ) {
-                        textModelLoaded = true
-                        Result.success(Unit)
-                    } else {
-                        Log.e(
-                            TAG,
-                            "Model loading failed: $response"
-                        )
-
-                        Result.failure(
-                            IllegalStateException(
-                                response.ifBlank {
-                                    "Unknown native loading error"
-                                }
-                            )
-                        )
-                    }
-
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    textModelLoaded = false
-                    Log.e(TAG, "Text model loading failed", e)
-                    Result.failure(e)
-                }
-            }
-        }
-    }
-
-    /**
-     * Compatibility wrapper for older callback-based callers.
-     */
-    fun loadModel(
-        modelPath: String,
-        onSuccess: () -> Unit,
-        onError: (String) -> Unit
-    ) {
-        callbackScope.launch {
-            val result = loadModelAsync(modelPath)
-
-            withContext(Dispatchers.Main) {
-                result.fold(
-                    onSuccess = {
-                        onSuccess()
-                    },
-                    onFailure = { error ->
-                        onError(
-                            error.message
-                                ?: "Unknown model loading error"
-                        )
-                    }
-                )
-            }
-        }
-    }
-
-    // =========================================================
-    // Text generation
-    // =========================================================
-
-    override suspend fun generate(
-        prompt: String,
-        agentId: Int
-    ): String {
-        return generateResponse(prompt, agentId)
-    }
-
-    suspend fun generateResponse(
-        prompt: String,
-        agentId: Int = 0
-    ): String {
-
-        return withContext(Dispatchers.IO) {
-            engineMutex.withLock {
-                try {
-                    check(nativeEngineReady) {
-                        "Native engine is unavailable"
-                    }
-
-                    check(!closed) {
-                        "Model manager is closed"
-                    }
-
-                    check(textModelLoaded) {
-                        "Text model is not loaded"
-                    }
-
-                    require(prompt.isNotBlank()) {
-                        "Prompt cannot be empty"
-                    }
-
-                    require(agentId >= 0) {
-                        "Invalid agent ID"
-                    }
-
-                    nativeGenerate(prompt, agentId)
-
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    Log.e(TAG, "Text generation failed", e)
-                    throw e
-                }
-            }
-        }
-    }
-
-    // =========================================================
-    // Sub-agent management
-    // =========================================================
-
-    fun createSubAgent(): Int {
-        if (
-            !nativeEngineReady ||
-            closed ||
-            !textModelLoaded
-        ) {
-            return -1
-        }
-
-        return try {
-            if (!engineMutex.tryLock()) {
-                return -1
-            }
-
-            try {
-                nativeCreateSubAgent()
-            } finally {
-                engineMutex.unlock()
-            }
-
-        } catch (e: Exception) {
-            Log.e(TAG, "Sub-agent creation failed", e)
-            -1
-        }
-    }
-
-    // =========================================================
-    // Vision model management
-    // =========================================================
-
-    suspend fun loadVisionModelAsync(
-        visionModelPath: String,
-        mmprojPath: String
-    ): Result<Unit> {
-
-        return withContext(Dispatchers.IO) {
-            engineMutex.withLock {
-                try {
-                    if (!nativeEngineReady || closed) {
-                        return@withLock Result.failure(
-                            IllegalStateException(
-                                "Native engine unavailable"
-                            )
-                        )
-                    }
-
-                    val modelFile = validateModelFile(
-                        visionModelPath
-                    ) ?: return@withLock Result.failure(
-                        IllegalArgumentException(
-                            "Invalid vision model"
-                        )
-                    )
-
-                    val projectorFile = validateModelFile(
-                        mmprojPath
-                    ) ?: return@withLock Result.failure(
-                        IllegalArgumentException(
-                            "Invalid projector model"
-                        )
-                    )
-
-                    visionModelLoaded = false
-
-                    val success = VisionProcessor.nativeInitVision(
-                        modelFile.absolutePath,
-                        projectorFile.absolutePath
-                    )
-
-                    if (success) {
-                        visionModelLoaded = true
-                        Result.success(Unit)
-                    } else {
-                        Result.failure(
-                            IllegalStateException(
-                                "Vision initialization failed"
-                            )
-                        )
-                    }
-
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    visionModelLoaded = false
-                    Log.e(TAG, "Vision loading failed", e)
-                    Result.failure(e)
-                }
-            }
-        }
-    }
-
-    /**
-     * Compatibility wrapper for older vision callers.
-     */
-    fun loadVisionModel(
-        visionModelPath: String,
-        mmprojPath: String,
-        onResult: (Boolean) -> Unit
-    ) {
-        callbackScope.launch {
-            val result = loadVisionModelAsync(
-                visionModelPath,
-                mmprojPath
-            )
-
-            withContext(Dispatchers.Main) {
-                onResult(result.isSuccess)
-            }
-        }
-    }
-
-    suspend fun analyzeScreenFrame(
-        buffer: ByteBuffer,
-        width: Int,
-        height: Int,
-        prompt: String
-    ): String {
-
-        return withContext(Dispatchers.IO) {
-            engineMutex.withLock {
-                try {
-                    check(nativeEngineReady && !closed) {
-                        "Native engine unavailable"
-                    }
-
-                    check(visionModelLoaded) {
-                        "Vision model is not loaded"
-                    }
-
-                    require(width > 0 && height > 0) {
-                        "Invalid frame dimensions"
-                    }
-
-                    require(buffer.isDirect) {
-                        "A direct ByteBuffer is required"
-                    }
-
-                    require(prompt.isNotBlank()) {
-                        "Vision prompt cannot be empty"
-                    }
-
-                    VisionProcessor.nativeAnalyzeFrame(
-                        buffer,
-                        width,
-                        height,
-                        prompt
-                    )
-
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    Log.e(TAG, "Frame analysis failed", e)
-
-                    JSONObject()
-                        .put(
-                            "error",
-                            e.message ?: "Unknown vision error"
-                        )
-                        .toString()
-                }
-            }
-        }
-    }
-
-    // =========================================================
-    // Unloading
-    // =========================================================
-
-    fun unloadModel() {
-        if (!nativeEngineReady || closed) return
-        if (!engineMutex.tryLock()) return
-
-        try {
-            if (textModelLoaded) {
-                nativeUnloadModel()
-                textModelLoaded = false
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Text model unloading failed", e)
-        } finally {
-            engineMutex.unlock()
-        }
-    }
-
-    fun unloadVisionModel() {
-        if (!nativeEngineReady || closed) return
-        if (!engineMutex.tryLock()) return
-
-        try {
-            if (visionModelLoaded) {
-                VisionProcessor.nativeFreeVision()
-                visionModelLoaded = false
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Vision model unloading failed", e)
-        } finally {
-            engineMutex.unlock()
-        }
-    }
-
-    suspend fun unloadAllAsync() {
-        withContext(Dispatchers.IO) {
-            engineMutex.withLock {
-                if (closed) return@withLock
-
-                try {
-                    if (textModelLoaded) {
-                        nativeUnloadModel()
-                    }
-
-                    if (visionModelLoaded) {
-                        VisionProcessor.nativeFreeVision()
-                    }
-
-                } catch (e: Exception) {
-                    Log.e(TAG, "Engine unloading failed", e)
-                } finally {
-                    textModelLoaded = false
-                    visionModelLoaded = false
-                    closed = true
-                }
-            }
-        }
-    }
-
-    // =========================================================
-    // Public model information
-    // =========================================================
-
-    fun getModelDetails(modelPath: String): String {
-        return try {
-            val file = validateModelFile(modelPath)
-                ?: return "الملف غير موجود أو غير صالح"
-
-            val inspection = inspectGgufFile(file)
-
-            val sizeBytes = file.length()
-            val sizeMB = sizeBytes.toDouble() /
-                (1024.0 * 1024.0)
-
-            val modelType = classifyModel(
-                inspection.architecture
-            )
-
-            JSONObject()
-                .put("name", inspection.modelName ?: file.name)
-                .put("fileName", file.name)
-                .put("sizeMB", sizeMB)
-                .put("sizeBytes", sizeBytes)
-                .put("readable", file.canRead())
-                .put("format", "GGUF")
-                .put("ggufVersion", inspection.version)
-                .put("tensorCount", inspection.tensorCount)
-                .put("metadataCount", inspection.metadataCount)
-                .put("architecture", inspection.architecture)
-                .put("modelType", modelType)
-                .put("contextLength", inspection.contextLength ?: JSONObject.NULL)
-                .put("embeddingLength", inspection.embeddingLength ?: JSONObject.NULL)
-                .put("blockCount", inspection.blockCount ?: JSONObject.NULL)
-                .put("alignment", inspection.alignment)
-                .put("dataOffset", inspection.dataOffset)
-                .put("chatTemplateAvailable", inspection.chatTemplateAvailable)
-                .put("ggufStructureValid", true)
-                .put("runtimeTested", false)
-                .toString()
-
-        } catch (e: Exception) {
-            Log.e(TAG, "Model details failed", e)
-
-            JSONObject()
-                .put("ggufStructureValid", false)
-                .put(
-                    "error",
-                    e.message ?: "GGUF inspection failed"
-                )
-                .toString()
-        }
+        );
     }
 }
+
+static std::u16string utf8ToUtf16(
+    const std::string& input
+) {
+    std::u16string output;
+
+    size_t i = 0;
+
+    while (i < input.size()) {
+
+        const uint8_t first =
+            static_cast<uint8_t>(input[i]);
+
+        uint32_t codepoint = 0;
+        size_t count = 0;
+
+        if (first <= 0x7F) {
+            codepoint = first;
+            count = 1;
+        } else if (
+            first >= 0xC2 &&
+            first <= 0xDF
+        ) {
+            codepoint = first & 0x1F;
+            count = 2;
+        } else if (
+            first >= 0xE0 &&
+            first <= 0xEF
+        ) {
+            codepoint = first & 0x0F;
+            count = 3;
+        } else if (
+            first >= 0xF0 &&
+            first <= 0xF4
+        ) {
+            codepoint = first & 0x07;
+            count = 4;
+        } else {
+            appendUtf16(output, 0xFFFD);
+            ++i;
+            continue;
+        }
+
+        if (i + count > input.size()) {
+            appendUtf16(output, 0xFFFD);
+            ++i;
+            continue;
+        }
+
+        bool valid = true;
+
+        for (size_t j = 1; j < count; ++j) {
+
+            const uint8_t next =
+                static_cast<uint8_t>(input[i + j]);
+
+            if ((next & 0xC0) != 0x80) {
+                valid = false;
+                break;
+            }
+
+            codepoint =
+                (codepoint << 6) |
+                (next & 0x3F);
+        }
+
+        if (
+            !valid ||
+            (count == 2 && codepoint < 0x80) ||
+            (count == 3 && codepoint < 0x800) ||
+            (count == 4 && codepoint < 0x10000) ||
+            codepoint > 0x10FFFF ||
+            (codepoint >= 0xD800 &&
+             codepoint <= 0xDFFF)
+        ) {
+            appendUtf16(output, 0xFFFD);
+            ++i;
+            continue;
+        }
+
+        appendUtf16(output, codepoint);
+        i += count;
+    }
+
+    return output;
+}
+
+static jstring makeUtf8Result(
+    JNIEnv* env,
+    const std::string& message
+) {
+    const std::u16string converted =
+        utf8ToUtf16(message);
+
+    return env->NewString(
+        reinterpret_cast<const jchar*>(
+            converted.data()
+        ),
+        static_cast<jsize>(converted.size())
+    );
+}
+
+// =========================================================
+// Resource Management
+// =========================================================
+
+static void releaseContexts() {
+
+    for (llama_context* ctx : contexts) {
+
+        if (ctx != nullptr) {
+            llama_free(ctx);
+        }
+    }
+
+    contexts.clear();
+}
+
+static void releaseModel() {
+
+    releaseContexts();
+
+    vocab = nullptr;
+
+    if (model != nullptr) {
+
+        llama_model_free(model);
+
+        model = nullptr;
+    }
+}
+
+struct SamplerDeleter {
+    void operator()(llama_sampler* sampler) const {
+        if (sampler != nullptr) {
+            llama_sampler_free(sampler);
+        }
+    }
+};
+
+using SamplerPtr =
+    std::unique_ptr<llama_sampler, SamplerDeleter>;
+
+// =========================================================
+// Context Management
+// =========================================================
+
+static llama_context* createContext(
+    llama_model* source_model,
+    uint32_t context_size,
+    int threads
+) {
+
+    if (source_model == nullptr) {
+        return nullptr;
+    }
+
+    llama_context_params params =
+        llama_context_default_params();
+
+    params.n_ctx = context_size;
+
+    params.n_batch = context_size;
+
+    params.n_ubatch = std::min(
+        context_size,
+        MAX_BATCH_SIZE
+    );
+
+    params.n_threads = threads;
+    params.n_threads_batch = threads;
+
+    return llama_init_from_model(
+        source_model,
+        params
+    );
+}
+
+static bool resetContext(size_t agent_id) {
+
+    if (
+        agent_id >= contexts.size() ||
+        model == nullptr
+    ) {
+        return false;
+    }
+
+    llama_context* old_context =
+        contexts[agent_id];
+
+    if (old_context != nullptr) {
+
+        llama_free(old_context);
+
+        contexts[agent_id] = nullptr;
+    }
+
+    const uint32_t size =
+        agent_id == 0
+        ? MAIN_CONTEXT_SIZE
+        : AGENT_CONTEXT_SIZE;
+
+    const int threads =
+        agent_id == 0
+        ? MAIN_THREADS
+        : AGENT_THREADS;
+
+    llama_context* new_context =
+        createContext(
+            model,
+            size,
+            threads
+        );
+
+    if (new_context == nullptr) {
+
+        LOGE(
+            "Failed to recreate context for agent %zu",
+            agent_id
+        );
+
+        return false;
+    }
+
+    contexts[agent_id] = new_context;
+
+    return true;
+}
+
+// =========================================================
+// Model-Specific Prompt Formatting
+// =========================================================
+
+static bool formatPrompt(
+    const llama_model* source_model,
+    const std::string& user_prompt,
+    std::string& formatted_prompt
+) {
+
+    if (source_model == nullptr) {
+        return false;
+    }
+
+    // Ask llama.cpp for the model's own chat template.
+    const char* template_text =
+        llama_model_chat_template(
+            source_model,
+            nullptr
+        );
+
+    // Some completion models do not provide a chat template.
+    // In that case, preserve the user's original prompt
+    // instead of forcing an unrelated ChatML format.
+
+    if (
+        template_text == nullptr ||
+        template_text[0] == '\0'
+    ) {
+        formatted_prompt = user_prompt;
+        return !formatted_prompt.empty();
+    }
+
+    llama_chat_message message;
+
+    message.role = "user";
+    message.content = user_prompt.c_str();
+
+    const size_t initial_size =
+        user_prompt.size() * 2 + 1024;
+
+    if (
+        initial_size >
+        static_cast<size_t>(
+            std::numeric_limits<int32_t>::max()
+        )
+    ) {
+        return false;
+    }
+
+    std::vector<char> buffer(
+        initial_size,
+        '\0'
+    );
+
+    int32_t result =
+        llama_chat_apply_template(
+            template_text,
+            &message,
+            1,
+            true,
+            buffer.data(),
+            static_cast<int32_t>(buffer.size())
+        );
+
+    // The template may require a larger output buffer.
+    if (result > static_cast<int32_t>(buffer.size())) {
+
+        if (
+            result >=
+            std::numeric_limits<int32_t>::max()
+        ) {
+            return false;
+        }
+
+        buffer.assign(
+            static_cast<size_t>(result) + 1,
+            '\0'
+        );
+
+        result = llama_chat_apply_template(
+            template_text,
+            &message,
+            1,
+            true,
+            buffer.data(),
+            static_cast<int32_t>(buffer.size())
+        );
+    }
+
+    if (result <= 0) {
+
+        LOGE(
+            "Chat template application failed: %d",
+            result
+        );
+
+        return false;
+    }
+
+    if (
+        static_cast<size_t>(result) >=
+        buffer.size()
+    ) {
+        return false;
+    }
+
+    formatted_prompt.assign(
+        buffer.data(),
+        static_cast<size_t>(result)
+    );
+
+    return !formatted_prompt.empty();
+}
+
+// =========================================================
+// Tokenization
+// =========================================================
+
+static bool tokenizePrompt(
+    const std::string& prompt,
+    std::vector<llama_token>& tokens
+) {
+
+    if (vocab == nullptr || prompt.empty()) {
+        return false;
+    }
+
+    if (
+        prompt.size() >
+        static_cast<size_t>(
+            std::numeric_limits<int32_t>::max()
+        )
+    ) {
+        return false;
+    }
+
+    const int32_t prompt_length =
+        static_cast<int32_t>(prompt.size());
+
+    const int32_t required =
+        llama_tokenize(
+            vocab,
+            prompt.c_str(),
+            prompt_length,
+            nullptr,
+            0,
+            true,
+            true
+        );
+
+    if (
+        required >= 0 ||
+        required == INT32_MIN
+    ) {
+        LOGE(
+            "Token count calculation failed: %d",
+            required
+        );
+
+        return false;
+    }
+
+    const int32_t token_count = -required;
+
+    if (token_count <= 0) {
+        return false;
+    }
+
+    tokens.resize(
+        static_cast<size_t>(token_count)
+    );
+
+    const int32_t actual =
+        llama_tokenize(
+            vocab,
+            prompt.c_str(),
+            prompt_length,
+            tokens.data(),
+            token_count,
+            true,
+            true
+        );
+
+    if (
+        actual <= 0 ||
+        actual > token_count
+    ) {
+        LOGE(
+            "Tokenization failed: %d",
+            actual
+        );
+
+        tokens.clear();
+        return false;
+    }
+
+    tokens.resize(
+        static_cast<size_t>(actual)
+    );
+
+    return true;
+}
+
+// =========================================================
+// Model Loading
+// =========================================================
+
+extern "C" JNIEXPORT jstring JNICALL
+
+Java_com_monolith_ModelManager_nativeLoadModel(
+    JNIEnv* env,
+    jobject,
+    jstring modelPath
+) {
+
+    if (modelPath == nullptr) {
+        return makeResult(
+            env,
+            "مسار النموذج فارغ."
+        );
+    }
+
+    const char* path =
+        env->GetStringUTFChars(
+            modelPath,
+            nullptr
+        );
+
+    if (path == nullptr) {
+        return makeResult(
+            env,
+            "تعذر قراءة مسار النموذج."
+        );
+    }
+
+    std::string native_path(path);
+
+    env->ReleaseStringUTFChars(
+        modelPath,
+        path
+    );
+
+    std::lock_guard<std::mutex> lock(
+        engine_mutex
+    );
+
+    try {
+
+        LOGI(
+            "Loading model: %s",
+            native_path.c_str()
+        );
+
+        releaseModel();
+
+        if (!backend_initialized) {
+
+            llama_backend_init();
+
+            backend_initialized = true;
+        }
+
+        llama_model_params params =
+            llama_model_default_params();
+
+        model = llama_model_load_from_file(
+            native_path.c_str(),
+            params
+        );
+
+        if (model == nullptr) {
+
+            LOGE("Model loading failed.");
+
+            return makeResult(
+                env,
+                "فشل تحميل النموذج. تحقق من ملف GGUF والذاكرة المتاحة."
+            );
+        }
+
+        vocab = llama_model_get_vocab(model);
+
+        if (vocab == nullptr) {
+
+            releaseModel();
+
+            return makeResult(
+                env,
+                "تعذر الحصول على مفردات النموذج."
+            );
+        }
+
+        llama_context* main_context =
+            createContext(
+                model,
+                MAIN_CONTEXT_SIZE,
+                MAIN_THREADS
+            );
+
+        if (main_context == nullptr) {
+
+            releaseModel();
+
+            return makeResult(
+                env,
+                "فشل إنشاء السياق الرئيسي."
+            );
+        }
+
+        contexts.push_back(main_context);
+
+        const char* chat_template =
+            llama_model_chat_template(
+                model,
+                nullptr
+            );
+
+        LOGI(
+            "Model metadata: context=%d embedding=%d layers=%d",
+            llama_model_n_ctx_train(model),
+            llama_model_n_embd(model),
+            llama_model_n_layer(model)
+        );
+
+        LOGI(
+            "Chat template: %s",
+            chat_template != nullptr
+                ? "available"
+                : "not available"
+        );
+
+        LOGI("Model loaded successfully.");
+
+        return makeResult(
+            env,
+            "تم تحميل النموذج بنجاح."
+        );
+
+    } catch (...) {
+
+        LOGE(
+            "Unexpected error during model loading."
+        );
+
+        releaseModel();
+
+        return makeResult(
+            env,
+            "حدث خطأ غير متوقع أثناء تحميل النموذج."
+        );
+    }
+}
+
+// =========================================================
+// Sub-Agent Creation
+// =========================================================
+
+extern "C" JNIEXPORT jint JNICALL
+
+Java_com_monolith_ModelManager_nativeCreateSubAgent(
+    JNIEnv*,
+    jobject
+) {
+
+    std::lock_guard<std::mutex> lock(
+        engine_mutex
+    );
+
+    if (
+        model == nullptr ||
+        vocab == nullptr
+    ) {
+        return -1;
+    }
+
+    try {
+
+        llama_context* sub_context =
+            createContext(
+                model,
+                AGENT_CONTEXT_SIZE,
+                AGENT_THREADS
+            );
+
+        if (sub_context == nullptr) {
+
+            LOGE(
+                "Sub-agent context creation failed."
+            );
+
+            return -1;
+        }
+
+        contexts.push_back(sub_context);
+
+        const int agent_id =
+            static_cast<int>(
+                contexts.size() - 1
+            );
+
+        LOGI(
+            "Sub-agent created: %d",
+            agent_id
+        );
+
+        return agent_id;
+
+    } catch (...) {
+
+        LOGE(
+            "Sub-agent creation exception."
+        );
+
+        return -1;
+    }
+}
+
+// =========================================================
+// Token Decoding Helper
+// =========================================================
+
+static bool decodeGeneratedToken(
+    llama_context* ctx,
+    llama_token token,
+    int current_position
+) {
+
+    llama_batch batch =
+        llama_batch_init(
+            1,
+            0,
+            1
+        );
+
+    if (
+        batch.token == nullptr ||
+        batch.pos == nullptr ||
+        batch.n_seq_id == nullptr ||
+        batch.seq_id == nullptr ||
+        batch.logits == nullptr
+    ) {
+        llama_batch_free(batch);
+        return false;
+    }
+
+    batch.n_tokens = 1;
+
+    batch.token[0] = token;
+    batch.pos[0] = current_position;
+
+    batch.n_seq_id[0] = 1;
+    batch.seq_id[0][0] = 0;
+
+    batch.logits[0] = true;
+
+    const int result =
+        llama_decode(
+            ctx,
+            batch
+        );
+
+    llama_batch_free(batch);
+
+    return result == 0;
+}
+
+// =========================================================
+// Token To Text
+// =========================================================
+
+static bool appendTokenPiece(
+    const llama_vocab* source_vocab,
+    llama_token token,
+    std::string& output
+) {
+
+    char buffer[256];
+
+    int32_t piece_size =
+        llama_token_to_piece(
+            source_vocab,
+            token,
+            buffer,
+            sizeof(buffer),
+            0,
+            true
+        );
+
+    if (piece_size > 0) {
+
+        output.append(
+            buffer,
+            static_cast<size_t>(piece_size)
+        );
+
+        return true;
+    }
+
+    if (piece_size == 0) {
+        return true;
+    }
+
+    if (piece_size == INT32_MIN) {
+        return false;
+    }
+
+    const size_t required =
+        static_cast<size_t>(-piece_size);
+
+    // Prevent an unreasonable allocation.
+    if (
+        required == 0 ||
+        required > 1024 * 1024
+    ) {
+        return false;
+    }
+
+    std::vector<char> large_buffer(
+        required
+    );
+
+    piece_size =
+        llama_token_to_piece(
+            source_vocab,
+            token,
+            large_buffer.data(),
+            static_cast<int32_t>(
+                large_buffer.size()
+            ),
+            0,
+            true
+        );
+
+    if (
+        piece_size <= 0 ||
+        static_cast<size_t>(piece_size) >
+            large_buffer.size()
+    ) {
+        return false;
+    }
+
+    output.append(
+        large_buffer.data(),
+        static_cast<size_t>(piece_size)
+    );
+
+    return true;
+}
+
+// =========================================================
+// Text Generation
+// =========================================================
+
+extern "C" JNIEXPORT jstring JNICALL
+
+Java_com_monolith_ModelManager_nativeGenerate(
+    JNIEnv* env,
+    jobject,
+    jstring prompt,
+    jint agent_id
+) {
+
+    if (prompt == nullptr) {
+        return makeResult(
+            env,
+            "النص المدخل فارغ."
+        );
+    }
+
+    const char* prompt_chars =
+        env->GetStringUTFChars(
+            prompt,
+            nullptr
+        );
+
+    if (prompt_chars == nullptr) {
+        return makeResult(
+            env,
+            "تعذر قراءة النص."
+        );
+    }
+
+    std::string user_prompt(prompt_chars);
+
+    env->ReleaseStringUTFChars(
+        prompt,
+        prompt_chars
+    );
+
+    if (user_prompt.empty()) {
+        return makeResult(
+            env,
+            "لا يمكن توليد إجابة لنص فارغ."
+        );
+    }
+
+    std::lock_guard<std::mutex> lock(
+        engine_mutex
+    );
+
+    if (
+        model == nullptr ||
+        vocab == nullptr
+    ) {
+        return makeResult(
+            env,
+            "النموذج غير محمل."
+        );
+    }
+
+    if (
+        agent_id < 0 ||
+        static_cast<size_t>(agent_id) >=
+            contexts.size()
+    ) {
+        return makeResult(
+            env,
+            "معرف الوكيل غير صالح."
+        );
+    }
+
+    try {
+
+        // -------------------------------------------------
+        // Reset Context
+        // -------------------------------------------------
+
+        if (
+            !resetContext(
+                static_cast<size_t>(agent_id)
+            )
+        ) {
+            return makeResult(
+                env,
+                "فشل إعادة تهيئة سياق الوكيل."
+            );
+        }
+
+        llama_context* ctx =
+            contexts[static_cast<size_t>(agent_id)];
+
+        if (ctx == nullptr) {
+            return makeResult(
+                env,
+                "سياق النموذج غير متاح."
+            );
+        }
+
+        const uint32_t n_ctx =
+            llama_n_ctx(ctx);
+
+        if (n_ctx < 2) {
+            return makeResult(
+                env,
+                "سعة سياق النموذج غير صالحة."
+            );
+        }
+
+        // -------------------------------------------------
+        // Model-Specific Prompt
+        // -------------------------------------------------
+
+        std::string formatted_prompt;
+
+        if (
+            !formatPrompt(
+                model,
+                user_prompt,
+                formatted_prompt
+            )
+        ) {
+            return makeResult(
+                env,
+                "تعذر تجهيز قالب المحادثة الخاص بالنموذج."
+            );
+        }
+
+        // -------------------------------------------------
+        // Tokenization
+        // -------------------------------------------------
+
+        std::vector<llama_token> tokens;
+
+        if (
+            !tokenizePrompt(
+                formatted_prompt,
+                tokens
+            )
+        ) {
+            return makeResult(
+                env,
+                "فشل تحويل النص إلى رموز."
+            );
+        }
+
+        if (
+            tokens.size() >=
+            static_cast<size_t>(n_ctx - 1)
+        ) {
+            return makeResult(
+                env,
+                "النص أطول من سعة سياق النموذج."
+            );
+        }
+
+        // -------------------------------------------------
+        // Prompt Evaluation
+        // -------------------------------------------------
+
+        llama_batch prompt_batch =
+            llama_batch_get_one(
+                tokens.data(),
+                static_cast<int32_t>(
+                    tokens.size()
+                )
+            );
+
+        const int prompt_result =
+            llama_decode(
+                ctx,
+                prompt_batch
+            );
+
+        if (prompt_result != 0) {
+
+            LOGE(
+                "Prompt decoding failed: %d",
+                prompt_result
+            );
+
+            return makeResult(
+                env,
+                "فشل معالجة النص داخل النموذج."
+            );
+        }
+
+        // -------------------------------------------------
+        // Sampler Initialization
+        // -------------------------------------------------
+
+        SamplerPtr sampler(
+            llama_sampler_chain_init(
+                llama_sampler_chain_default_params()
+            )
+        );
+
+        if (!sampler) {
+            return makeResult(
+                env,
+                "فشل إنشاء نظام التوليد."
+            );
+        }
+
+        llama_sampler* greedy =
+            llama_sampler_init_greedy();
+
+        if (greedy == nullptr) {
+            return makeResult(
+                env,
+                "فشل تهيئة خوارزمية التوليد."
+            );
+        }
+
+        // The chain takes ownership of the sampler.
+        llama_sampler_chain_add(
+            sampler.get(),
+            greedy
+        );
+
+        // -------------------------------------------------
+        // Generation
+        // -------------------------------------------------
+
+        std::string output;
+
+        int current_position =
+            static_cast<int>(
+                tokens.size()
+            );
+
+        int generated = 0;
+
+        while (
+            generated < MAX_GENERATION_TOKENS &&
+            current_position <
+                static_cast<int>(n_ctx)
+        ) {
+
+            const llama_token token =
+                llama_sampler_sample(
+                    sampler.get(),
+                    ctx,
+                    -1
+                );
+
+            if (
+                llama_vocab_is_eog(
+                    vocab,
+                    token
+                )
+            ) {
+                break;
+            }
+
+            // ---------------------------------------------
+            // Convert token into UTF-8 text
+            // ---------------------------------------------
+
+            if (
+                !appendTokenPiece(
+                    vocab,
+                    token,
+                    output
+                )
+            ) {
+                LOGE(
+                    "Token-to-piece conversion failed."
+                );
+
+                break;
+            }
+
+            // ---------------------------------------------
+            // Decode token to obtain next logits
+            // ---------------------------------------------
+
+            if (
+                !decodeGeneratedToken(
+                    ctx,
+                    token,
+                    current_position
+                )
+            ) {
+
+                LOGE(
+                    "Generated token decoding failed."
+                );
+
+                break;
+            }
+
+            ++current_position;
+            ++generated;
+        }
+
+        LOGI(
+            "Generation completed. Agent=%d Tokens=%d OutputBytes=%zu",
+            agent_id,
+            generated,
+            output.size()
+        );
+
+        if (output.empty()) {
+
+            return makeResult(
+                env,
+                "لم ينتج النموذج إجابة. تحقق من توافق قالب المحادثة والنموذج."
+            );
+        }
+
+        return makeUtf8Result(
+            env,
+            output
+        );
+
+    } catch (...) {
+
+        LOGE(
+            "Unexpected generation exception."
+        );
+
+        return makeResult(
+            env,
+            "حدث خطأ داخلي أثناء التوليد."
+        );
+    }
+}
+
+// =========================================================
+// Model Unloading
+// =========================================================
+
+extern "C" JNIEXPORT void JNICALL
+
+Java_com_monolith_ModelManager_nativeUnloadModel(
+    JNIEnv*,
+    jobject
+) {
+
+    std::lock_guard<std::mutex> lock(
+        engine_mutex
+    );
+
+    LOGI(
+        "Unloading native model."
+    );
+
+    releaseModel();
+
+    if (backend_initialized) {
+
+        llama_backend_free();
+
+        backend_initialized = false;
+    }
+
+    LOGI(
+        "Native model unloaded."
+    );
+}
+
+} // namespace Monolith
