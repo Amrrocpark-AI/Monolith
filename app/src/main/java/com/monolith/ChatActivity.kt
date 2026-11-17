@@ -2022,7 +2022,7 @@ class ChatActivity : AppCompatActivity() {
         val colorInput = EditText(this).apply {
             hint = "لون HEX مثال: #00D4FF"
             setText("#00D4FF")
-            singleLine = true
+            setSingleLine(true)
         }
 
         layout.addView(nameInput)
