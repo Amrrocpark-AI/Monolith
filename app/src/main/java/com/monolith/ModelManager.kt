@@ -3,7 +3,11 @@ package com.monolith
 
 import android.content.Context
 import android.util.Log
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -11,17 +15,28 @@ import org.json.JSONObject
 import java.io.File
 import java.nio.ByteBuffer
 
-class ModelManager(context: Context) {
-
-    private val appContext = context.applicationContext
+class ModelManager(context: Context) : AgentModel {
 
     companion object {
         private const val TAG = "ModelManager"
+
+        @Volatile
+        private var sharedInstance: ModelManager? = null
+
+        fun getInstance(context: Context): ModelManager {
+            return sharedInstance ?: synchronized(this) {
+                sharedInstance ?: ModelManager(
+                    context.applicationContext
+                ).also {
+                    sharedInstance = it
+                }
+            }
+        }
     }
 
-    // ==========================================
-    // Native Engine
-    // ==========================================
+    private val callbackScope = CoroutineScope(
+        SupervisorJob() + Dispatchers.IO
+    )
 
     private val nativeEngineReady: Boolean = try {
         System.loadLibrary("monolith")
@@ -35,13 +50,13 @@ class ModelManager(context: Context) {
     }
 
     private external fun nativeLoadModel(modelPath: String): String
-    private external fun nativeGenerate(prompt: String, agentId: Int): String
+    private external fun nativeGenerate(
+        prompt: String,
+        agentId: Int
+    ): String
+
     private external fun nativeUnloadModel()
     private external fun nativeCreateSubAgent(): Int
-
-    // ==========================================
-    // State Management
-    // ==========================================
 
     private val engineMutex = Mutex()
 
@@ -63,16 +78,15 @@ class ModelManager(context: Context) {
     val isEngineReady: Boolean
         get() = nativeEngineReady && !closed
 
-    // ==========================================
-    // Model Validation
-    // ==========================================
-
     private fun validateModelFile(path: String): File? {
         if (path.isBlank()) return null
 
         return try {
             File(path).canonicalFile.takeIf {
-                it.exists() && it.isFile && it.canRead() && it.length() > 0L
+                it.exists() &&
+                it.isFile &&
+                it.canRead() &&
+                it.length() > 0L
             }
         } catch (e: Exception) {
             Log.e(TAG, "Model file validation failed", e)
@@ -80,43 +94,63 @@ class ModelManager(context: Context) {
         }
     }
 
-    // ==========================================
-    // Text Model
-    // ==========================================
+    suspend fun loadModelAsync(
+        modelPath: String
+    ): Result<Unit> {
 
-    suspend fun loadModelAsync(modelPath: String): Result<Unit> {
         return withContext(Dispatchers.IO) {
             engineMutex.withLock {
                 try {
                     if (!nativeEngineReady || closed) {
                         return@withLock Result.failure(
-                            IllegalStateException("Native engine is unavailable")
+                            IllegalStateException(
+                                "Native engine is unavailable"
+                            )
                         )
                     }
 
                     val file = validateModelFile(modelPath)
                         ?: return@withLock Result.failure(
-                            IllegalArgumentException("Invalid model file: $modelPath")
+                            IllegalArgumentException(
+                                "Invalid model file: $modelPath"
+                            )
                         )
 
                     textModelLoaded = false
 
-                    val response = nativeLoadModel(file.absolutePath)
+                    val response = nativeLoadModel(
+                        file.absolutePath
+                    )
 
-                    if (response.contains("بنجاح", ignoreCase = true) ||
-                        response.contains("success", ignoreCase = true)
+                    if (
+                        response.contains(
+                            "بنجاح",
+                            ignoreCase = true
+                        ) ||
+                        response.contains(
+                            "success",
+                            ignoreCase = true
+                        )
                     ) {
                         textModelLoaded = true
                         Result.success(Unit)
                     } else {
-                        Log.e(TAG, "Model loading failed: $response")
+                        Log.e(
+                            TAG,
+                            "Model loading failed: $response"
+                        )
+
                         Result.failure(
-                            IllegalStateException(response.ifBlank {
-                                "Unknown native loading error"
-                            })
+                            IllegalStateException(
+                                response.ifBlank {
+                                    "Unknown native loading error"
+                                }
+                            )
                         )
                     }
 
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     textModelLoaded = false
                     Log.e(TAG, "Text model loading failed", e)
@@ -126,28 +160,46 @@ class ModelManager(context: Context) {
         }
     }
 
-    // Original API compatibility
+    /**
+     * واجهة توافق للملفات القديمة التي تستخدم callbacks.
+     * التنفيذ الفعلي يتم داخل Coroutine وليس Thread يستدعي suspend مباشرة.
+     */
     fun loadModel(
         modelPath: String,
         onSuccess: () -> Unit,
         onError: (String) -> Unit
     ) {
-        if (!nativeEngineReady || closed) {
-            onError("Native engine is unavailable")
-            return
-        }
+        callbackScope.launch {
+            val result = loadModelAsync(modelPath)
 
-        Thread {
-            loadModelAsync(modelPath)
-            // This compatibility method is intentionally not used
-            // for coroutine execution. See note below.
-        }.start()
+            withContext(Dispatchers.Main) {
+                result.fold(
+                    onSuccess = {
+                        onSuccess()
+                    },
+                    onFailure = { error ->
+                        onError(
+                            error.message
+                                ?: "Unknown model loading error"
+                        )
+                    }
+                )
+            }
+        }
+    }
+
+    override suspend fun generate(
+        prompt: String,
+        agentId: Int
+    ): String {
+        return generateResponse(prompt, agentId)
     }
 
     suspend fun generateResponse(
         prompt: String,
         agentId: Int = 0
     ): String {
+
         return withContext(Dispatchers.IO) {
             engineMutex.withLock {
                 try {
@@ -173,62 +225,73 @@ class ModelManager(context: Context) {
 
                     nativeGenerate(prompt, agentId)
 
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     Log.e(TAG, "Text generation failed", e)
-                    "فشل التوليد: ${e.message ?: "خطأ غير معروف"}"
+                    throw e
                 }
             }
         }
     }
 
     fun createSubAgent(): Int {
-        if (!nativeEngineReady || closed || !textModelLoaded) {
+        if (
+            !nativeEngineReady ||
+            closed ||
+            !textModelLoaded
+        ) {
             return -1
         }
 
         return try {
-            // Native implementation must guarantee thread safety.
-            engineMutex.tryLock().let { locked ->
-                if (!locked) return -1
-
-                try {
-                    nativeCreateSubAgent()
-                } finally {
-                    engineMutex.unlock()
-                }
+            if (!engineMutex.tryLock()) {
+                return -1
             }
+
+            try {
+                nativeCreateSubAgent()
+            } finally {
+                engineMutex.unlock()
+            }
+
         } catch (e: Exception) {
             Log.e(TAG, "Sub-agent creation failed", e)
             -1
         }
     }
 
-    // ==========================================
-    // Vision Model
-    // ==========================================
-
     suspend fun loadVisionModelAsync(
         visionModelPath: String,
         mmprojPath: String
     ): Result<Unit> {
+
         return withContext(Dispatchers.IO) {
             engineMutex.withLock {
                 try {
                     if (!nativeEngineReady || closed) {
                         return@withLock Result.failure(
-                            IllegalStateException("Native engine unavailable")
+                            IllegalStateException(
+                                "Native engine unavailable"
+                            )
                         )
                     }
 
-                    val modelFile = validateModelFile(visionModelPath)
-                        ?: return@withLock Result.failure(
-                            IllegalArgumentException("Invalid vision model")
+                    val modelFile = validateModelFile(
+                        visionModelPath
+                    ) ?: return@withLock Result.failure(
+                        IllegalArgumentException(
+                            "Invalid vision model"
                         )
+                    )
 
-                    val projectorFile = validateModelFile(mmprojPath)
-                        ?: return@withLock Result.failure(
-                            IllegalArgumentException("Invalid projector model")
+                    val projectorFile = validateModelFile(
+                        mmprojPath
+                    ) ?: return@withLock Result.failure(
+                        IllegalArgumentException(
+                            "Invalid projector model"
                         )
+                    )
 
                     visionModelLoaded = false
 
@@ -242,10 +305,14 @@ class ModelManager(context: Context) {
                         Result.success(Unit)
                     } else {
                         Result.failure(
-                            IllegalStateException("Vision initialization failed")
+                            IllegalStateException(
+                                "Vision initialization failed"
+                            )
                         )
                     }
 
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     visionModelLoaded = false
                     Log.e(TAG, "Vision loading failed", e)
@@ -255,7 +322,6 @@ class ModelManager(context: Context) {
         }
     }
 
-    // Original API compatibility
     fun loadVisionModel(
         visionModelPath: String,
         mmprojPath: String,
@@ -266,7 +332,6 @@ class ModelManager(context: Context) {
             return
         }
 
-        // Legacy synchronous API retained for existing callers.
         try {
             val modelFile = validateModelFile(visionModelPath)
             val projectorFile = validateModelFile(mmprojPath)
@@ -297,6 +362,7 @@ class ModelManager(context: Context) {
         height: Int,
         prompt: String
     ): String {
+
         return withContext(Dispatchers.IO) {
             engineMutex.withLock {
                 try {
@@ -327,38 +393,41 @@ class ModelManager(context: Context) {
                         prompt
                     )
 
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     Log.e(TAG, "Frame analysis failed", e)
 
                     JSONObject()
-                        .put("error", e.message ?: "Unknown vision error")
+                        .put(
+                            "error",
+                            e.message ?: "Unknown vision error"
+                        )
                         .toString()
                 }
             }
         }
     }
 
-    // ==========================================
-    // Unloading
-    // ==========================================
-
     fun unloadModel() {
         if (!nativeEngineReady || closed) return
+        if (!engineMutex.tryLock()) return
 
         try {
-            // Synchronous compatibility method.
-            // Call only after active generation has stopped.
             if (textModelLoaded) {
                 nativeUnloadModel()
                 textModelLoaded = false
             }
         } catch (e: Exception) {
             Log.e(TAG, "Text model unloading failed", e)
+        } finally {
+            engineMutex.unlock()
         }
     }
 
     fun unloadVisionModel() {
         if (!nativeEngineReady || closed) return
+        if (!engineMutex.tryLock()) return
 
         try {
             if (visionModelLoaded) {
@@ -367,6 +436,8 @@ class ModelManager(context: Context) {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Vision model unloading failed", e)
+        } finally {
+            engineMutex.unlock()
         }
     }
 
@@ -378,13 +449,12 @@ class ModelManager(context: Context) {
                 try {
                     if (textModelLoaded) {
                         nativeUnloadModel()
-                        textModelLoaded = false
                     }
 
                     if (visionModelLoaded) {
                         VisionProcessor.nativeFreeVision()
-                        visionModelLoaded = false
                     }
+
                 } catch (e: Exception) {
                     Log.e(TAG, "Engine unloading failed", e)
                 } finally {
@@ -395,10 +465,6 @@ class ModelManager(context: Context) {
             }
         }
     }
-
-    // ==========================================
-    // Model Information
-    // ==========================================
 
     fun getModelDetails(modelPath: String): String {
         return try {
