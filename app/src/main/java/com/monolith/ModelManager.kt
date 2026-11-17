@@ -1,4 +1,3 @@
-
 package com.monolith
 
 import android.content.Context
@@ -50,12 +49,14 @@ class ModelManager(context: Context) : AgentModel {
     }
 
     private external fun nativeLoadModel(modelPath: String): String
+
     private external fun nativeGenerate(
         prompt: String,
         agentId: Int
     ): String
 
     private external fun nativeUnloadModel()
+
     private external fun nativeCreateSubAgent(): Int
 
     private val engineMutex = Mutex()
@@ -84,9 +85,9 @@ class ModelManager(context: Context) : AgentModel {
         return try {
             File(path).canonicalFile.takeIf {
                 it.exists() &&
-                it.isFile &&
-                it.canRead() &&
-                it.length() > 0L
+                    it.isFile &&
+                    it.canRead() &&
+                    it.length() > 0L
             }
         } catch (e: Exception) {
             Log.e(TAG, "Model file validation failed", e)
@@ -162,7 +163,7 @@ class ModelManager(context: Context) : AgentModel {
 
     /**
      * واجهة توافق للملفات القديمة التي تستخدم callbacks.
-     * التنفيذ الفعلي يتم داخل Coroutine وليس Thread يستدعي suspend مباشرة.
+     * التنفيذ الفعلي يتم داخل Coroutine.
      */
     fun loadModel(
         modelPath: String,
@@ -322,37 +323,28 @@ class ModelManager(context: Context) : AgentModel {
         }
     }
 
+    /**
+     * واجهة توافق قديمة.
+     *
+     * الإصلاح:
+     * لا تستدعي JNI مباشرة.
+     * تستخدم loadVisionModelAsync حتى تمر العملية
+     * عبر engineMutex مثل بقية عمليات المحرك.
+     */
     fun loadVisionModel(
         visionModelPath: String,
         mmprojPath: String,
         onResult: (Boolean) -> Unit
     ) {
-        if (!nativeEngineReady || closed) {
-            onResult(false)
-            return
-        }
-
-        try {
-            val modelFile = validateModelFile(visionModelPath)
-            val projectorFile = validateModelFile(mmprojPath)
-
-            if (modelFile == null || projectorFile == null) {
-                onResult(false)
-                return
-            }
-
-            val success = VisionProcessor.nativeInitVision(
-                modelFile.absolutePath,
-                projectorFile.absolutePath
+        callbackScope.launch {
+            val result = loadVisionModelAsync(
+                visionModelPath,
+                mmprojPath
             )
 
-            visionModelLoaded = success
-            onResult(success)
-
-        } catch (e: Exception) {
-            Log.e(TAG, "Vision loading failed", e)
-            visionModelLoaded = false
-            onResult(false)
+            withContext(Dispatchers.Main) {
+                onResult(result.isSuccess)
+            }
         }
     }
 
