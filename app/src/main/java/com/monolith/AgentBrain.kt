@@ -101,7 +101,6 @@ interface AgentScreen {
 
 interface AgentPolicy {
 
-    // الإعداد الافتراضي آمن: لا قراءة دون سماح صريح.
     suspend fun isScreenReadAllowed(): Boolean = false
 
     suspend fun isActionAllowed(
@@ -114,9 +113,6 @@ interface AgentVoice {
     suspend fun speak(text: String)
 }
 
-/**
- * يربط عقل الوكيل بمحرك النماذج وخدمات Android.
- */
 object AgentBrainFactory {
 
     fun create(
@@ -131,13 +127,6 @@ object AgentBrainFactory {
     }
 }
 
-/**
- * إدارة صلاحيات الوكيل.
- *
- * AUTO: السماح بالتنفيذ التلقائي.
- * ASK: المنع حتى يتم ربط آلية موافقة فعلية.
- * DENY: المنع.
- */
 private class SharedPreferencesAgentPolicy(
     context: Context
 ) : AgentPolicy {
@@ -203,12 +192,6 @@ private class SharedPreferencesAgentPolicy(
     }
 }
 
-/**
- * تصنيف احترازي لبعض النصوص التي قد تحتوي على معلومات خاصة.
- *
- * هذا التصنيف ليس كاشفاً كاملاً للمعلومات الحساسة.
- * صلاحيات المستخدم تبقى هي المرجع الأساسي.
- */
 private object SensitiveInputDetector {
 
     private val patterns = listOf(
@@ -233,9 +216,6 @@ private object SensitiveInputDetector {
     }
 }
 
-/**
- * تنفيذ أوامر الشاشة باستخدام Accessibility وMediaProjection.
- */
 private class AndroidAgentScreen(
     private val modelManager: ModelManager
 ) : AgentScreen {
@@ -371,10 +351,19 @@ class AgentBrain(
     private val voice: AgentVoice? = null
 ) {
 
-    /*
-     * إبقاء التنفيذ متسلسلاً يحمي جلسات الوكيل من
-     * تداخل الأوامر على الشاشة نفسها.
+    /**
+     * توافق خلفي مع الاستدعاء القديم:
+     * AgentBrain(modelManager, context)
      */
+    constructor(
+        modelManager: ModelManager,
+        context: Context
+    ) : this(
+        model = modelManager,
+        screen = AndroidAgentScreen(modelManager),
+        policy = SharedPreferencesAgentPolicy(context)
+    )
+
     private val executionMutex = Mutex()
 
     private val systemPrompt = """
@@ -415,12 +404,6 @@ class AgentBrain(
         لا تضف Markdown حول JSON.
     """.trimIndent()
 
-    /**
-     * نقطة الدخول الأساسية لتنفيذ مهمة وكيل.
-     *
-     * التنفيذ متسلسل داخل هذا الكائن.
-     * يمكن إنشاء AgentBrain منفصل لكل وكيل لاحقاً.
-     */
     suspend fun executeTask(
         userGoal: String,
         maxSteps: Int = 12,
@@ -452,9 +435,6 @@ class AgentBrain(
 
             currentCoroutineContext().ensureActive()
 
-            /*
-             * فشل قراءة الصلاحية يعامل كمنع.
-             */
             val canReadScreen = try {
                 policy.isScreenReadAllowed()
             } catch (e: CancellationException) {
@@ -561,10 +541,6 @@ class AgentBrain(
                 }
 
                 AgentAction.OBSERVE -> {
-                    /*
-                     * تبدأ الدورة التالية بقراءة جديدة للشاشة.
-                     * لا ندعي أن OBSERVE أنشأ تدفق رؤية حياً.
-                     */
                     session = addHistory(
                         session,
                         "طلب الوكيل تحديث ملاحظته عن الشاشة. ستتم القراءة في الخطوة التالية إذا كانت الصلاحية متاحة."
@@ -610,10 +586,6 @@ class AgentBrain(
                 AgentAction.TYPE,
                 AgentAction.SCROLL -> {
 
-                    /*
-                     * فحص الصلاحية يتم قبل أي إجراء.
-                     * الاستثناء أو فشل الفحص يعني المنع.
-                     */
                     val allowed = try {
                         policy.isActionAllowed(
                             command,
@@ -768,10 +740,6 @@ class AgentBrain(
         """.trimIndent()
     }
 
-    /**
-     * استخراج JSON متوازن مع مراعاة النصوص وعلامات الهروب.
-     * يدعم وجود JSON داخل code fence أو نص محيط به.
-     */
     private fun extractJsonObject(raw: String): String? {
 
         val start = raw.indexOf('{')
@@ -829,11 +797,6 @@ class AgentBrain(
 
         val jsonText = extractJsonObject(raw)
 
-        /*
-         * الاستجابة النصية العادية مقبولة كمحادثة.
-         * أما الاستجابة التي تبدأ بصيغة JSON غير مكتملة
-         * فلا نحولها إلى أمر محادثة صامتاً.
-         */
         if (jsonText == null) {
             val plainText = raw.trim()
 
