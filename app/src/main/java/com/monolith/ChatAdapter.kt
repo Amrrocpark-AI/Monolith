@@ -150,7 +150,7 @@ class ChatAdapter(
                     movementMethod =
                         android.text.method.LinkMovementMethod.getInstance()
 
-                    layoutParams = CardView.LayoutParams(
+                    layoutParams = FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.WRAP_CONTENT,
                         ViewGroup.LayoutParams.WRAP_CONTENT
                     )
