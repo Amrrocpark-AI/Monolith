@@ -1,9 +1,11 @@
+
 package com.monolith
 
 import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.PorterDuff
@@ -14,7 +16,9 @@ import android.os.Build
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
+import android.util.Base64
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
@@ -37,29 +41,37 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import okhttp3.ResponseBody
 import org.json.JSONArray
+import org.json.JSONObject
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
-import java.io.InputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 class ChatActivity : AppCompatActivity() {
 
     companion object {
         private const val CONVERSATION_ID = "main_chat"
+
         private const val MODEL_FILE_NAME = "model.gguf"
         private const val VISION_MODEL_FILE_NAME = "vision_model.gguf"
         private const val VISION_PROJECT_FILE_NAME = "vision_mmproj.gguf"
 
         private const val STATUS_LOCAL = "جاري تنفيذ الطلب..."
         private const val STATUS_CLOUD = "جاري إعداد الرد..."
+
+        private const val MAX_IMAGE_BYTES = 8 * 1024 * 1024
+        private const val MAX_IMAGE_DIMENSION = 1536
     }
 
-    // ---------------------------------------------------------
+    // =========================================================
     // UI
-    // ---------------------------------------------------------
+    // =========================================================
 
     private val selectedImageUris = mutableListOf<Uri>()
 
@@ -78,9 +90,9 @@ class ChatActivity : AppCompatActivity() {
 
     private var themeColorHex = "#00D4FF"
 
-    // ---------------------------------------------------------
+    // =========================================================
     // Core services
-    // ---------------------------------------------------------
+    // =========================================================
 
     private lateinit var securePrefs: SharedPreferences
     private lateinit var appDatabase: AppDatabase
@@ -92,23 +104,19 @@ class ChatActivity : AppCompatActivity() {
 
     private var ttsManager: TtsManager? = null
 
-    @Volatile
     private var isModelLoaded = false
-
-    @Volatile
-    private var isVisionLoaded = false
-
     private var activeAgentId = 0
     private var pendingVisionGgufPath: String? = null
 
     private var isActivityReady = false
     private var isLoadingMessages = false
 
-    // ---------------------------------------------------------
-    // Request and database coordination
-    // ---------------------------------------------------------
+    // =========================================================
+    // Concurrency
+    // =========================================================
 
     private val databaseMutex = Mutex()
+    private val requestLock = Any()
 
     private val activeApiCalls =
         mutableMapOf<String, Call<ChatResponse>>()
@@ -116,71 +124,9 @@ class ChatActivity : AppCompatActivity() {
     private val activeLocalJobs =
         mutableMapOf<String, Job>()
 
-    private val requestLock = Any()
-
-    // ---------------------------------------------------------
-    // File helpers
-    // ---------------------------------------------------------
-
-    private suspend fun copyUriToFileAtomically(
-        uri: Uri,
-        destination: File
-    ) = withContext(Dispatchers.IO) {
-
-        val parent = destination.parentFile
-        if (parent != null && !parent.exists()) {
-            parent.mkdirs()
-        }
-
-        val temporaryFile = File(
-            destination.parentFile,
-            destination.name + ".tmp"
-        )
-
-        try {
-            val input = contentResolver.openInputStream(uri)
-                ?: throw IllegalStateException("تعذر فتح الملف المحدد")
-
-            input.use { source ->
-                FileOutputStream(temporaryFile).use { output ->
-                    source.copyTo(output)
-                    output.fd.sync()
-                }
-            }
-
-            if (temporaryFile.length() <= 0L) {
-                throw IllegalStateException("الملف المحدد فارغ")
-            }
-
-            if (destination.exists() && !destination.delete()) {
-                throw IllegalStateException("تعذر استبدال الملف السابق")
-            }
-
-            if (!temporaryFile.renameTo(destination)) {
-                temporaryFile.copyTo(destination, overwrite = true)
-                temporaryFile.delete()
-            }
-
-        } catch (e: Exception) {
-            temporaryFile.delete()
-            throw e
-        }
-    }
-
-    private fun persistReadPermission(uri: Uri) {
-        try {
-            contentResolver.takePersistableUriPermission(
-                uri,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION
-            )
-        } catch (_: Exception) {
-            // بعض مزودي الملفات لا يدعمون الصلاحية الدائمة.
-        }
-    }
-
-    // ---------------------------------------------------------
+    // =========================================================
     // Activity result launchers
-    // ---------------------------------------------------------
+    // =========================================================
 
     private val pickImagesLauncher =
         registerForActivityResult(
@@ -189,7 +135,7 @@ class ChatActivity : AppCompatActivity() {
 
             if (uris.isNullOrEmpty()) return@registerForActivityResult
 
-            for (uri in uris) {
+            uris.forEach { uri ->
                 persistReadPermission(uri)
 
                 if (!selectedImageUris.contains(uri)) {
@@ -237,6 +183,8 @@ class ChatActivity : AppCompatActivity() {
                     etMessage.setSelection(etMessage.text.length)
                     showToast("تمت قراءة الملف")
 
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     showToast("تعذرت قراءة الملف: ${e.message}")
                 }
@@ -254,12 +202,16 @@ class ChatActivity : AppCompatActivity() {
                 try {
                     showToast("جاري نسخ النموذج...")
 
-                    val modelFile = File(filesDir, MODEL_FILE_NAME)
+                    val modelFile = File(
+                        filesDir,
+                        MODEL_FILE_NAME
+                    )
 
                     copyUriToFileAtomically(uri, modelFile)
-
                     loadLocalModel(modelFile)
 
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     showToast("فشل تحميل ملف النموذج: ${e.message}")
                 }
@@ -284,12 +236,15 @@ class ChatActivity : AppCompatActivity() {
 
                     copyUriToFileAtomically(uri, visionFile)
 
-                    pendingVisionGgufPath = visionFile.absolutePath
+                    pendingVisionGgufPath =
+                        visionFile.absolutePath
 
                     showToast("اختر الآن ملف mmproj")
 
                     pickMmprojLauncher.launch(arrayOf("*/*"))
 
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     showToast("فشل نسخ نموذج الرؤية: ${e.message}")
                 }
@@ -305,9 +260,9 @@ class ChatActivity : AppCompatActivity() {
 
             lifecycleScope.launch {
                 try {
-                    val ggufPath = pendingVisionGgufPath
+                    val visionPath = pendingVisionGgufPath
 
-                    if (ggufPath.isNullOrBlank()) {
+                    if (visionPath.isNullOrBlank()) {
                         showToast("لم يتم تحديد نموذج الرؤية أولاً")
                         return@launch
                     }
@@ -321,37 +276,146 @@ class ChatActivity : AppCompatActivity() {
 
                     copyUriToFileAtomically(uri, mmprojFile)
 
-                    val success = withContext(Dispatchers.IO) {
-                        VisionProcessor.initVision(
-                            ggufPath,
+                    val result = withContext(Dispatchers.IO) {
+                        modelManager.loadVisionModelAsync(
+                            visionPath,
                             mmprojFile.absolutePath
                         )
                     }
 
-                    isVisionLoaded = success
-
-                    btnLoadVisionModel.setColorFilter(
-                        if (success) Color.GREEN else Color.RED
-                    )
-
-                    showToast(
-                        if (success) {
-                            "تمت تهيئة محرك الرؤية"
-                        } else {
-                            "فشلت تهيئة محرك الرؤية"
+                    result.fold(
+                        onSuccess = {
+                            btnLoadVisionModel.setColorFilter(
+                                Color.GREEN
+                            )
+                            showToast("تم تحميل نموذج الرؤية بنجاح")
+                        },
+                        onFailure = { error ->
+                            btnLoadVisionModel.setColorFilter(
+                                Color.RED
+                            )
+                            showToast(
+                                "فشل تحميل نموذج الرؤية: ${error.message}"
+                            )
                         }
                     )
 
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
-                    isVisionLoaded = false
+                    btnLoadVisionModel.setColorFilter(Color.RED)
                     showToast("خطأ في إعداد الرؤية: ${e.message}")
+                } finally {
+                    pendingVisionGgufPath = null
                 }
             }
         }
 
-    // ---------------------------------------------------------
-    // Activity lifecycle
-    // ---------------------------------------------------------
+    // =========================================================
+    // File operations
+    // =========================================================
+
+    private suspend fun copyUriToFileAtomically(
+        uri: Uri,
+        destination: File
+    ) = withContext(Dispatchers.IO) {
+
+        val parent = destination.parentFile ?: filesDir
+
+        if (!parent.exists() && !parent.mkdirs()) {
+            throw IllegalStateException(
+                "تعذر إنشاء مجلد تخزين النموذج"
+            )
+        }
+
+        val temporaryFile = File(
+            parent,
+            destination.name + ".tmp"
+        )
+
+        val backupFile = File(
+            parent,
+            destination.name + ".bak"
+        )
+
+        try {
+            val input = contentResolver.openInputStream(uri)
+                ?: throw IllegalStateException(
+                    "تعذر فتح الملف المحدد"
+                )
+
+            input.use { source ->
+                FileOutputStream(temporaryFile).use { output ->
+                    source.copyTo(output)
+                    output.fd.sync()
+                }
+            }
+
+            if (temporaryFile.length() <= 0L) {
+                throw IllegalStateException("الملف المحدد فارغ")
+            }
+
+            if (backupFile.exists()) {
+                backupFile.delete()
+            }
+
+            var oldFileMoved = false
+
+            if (destination.exists()) {
+                oldFileMoved = destination.renameTo(backupFile)
+
+                if (!oldFileMoved) {
+                    throw IllegalStateException(
+                        "تعذر حفظ النسخة السابقة قبل الاستبدال"
+                    )
+                }
+            }
+
+            if (!temporaryFile.renameTo(destination)) {
+                if (oldFileMoved) {
+                    backupFile.renameTo(destination)
+                }
+
+                throw IllegalStateException(
+                    "تعذر نقل الملف المؤقت إلى موقعه النهائي"
+                )
+            }
+
+            if (backupFile.exists()) {
+                backupFile.delete()
+            }
+
+        } catch (e: CancellationException) {
+            temporaryFile.delete()
+            throw e
+        } catch (e: Exception) {
+            temporaryFile.delete()
+
+            if (
+                backupFile.exists() &&
+                !destination.exists()
+            ) {
+                backupFile.renameTo(destination)
+            }
+
+            throw e
+        }
+    }
+
+    private fun persistReadPermission(uri: Uri) {
+        try {
+            contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        } catch (_: Exception) {
+            // بعض مزودي الملفات لا يدعمون الصلاحية الدائمة.
+        }
+    }
+
+    // =========================================================
+    // Lifecycle
+    // =========================================================
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -362,10 +426,21 @@ class ChatActivity : AppCompatActivity() {
             ApiClient.init(applicationContext)
 
             appDatabase = AppDatabase(applicationContext)
-            modelManager = ModelManager(applicationContext)
-            agentBrain = AgentBrain(modelManager, applicationContext)
+
+            // استخدام المحرك المشترك بدلاً من إنشاء محرك مستقل.
+            modelManager = ModelManager.getInstance(
+                applicationContext
+            )
+
+            // إنشاء الوكيل وفق واجهته المعمارية الحالية.
+            agentBrain = AgentBrainFactory.create(
+                applicationContext,
+                modelManager
+            )
 
             initializeSecurePreferences()
+            loadInitialTheme()
+
             initializeViews()
             initializeAdapter()
             initializeTopBar()
@@ -375,9 +450,18 @@ class ChatActivity : AppCompatActivity() {
 
             loadMessagesFromDb()
             checkAndLoadModelOnStartup()
+            updateModelIndicators()
 
         } catch (e: Exception) {
-            showToast("تعذر تهيئة المحادثة: ${e.message}")
+            android.util.Log.e(
+                "Monolith",
+                "Chat initialization failed",
+                e
+            )
+
+            showToast(
+                "تعذر تهيئة المحادثة: ${e.message}"
+            )
         }
     }
 
@@ -395,19 +479,45 @@ class ChatActivity : AppCompatActivity() {
         )
     }
 
+    private fun loadInitialTheme() {
+        val settings = getSharedPreferences(
+            "Settings",
+            MODE_PRIVATE
+        )
+
+        themeColorHex = settings.getString(
+            "AppThemeColor",
+            "#00D4FF"
+        ) ?: "#00D4FF"
+
+        try {
+            Color.parseColor(themeColorHex)
+        } catch (_: Exception) {
+            themeColorHex = "#00D4FF"
+        }
+    }
+
+    // =========================================================
+    // Views and adapter
+    // =========================================================
+
     private fun initializeViews() {
         etMessage = findViewById(R.id.etMessage)
         btnSend = findViewById(R.id.btnSend)
 
         tvAppTitle = findViewById(R.id.tvAppTitle)
 
-        recyclerViewChat = findViewById(R.id.recyclerViewChat)
+        recyclerViewChat = findViewById(
+            R.id.recyclerViewChat
+        )
 
-        imagePreviewContainer =
-            findViewById(R.id.imagePreviewContainer)
+        imagePreviewContainer = findViewById(
+            R.id.imagePreviewContainer
+        )
 
-        previewListContainer =
-            findViewById(R.id.previewListContainer)
+        previewListContainer = findViewById(
+            R.id.previewListContainer
+        )
 
         btnLoadModel = createTopBarButton(
             android.R.drawable.ic_menu_save,
@@ -438,28 +548,24 @@ class ChatActivity : AppCompatActivity() {
     private fun initializeAdapter() {
         chatAdapter = ChatAdapter(
             context = this,
-            messages = messageList,
 
-            onEditClick = { msg ->
-                showEditDialog(msg)
+            onEditClick = { message ->
+                showEditDialog(message)
             },
 
-            onReactionClick = { msg ->
-                val newReaction = when (msg.reactionType) {
+            onReactionClick = { message ->
+                val newReaction = when (message.reactionType) {
                     "LIKE" -> "DISLIKE"
                     "DISLIKE" -> null
                     else -> "LIKE"
                 }
 
-                updateMessageLocally(
-                    msg.id
-                ) {
+                updateMessageLocally(message.id) {
                     it.copy(reactionType = newReaction)
                 }
 
-                val updated = findMessage(msg.id)
-                if (updated != null) {
-                    saveMessageToDb(updated)
+                findMessage(message.id)?.let {
+                    saveMessageToDb(it)
                 }
             },
 
@@ -468,14 +574,12 @@ class ChatActivity : AppCompatActivity() {
                 ttsManager?.speak(text)
             },
 
-            onPinClick = { msg ->
-                updateMessageLocally(msg.id) {
+            onPinClick = { message ->
+                updateMessageLocally(message.id) {
                     it.copy(isPinned = !it.isPinned)
                 }
 
-                val updated = findMessage(msg.id)
-
-                if (updated != null) {
+                findMessage(message.id)?.let { updated ->
                     saveMessageToDb(updated)
 
                     showToast(
@@ -492,6 +596,7 @@ class ChatActivity : AppCompatActivity() {
         )
 
         recyclerViewChat.adapter = chatAdapter
+        chatAdapter.updateMessages(messageList)
     }
 
     private fun createTopBarButton(
@@ -511,14 +616,20 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun initializeTopBar() {
-        val rootLayout =
-            findViewById<LinearLayout>(R.id.rootLayout)
+        val rootLayout = findViewById<LinearLayout>(
+            R.id.rootLayout
+        )
 
         val topBar = rootLayout.getChildAt(0) as? LinearLayout
             ?: return
 
-        fun addButton(button: ImageButton, action: () -> Unit) {
-            button.setOnClickListener { action() }
+        fun addButton(
+            button: ImageButton,
+            action: () -> Unit
+        ) {
+            button.setOnClickListener {
+                action()
+            }
 
             val insertIndex =
                 (topBar.childCount - 1).coerceAtLeast(0)
@@ -538,6 +649,7 @@ class ChatActivity : AppCompatActivity() {
         btnLoadModel.setOnClickListener {
             pickModelLauncher.launch(arrayOf("*/*"))
         }
+
         topBar.addView(
             btnLoadModel,
             (topBar.childCount - 1).coerceAtLeast(0)
@@ -546,6 +658,7 @@ class ChatActivity : AppCompatActivity() {
         btnLoadVisionModel.setOnClickListener {
             pickVisionGgufLauncher.launch(arrayOf("*/*"))
         }
+
         topBar.addView(
             btnLoadVisionModel,
             (topBar.childCount - 1).coerceAtLeast(0)
@@ -554,6 +667,7 @@ class ChatActivity : AppCompatActivity() {
         btnAgents.setOnClickListener {
             showAgentsBottomSheet()
         }
+
         topBar.addView(
             btnAgents,
             (topBar.childCount - 1).coerceAtLeast(0)
@@ -562,6 +676,7 @@ class ChatActivity : AppCompatActivity() {
         btnThreads.setOnClickListener {
             showThreadsBottomSheet()
         }
+
         topBar.addView(
             btnThreads,
             (topBar.childCount - 1).coerceAtLeast(0)
@@ -620,7 +735,9 @@ class ChatActivity : AppCompatActivity() {
                     updateSendButtonState()
                 }
 
-                override fun afterTextChanged(s: Editable?) = Unit
+                override fun afterTextChanged(
+                    s: Editable?
+                ) = Unit
             }
         )
 
@@ -651,7 +768,9 @@ class ChatActivity : AppCompatActivity() {
             sendMessage()
         }
 
-        etMessage.setOnEditorActionListener { _, actionId, _ ->
+        etMessage.setOnEditorActionListener {
+                _, actionId, _ ->
+
             if (actionId == EditorInfo.IME_ACTION_SEND) {
                 sendMessage()
                 true
@@ -662,17 +781,24 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun updateSendButtonState() {
-        val enabled =
+        if (!::btnSend.isInitialized) return
+
+        val hasContent =
             etMessage.text.toString().isNotBlank() ||
             selectedImageUris.isNotEmpty()
+
+        val enabled =
+            hasContent &&
+            isActivityReady &&
+            !isLoadingMessages
 
         btnSend.isEnabled = enabled
         btnSend.alpha = if (enabled) 1f else 0.5f
     }
 
-    // ---------------------------------------------------------
+    // =========================================================
     // Model loading
-    // ---------------------------------------------------------
+    // =========================================================
 
     private suspend fun loadLocalModel(modelFile: File) {
         if (!modelFile.exists() || modelFile.length() <= 0L) {
@@ -680,42 +806,50 @@ class ChatActivity : AppCompatActivity() {
             return
         }
 
+        if (!modelManager.isEngineReady) {
+            showToast("محرك النماذج غير متاح")
+            return
+        }
+
         showToast("جاري تحميل النموذج المحلي...")
 
-        withContext(Dispatchers.IO) {
-            modelManager.loadModel(
-                modelFile.absolutePath,
+        val result = modelManager.loadModelAsync(
+            modelFile.absolutePath
+        )
 
-                onSuccess = {
-                    runOnUiThread {
-                        if (isFinishing || isDestroyed) return@runOnUiThread
+        result.fold(
+            onSuccess = {
+                isModelLoaded = true
+                activeAgentId = 0
 
-                        isModelLoaded = true
-                        activeAgentId = 0
+                btnLoadModel.setColorFilter(Color.GREEN)
 
-                        btnLoadModel.setColorFilter(Color.GREEN)
+                showToast("تم تحميل النموذج المحلي بنجاح")
+            },
+            onFailure = { error ->
+                isModelLoaded = false
 
-                        showToast("تم تحميل النموذج المحلي بنجاح")
-                    }
-                },
+                btnLoadModel.setColorFilter(Color.RED)
 
-                onError = { error ->
-                    runOnUiThread {
-                        if (isFinishing || isDestroyed) return@runOnUiThread
-
-                        isModelLoaded = false
-
-                        btnLoadModel.setColorFilter(Color.RED)
-
-                        showToast("فشل تحميل النموذج: $error")
-                    }
-                }
-            )
-        }
+                showToast(
+                    "فشل تحميل النموذج: ${error.message}"
+                )
+            }
+        )
     }
 
     private fun checkAndLoadModelOnStartup() {
-        val modelFile = File(filesDir, MODEL_FILE_NAME)
+        // قد يكون المحرك قد حُمّل مسبقاً بواسطة خدمة أخرى.
+        if (modelManager.isTextModelLoaded) {
+            isModelLoaded = true
+            btnLoadModel.setColorFilter(Color.GREEN)
+            return
+        }
+
+        val modelFile = File(
+            filesDir,
+            MODEL_FILE_NAME
+        )
 
         if (!modelFile.exists() || modelFile.length() <= 0L) {
             isModelLoaded = false
@@ -725,29 +859,59 @@ class ChatActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 loadLocalModel(modelFile)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 isModelLoaded = false
                 btnLoadModel.setColorFilter(Color.RED)
-                showToast("تعذر التحميل التلقائي: ${e.message}")
+
+                showToast(
+                    "تعذر التحميل التلقائي: ${e.message}"
+                )
             }
         }
     }
 
-    // ---------------------------------------------------------
-    // Message loading and persistence
-    // ---------------------------------------------------------
+    private fun updateModelIndicators() {
+        isModelLoaded = modelManager.isTextModelLoaded
+
+        btnLoadModel.setColorFilter(
+            if (modelManager.isTextModelLoaded) {
+                Color.GREEN
+            } else {
+                Color.GRAY
+            }
+        )
+
+        btnLoadVisionModel.setColorFilter(
+            if (modelManager.isVisionModelLoaded) {
+                Color.GREEN
+            } else {
+                Color.GRAY
+            }
+        )
+    }
+
+    // =========================================================
+    // Database and messages
+    // =========================================================
 
     private fun loadMessagesFromDb() {
         if (isLoadingMessages) return
 
         isLoadingMessages = true
+        updateSendButtonState()
 
         lifecycleScope.launch {
             try {
                 val loadedMessages = withContext(Dispatchers.IO) {
                     appDatabase
-                        .getMessagesForConversation(currentConversationId)
-                        .map { it.toChatMessage() }
+                        .getMessagesForConversation(
+                            currentConversationId
+                        )
+                        .map {
+                            it.toChatMessage()
+                        }
                 }
 
                 messageList.clear()
@@ -759,22 +923,31 @@ class ChatActivity : AppCompatActivity() {
                     scrollToBottom()
                 }
 
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                showToast("تعذر تحميل سجل المحادثة: ${e.message}")
+                showToast(
+                    "تعذر تحميل سجل المحادثة: ${e.message}"
+                )
             } finally {
                 isLoadingMessages = false
+                updateSendButtonState()
             }
         }
     }
 
-    private fun saveMessageToDb(msg: ChatMessage) {
+    private fun saveMessageToDb(message: ChatMessage) {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 databaseMutex.withLock {
                     appDatabase.insertMessage(
-                        msg.toMessageEntity(currentConversationId)
+                        message.toMessageEntity(
+                            currentConversationId
+                        )
                     )
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 android.util.Log.e(
                     "Monolith",
@@ -795,12 +968,16 @@ class ChatActivity : AppCompatActivity() {
 
         if (index == -1) return
 
-        messageList[index] = transform(messageList[index])
+        messageList[index] = transform(
+            messageList[index]
+        )
 
         chatAdapter.updateMessages(messageList)
     }
 
-    private fun findMessage(messageId: String): ChatMessage? {
+    private fun findMessage(
+        messageId: String
+    ): ChatMessage? {
         return messageList.firstOrNull {
             it.id == messageId
         }
@@ -810,7 +987,7 @@ class ChatActivity : AppCompatActivity() {
         return ChatMessage(
             id = id,
 
-            role = if (role == "USER") {
+            role = if (role.equals("USER", true)) {
                 MessageRole.USER
             } else {
                 MessageRole.AI
@@ -822,7 +999,9 @@ class ChatActivity : AppCompatActivity() {
                 attachmentUris
             ),
 
-            colorHex = if (role == "USER") {
+            colorHex = if (
+                role.equals("USER", true)
+            ) {
                 themeColorHex
             } else {
                 "#2A2A2A"
@@ -896,9 +1075,11 @@ class ChatActivity : AppCompatActivity() {
 
         return try {
             val array = JSONArray(stored)
+
             List(array.length()) { index ->
                 array.getString(index)
             }
+
         } catch (_: Exception) {
             // توافق مع السجلات القديمة التي استخدمت الفاصلة.
             stored.split(",").filter {
@@ -907,14 +1088,15 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    // ---------------------------------------------------------
-    // Message sending
-    // ---------------------------------------------------------
+    // =========================================================
+    // Sending messages
+    // =========================================================
 
     private fun sendMessage() {
-        if (!isActivityReady) return
+        if (!isActivityReady || isLoadingMessages) return
 
         val text = etMessage.text.toString().trim()
+
         val attachments = selectedImageUris.map {
             it.toString()
         }
@@ -923,15 +1105,24 @@ class ChatActivity : AppCompatActivity() {
             return
         }
 
-        val apiKey = securePrefs.getString("api_key", null)
+        isModelLoaded = modelManager.isTextModelLoaded
+
+        val apiKey = securePrefs.getString(
+            "api_key",
+            null
+        )
+
         val selectedModel = securePrefs.getString(
             "selected_model",
             null
         )
 
-        // لا نحفظ رسالة يتعذر إرسالها بسبب غياب إعدادات الاتصال.
-        if (!isModelLoaded &&
-            (apiKey.isNullOrBlank() || selectedModel.isNullOrBlank())
+        if (
+            !isModelLoaded &&
+            (
+                apiKey.isNullOrBlank() ||
+                selectedModel.isNullOrBlank()
+            )
         ) {
             showToast(
                 "حمّل نموذجاً محلياً أو أضف إعدادات الاتصال السحابي أولاً"
@@ -941,14 +1132,17 @@ class ChatActivity : AppCompatActivity() {
 
         val userMessage = ChatMessage(
             role = MessageRole.USER,
+
             content = text.ifBlank {
                 "أرسل المستخدم صوراً مرفقة."
             },
+
             attachmentUris = attachments,
             colorHex = themeColorHex
         )
 
         messageList.add(userMessage)
+
         chatAdapter.updateMessages(messageList)
         saveMessageToDb(userMessage)
 
@@ -970,9 +1164,13 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    private fun sendToLocalModel(userMessage: ChatMessage) {
-        val messageId = userMessage.id
+    // =========================================================
+    // Local model and local vision
+    // =========================================================
 
+    private fun sendToLocalModel(
+        userMessage: ChatMessage
+    ) {
         val statusMessage = ChatMessage(
             role = MessageRole.AI,
             content = STATUS_LOCAL,
@@ -981,17 +1179,41 @@ class ChatActivity : AppCompatActivity() {
         )
 
         messageList.add(statusMessage)
+
         chatAdapter.updateMessages(messageList)
         scrollToBottom()
 
         val job = lifecycleScope.launch {
             try {
-                val result = withContext(Dispatchers.IO) {
-                    agentBrain.executeTask(
-                        userMessage.content,
-                        agentId = activeAgentId
-                    )
+                val enrichedPrompt = buildString {
+                    append(userMessage.content)
+
+                    val attachments =
+                        userMessage.attachmentUris.orEmpty()
+
+                    if (attachments.isNotEmpty()) {
+                        append("\n\n")
+
+                        if (modelManager.isVisionModelLoaded) {
+                            append(
+                                analyzeLocalImageAttachments(
+                                    attachments
+                                )
+                            )
+                        } else {
+                            append(
+                                "ملاحظة للنموذج: توجد صور مرفقة، " +
+                                "لكن نموذج الرؤية المحلي غير محمّل. " +
+                                "لا تفترض أنك شاهدت محتوى الصور."
+                            )
+                        }
+                    }
                 }
+
+                val result = agentBrain.executeTask(
+                    userGoal = enrichedPrompt,
+                    agentId = activeAgentId
+                )
 
                 updateRequestMessage(
                     messageId = statusMessage.id,
@@ -1001,7 +1223,6 @@ class ChatActivity : AppCompatActivity() {
 
             } catch (e: CancellationException) {
                 throw e
-
             } catch (e: Exception) {
                 updateRequestMessage(
                     messageId = statusMessage.id,
@@ -1010,86 +1231,193 @@ class ChatActivity : AppCompatActivity() {
                 )
             } finally {
                 synchronized(requestLock) {
-                    activeLocalJobs.remove(messageId)
+                    activeLocalJobs.remove(
+                        statusMessage.id
+                    )
                 }
             }
         }
 
         synchronized(requestLock) {
-            activeLocalJobs[messageId] = job
+            activeLocalJobs[statusMessage.id] = job
         }
     }
+
+    private suspend fun analyzeLocalImageAttachments(
+        attachments: List<String>
+    ): String {
+        val results = StringBuilder()
+
+        attachments.forEachIndexed { index, uriString ->
+            try {
+                val uri = Uri.parse(uriString)
+
+                val frame = decodeImageToDirectBuffer(uri)
+
+                val analysis = modelManager.analyzeScreenFrame(
+                    buffer = frame.first,
+                    width = frame.second,
+                    height = frame.third,
+                    prompt = "حلل الصورة المرفقة رقم ${index + 1}. " +
+                        "صف محتواها والعناصر المهمة والعلاقات بينها."
+                )
+
+                val error = try {
+                    JSONObject(analysis).optString("error")
+                } catch (_: Exception) {
+                    ""
+                }
+
+                if (error.isNotBlank()) {
+                    throw IllegalStateException(error)
+                }
+
+                results.append(
+                    "\nنتيجة تحليل الصورة ${index + 1}:\n"
+                )
+
+                results.append(analysis)
+                results.append("\n")
+
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                results.append(
+                    "\nتعذر تحليل الصورة ${index + 1}: "
+                )
+
+                results.append(
+                    e.message ?: "خطأ غير معروف"
+                )
+
+                results.append("\n")
+            }
+        }
+
+        return results.toString()
+    }
+
+    /**
+     * يحوّل الصورة إلى RGBA داخل Direct ByteBuffer.
+     * هذا هو تنسيق الإدخال الذي يتوقعه vision_processor.cpp.
+     */
+    private suspend fun decodeImageToDirectBuffer(
+        uri: Uri
+    ): Triple<ByteBuffer, Int, Int> = withContext(Dispatchers.IO) {
+
+        val bounds = BitmapFactory.Options().apply {
+            inJustDecodeBounds = true
+        }
+
+        contentResolver.openInputStream(uri)?.use {
+            BitmapFactory.decodeStream(
+                it,
+                null,
+                bounds
+            )
+        } ?: throw IllegalStateException(
+            "تعذر قراءة أبعاد الصورة"
+        )
+
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+            throw IllegalArgumentException(
+                "الصورة غير صالحة"
+            )
+        }
+
+        var sampleSize = 1
+
+        while (
+            bounds.outWidth / sampleSize > MAX_IMAGE_DIMENSION ||
+            bounds.outHeight / sampleSize > MAX_IMAGE_DIMENSION
+        ) {
+            sampleSize *= 2
+        }
+
+        val options = BitmapFactory.Options().apply {
+            inSampleSize = sampleSize
+            inPreferredConfig = Bitmap.Config.ARGB_8888
+        }
+
+        var bitmap = contentResolver.openInputStream(uri)?.use {
+            BitmapFactory.decodeStream(
+                it,
+                null,
+                options
+            )
+        } ?: throw IllegalStateException(
+            "تعذر فك ترميز الصورة"
+        )
+
+        if (
+            bitmap.width > MAX_IMAGE_DIMENSION ||
+            bitmap.height > MAX_IMAGE_DIMENSION
+        ) {
+            val ratio = minOf(
+                MAX_IMAGE_DIMENSION.toFloat() / bitmap.width,
+                MAX_IMAGE_DIMENSION.toFloat() / bitmap.height
+            )
+
+            val scaled = Bitmap.createScaledBitmap(
+                bitmap,
+                (bitmap.width * ratio).toInt().coerceAtLeast(1),
+                (bitmap.height * ratio).toInt().coerceAtLeast(1),
+                true
+            )
+
+            if (scaled !== bitmap) {
+                bitmap.recycle()
+            }
+
+            bitmap = scaled
+        }
+
+        if (bitmap.config != Bitmap.Config.ARGB_8888) {
+            val converted = bitmap.copy(
+                Bitmap.Config.ARGB_8888,
+                false
+            ) ?: run {
+                bitmap.recycle()
+                throw IllegalStateException(
+                    "تعذر تحويل الصورة إلى ARGB_8888"
+                )
+            }
+
+            bitmap.recycle()
+            bitmap = converted
+        }
+
+        try {
+            val width = bitmap.width
+            val height = bitmap.height
+
+            val buffer = ByteBuffer.allocateDirect(
+                width * height * 4
+            ).order(ByteOrder.nativeOrder())
+
+            bitmap.copyPixelsToBuffer(buffer)
+            buffer.flip()
+
+            Triple(
+                buffer,
+                width,
+                height
+            )
+
+        } finally {
+            bitmap.recycle()
+        }
+    }
+
+    // =========================================================
+    // Cloud model and multimodal request
+    // =========================================================
 
     private fun sendToCloudModel(
         userMessage: ChatMessage,
         selectedModel: String,
         apiKey: String
     ) {
-        val temperature = securePrefs.getFloat(
-            "temperature",
-            0.7f
-        ).coerceIn(0f, 2f)
-
-        val persona = securePrefs.getString(
-            "persona",
-            "default"
-        ) ?: "default"
-
-        val personaPrompt = when (persona) {
-            "analytical" ->
-                "أنت Monolith في وضع المحلل النقدي. حلل المعطيات بدقة، وميّز بين الحقائق والافتراضات."
-
-            "objective" ->
-                "أنت Monolith في الوضع الموضوعي. قدم إجابات متوازنة ودقيقة دون تحيز."
-
-            "innovator" ->
-                "أنت Monolith في وضع الابتكار. اقترح حلولاً عملية وأفكاراً جديدة مع توضيح حدودها."
-
-            else ->
-                "أنت Monolith، مساعد ذكي. أجب بوضوح ودقة، ولا تدّعِ تنفيذ شيء لم تنفذه."
-        }
-
-        val history = messageList
-            .filter { !it.isThinking }
-            .takeLast(16)
-            .toList()
-
-        val apiMessages = mutableListOf<Message>()
-
-        apiMessages.add(
-            Message(
-                role = "system",
-                content = personaPrompt
-            )
-        )
-
-        for (msg in history) {
-            if (msg.role == MessageRole.USER) {
-                apiMessages.add(
-                    Message(
-                        role = "user",
-                        content = msg.content
-                    )
-                )
-            } else {
-                apiMessages.add(
-                    Message(
-                        role = "assistant",
-                        content = msg.content
-                    )
-                )
-            }
-        }
-
-        if (userMessage.attachmentUris?.isNotEmpty() == true) {
-            apiMessages.add(
-                Message(
-                    role = "system",
-                    content = "تنبيه: توجد صور مرفقة بالرسالة، لكن واجهة API الحالية في التطبيق ترسل نصوصاً فقط؛ لا تفترض أنك شاهدت محتوى الصور."
-                )
-            )
-        }
-
         val statusMessage = ChatMessage(
             role = MessageRole.AI,
             content = STATUS_CLOUD,
@@ -1099,91 +1427,323 @@ class ChatActivity : AppCompatActivity() {
         )
 
         messageList.add(statusMessage)
+
         chatAdapter.updateMessages(messageList)
         scrollToBottom()
 
-        val request = ChatRequest(
-            model = selectedModel,
-            messages = apiMessages,
-            temperature = temperature,
-            maxTokens = 2048
-        )
+        lifecycleScope.launch {
+            try {
+                val temperature = securePrefs.getFloat(
+                    "temperature",
+                    0.7f
+                ).coerceIn(0f, 2f)
 
-        val headers = mapOf(
-            "Authorization" to "Bearer $apiKey"
-        )
+                val persona = securePrefs.getString(
+                    "persona",
+                    "default"
+                ) ?: "default"
 
-        val call = ApiClient.service.sendMessage(
-            url = "v1/chat/completions",
-            headers = headers,
-            request = request
-        )
+                val personaPrompt = when (persona) {
+                    "analytical" ->
+                        "أنت Monolith في وضع المحلل النقدي. " +
+                        "حلل المعطيات بدقة وميّز بين الحقائق والافتراضات."
 
-        synchronized(requestLock) {
-            activeApiCalls[statusMessage.id] = call
-        }
+                    "objective" ->
+                        "أنت Monolith في الوضع الموضوعي. " +
+                        "قدم إجابات متوازنة ودقيقة دون تحيز."
 
-        call.enqueue(
-            object : Callback<ChatResponse> {
+                    "innovator" ->
+                        "أنت Monolith في وضع الابتكار. " +
+                        "اقترح حلولاً عملية وأفكاراً جديدة مع توضيح حدودها."
 
-                override fun onResponse(
-                    call: Call<ChatResponse>,
-                    response: Response<ChatResponse>
-                ) {
-                    synchronized(requestLock) {
-                        activeApiCalls.remove(statusMessage.id)
+                    else ->
+                        "أنت Monolith، مساعد ذكي. " +
+                        "أجب بوضوح ودقة ولا تدّعِ تنفيذ شيء لم تنفذه."
+                }
+
+                val history = messageList
+                    .filter {
+                        !it.isThinking &&
+                        it.id != userMessage.id
                     }
+                    .takeLast(15)
+                    .toList()
 
-                    runOnUiThread {
-                        if (isFinishing || isDestroyed) return@runOnUiThread
+                val apiMessages = mutableListOf<Message>()
 
-                        if (response.isSuccessful) {
-                            val reply = response.body()
-                                ?.choices
-                                ?.firstOrNull()
-                                ?.message
-                                ?.content
-                                ?.takeIf { it.isNotBlank() }
-                                ?: "لم يتم استلام رد صالح من الخادم."
+                apiMessages.add(
+                    Message(
+                        role = "system",
+                        content = personaPrompt
+                    )
+                )
 
-                            updateRequestMessage(
-                                messageId = statusMessage.id,
-                                content = reply,
-                                isThinking = false,
-                                modelName = selectedModel
+                history.forEach { message ->
+                    apiMessages.add(
+                        Message(
+                            role = if (
+                                message.role == MessageRole.USER
+                            ) {
+                                "user"
+                            } else {
+                                "assistant"
+                            },
+                            content = message.content
+                        )
+                    )
+                }
+
+                val currentContentParts =
+                    mutableListOf<ContentPart>()
+
+                if (userMessage.content.isNotBlank()) {
+                    currentContentParts.add(
+                        ContentPart(
+                            type = "text",
+                            text = userMessage.content
+                        )
+                    )
+                }
+
+                val imageErrors = mutableListOf<String>()
+
+                userMessage.attachmentUris.orEmpty()
+                    .forEachIndexed { index, uriString ->
+
+                        try {
+                            val dataUrl = encodeImageAsDataUrl(
+                                Uri.parse(uriString)
                             )
 
-                        } else {
+                            currentContentParts.add(
+                                ContentPart(
+                                    type = "image_url",
+                                    imageUrl = ImageUrl(dataUrl)
+                                )
+                            )
+
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            imageErrors.add(
+                                "تعذر تجهيز الصورة ${index + 1}: " +
+                                (e.message ?: "خطأ غير معروف")
+                            )
+                        }
+                    }
+
+                if (imageErrors.isNotEmpty()) {
+                    currentContentParts.add(
+                        ContentPart(
+                            type = "text",
+                            text = imageErrors.joinToString("\n")
+                        )
+                    )
+                }
+
+                val currentContent: Any =
+                    if (currentContentParts.size == 1 &&
+                        currentContentParts[0].type == "text"
+                    ) {
+                        currentContentParts[0].text ?: ""
+                    } else {
+                        currentContentParts
+                    }
+
+                apiMessages.add(
+                    Message(
+                        role = "user",
+                        content = currentContent
+                    )
+                )
+
+                val request = ChatRequest(
+                    model = selectedModel,
+                    messages = apiMessages,
+                    temperature = temperature,
+                    maxTokens = 2048
+                )
+
+                val headers = mapOf(
+                    "Authorization" to "Bearer $apiKey"
+                )
+
+                val call = ApiClient.service.sendMessage(
+                    url = "v1/chat/completions",
+                    headers = headers,
+                    request = request
+                )
+
+                synchronized(requestLock) {
+                    activeApiCalls[statusMessage.id] = call
+                }
+
+                call.enqueue(
+                    object : Callback<ChatResponse> {
+
+                        override fun onResponse(
+                            call: Call<ChatResponse>,
+                            response: Response<ChatResponse>
+                        ) {
+                            synchronized(requestLock) {
+                                activeApiCalls.remove(
+                                    statusMessage.id
+                                )
+                            }
+
+                            if (
+                                isFinishing ||
+                                isDestroyed ||
+                                call.isCanceled
+                            ) {
+                                return
+                            }
+
+                            if (response.isSuccessful) {
+                                val responseMessage = response.body()
+                                    ?.choices
+                                    ?.firstOrNull()
+                                    ?.message
+
+                                val reply = responseMessage
+                                    ?.content
+                                    ?.takeIf {
+                                        it.isNotBlank()
+                                    }
+                                    ?: if (
+                                        !responseMessage
+                                            ?.toolCalls
+                                            .isNullOrEmpty()
+                                    ) {
+                                        "وصل طلب لاستخدام أداة، " +
+                                        "لكن تنفيذ أدوات API غير موصول " +
+                                        "في مسار المحادثة الحالي."
+                                    } else {
+                                        "لم يتم استلام رد صالح من الخادم."
+                                    }
+
+                                updateRequestMessage(
+                                    messageId = statusMessage.id,
+                                    content = reply,
+                                    isThinking = false,
+                                    modelName = selectedModel
+                                )
+
+                            } else {
+                                val errorText = try {
+                                    response.errorBody()
+                                        ?.string()
+                                        ?.take(1000)
+                                } catch (_: Exception) {
+                                    null
+                                }
+
+                                updateRequestMessage(
+                                    messageId = statusMessage.id,
+                                    content = buildString {
+                                        append(
+                                            "فشل الطلب. رمز الاستجابة: "
+                                        )
+                                        append(response.code())
+
+                                        if (!errorText.isNullOrBlank()) {
+                                            append("\n")
+                                            append(errorText)
+                                        }
+                                    },
+                                    isThinking = false
+                                )
+                            }
+                        }
+
+                        override fun onFailure(
+                            call: Call<ChatResponse>,
+                            t: Throwable
+                        ) {
+                            synchronized(requestLock) {
+                                activeApiCalls.remove(
+                                    statusMessage.id
+                                )
+                            }
+
+                            if (
+                                isFinishing ||
+                                isDestroyed ||
+                                call.isCanceled
+                            ) {
+                                return
+                            }
+
                             updateRequestMessage(
                                 messageId = statusMessage.id,
-                                content = "فشل الطلب. رمز الاستجابة: ${response.code()}",
+                                content = "تعذر الاتصال بالخادم: " +
+                                    (t.message ?: "خطأ غير معروف"),
                                 isThinking = false
                             )
                         }
                     }
-                }
+                )
 
-                override fun onFailure(
-                    call: Call<ChatResponse>,
-                    t: Throwable
-                ) {
-                    synchronized(requestLock) {
-                        activeApiCalls.remove(statusMessage.id)
-                    }
-
-                    runOnUiThread {
-                        if (isFinishing || isDestroyed) return@runOnUiThread
-
-                        updateRequestMessage(
-                            messageId = statusMessage.id,
-                            content = "تعذر الاتصال بالخادم: ${t.message ?: "خطأ غير معروف"}",
-                            isThinking = false
-                        )
-                    }
-                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                updateRequestMessage(
+                    messageId = statusMessage.id,
+                    content = "تعذر إعداد الطلب السحابي: ${e.message}",
+                    isThinking = false
+                )
             }
-        )
+        }
     }
+
+    private suspend fun encodeImageAsDataUrl(
+        uri: Uri
+    ): String = withContext(Dispatchers.IO) {
+
+        val mimeType = contentResolver.getType(uri)
+            ?: "image/jpeg"
+
+        require(mimeType.startsWith("image/")) {
+            "الملف المحدد ليس صورة"
+        }
+
+        val output = ByteArrayOutputStream()
+
+        val input = contentResolver.openInputStream(uri)
+            ?: throw IllegalStateException(
+                "تعذر فتح الصورة"
+            )
+
+        input.use { stream ->
+            val buffer = ByteArray(8192)
+            var totalBytes = 0
+
+            while (true) {
+                val count = stream.read(buffer)
+
+                if (count < 0) break
+
+                totalBytes += count
+
+                require(totalBytes <= MAX_IMAGE_BYTES) {
+                    "حجم الصورة أكبر من الحد المسموح للإرسال السحابي"
+                }
+
+                output.write(buffer, 0, count)
+            }
+        }
+
+        val encoded = Base64.encodeToString(
+            output.toByteArray(),
+            Base64.NO_WRAP
+        )
+
+        "data:$mimeType;base64,$encoded"
+    }
+
+    // =========================================================
+    // Updating response messages
+    // =========================================================
 
     private fun updateRequestMessage(
         messageId: String,
@@ -1217,13 +1777,14 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    // ---------------------------------------------------------
+    // =========================================================
     // Scrolling and keyboard
-    // ---------------------------------------------------------
+    // =========================================================
 
     private fun scrollToBottom() {
         recyclerViewChat.post {
-            if (messageList.isNotEmpty() &&
+            if (
+                messageList.isNotEmpty() &&
                 !isFinishing &&
                 !isDestroyed
             ) {
@@ -1236,11 +1797,11 @@ class ChatActivity : AppCompatActivity() {
 
     private fun hideKeyboard() {
         try {
-            val imm = getSystemService(
+            val inputMethodManager = getSystemService(
                 Context.INPUT_METHOD_SERVICE
             ) as InputMethodManager
 
-            imm.hideSoftInputFromWindow(
+            inputMethodManager.hideSoftInputFromWindow(
                 etMessage.windowToken,
                 0
             )
@@ -1248,25 +1809,26 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    // ---------------------------------------------------------
-    // Attachments preview
-    // ---------------------------------------------------------
+    // =========================================================
+    // Image preview
+    // =========================================================
 
     private fun updatePreviewUi() {
         previewListContainer.removeAllViews()
 
         if (selectedImageUris.isEmpty()) {
             imagePreviewContainer.visibility =
-                LinearLayout.GONE
+                View.GONE
 
             updateSendButtonState()
             return
         }
 
         imagePreviewContainer.visibility =
-            LinearLayout.VISIBLE
+            View.VISIBLE
 
-        for (uri in selectedImageUris.toList()) {
+        selectedImageUris.toList().forEach { uri ->
+
             val cardView = MaterialCardView(this).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     dpToPx(58),
@@ -1284,7 +1846,7 @@ class ChatActivity : AppCompatActivity() {
                 cardElevation = 0f
             }
 
-            val container = android.widget.RelativeLayout(this)
+            val container = RelativeLayout(this)
 
             val imageView = ImageView(this).apply {
                 layoutParams = ViewGroup.LayoutParams(
@@ -1303,18 +1865,17 @@ class ChatActivity : AppCompatActivity() {
             container.addView(imageView)
 
             val removeButton = AppCompatTextView(this).apply {
-                val params =
-                    android.widget.RelativeLayout.LayoutParams(
-                        dpToPx(20),
-                        dpToPx(20)
-                    )
-
-                params.addRule(
-                    android.widget.RelativeLayout.ALIGN_PARENT_TOP
+                val params = RelativeLayout.LayoutParams(
+                    dpToPx(20),
+                    dpToPx(20)
                 )
 
                 params.addRule(
-                    android.widget.RelativeLayout.ALIGN_PARENT_END
+                    RelativeLayout.ALIGN_PARENT_TOP
+                )
+
+                params.addRule(
+                    RelativeLayout.ALIGN_PARENT_END
                 )
 
                 layoutParams = params
@@ -1323,7 +1884,9 @@ class ChatActivity : AppCompatActivity() {
                 textSize = 15f
                 gravity = Gravity.CENTER
                 setTextColor(Color.WHITE)
-                setBackgroundResource(R.drawable.bg_circle_dark)
+                setBackgroundResource(
+                    R.drawable.bg_circle_dark
+                )
 
                 setOnClickListener {
                     selectedImageUris.remove(uri)
@@ -1340,9 +1903,9 @@ class ChatActivity : AppCompatActivity() {
         updateSendButtonState()
     }
 
-    // ---------------------------------------------------------
+    // =========================================================
     // Share conversation
-    // ---------------------------------------------------------
+    // =========================================================
 
     private fun shareFullConversation() {
         if (messageList.isEmpty()) {
@@ -1354,8 +1917,10 @@ class ChatActivity : AppCompatActivity() {
 
         builder.append("سجل محادثة Monolith\n\n")
 
-        messageList.forEach { msg ->
-            val sender = if (msg.role == MessageRole.USER) {
+        messageList.forEach { message ->
+            val sender = if (
+                message.role == MessageRole.USER
+            ) {
                 "أنت"
             } else {
                 "Monolith"
@@ -1363,12 +1928,13 @@ class ChatActivity : AppCompatActivity() {
 
             builder.append(sender)
             builder.append(": ")
-            builder.append(msg.content)
+            builder.append(message.content)
             builder.append("\n")
 
-            if (!msg.attachmentUris.isNullOrEmpty()) {
+            if (!message.attachmentUris.isNullOrEmpty()) {
                 builder.append(
-                    "[عدد المرفقات: ${msg.attachmentUris.size}]\n"
+                    "[عدد المرفقات: " +
+                    "${message.attachmentUris.size}]\n"
                 )
             }
 
@@ -1377,7 +1943,10 @@ class ChatActivity : AppCompatActivity() {
 
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
-            putExtra(Intent.EXTRA_TEXT, builder.toString())
+            putExtra(
+                Intent.EXTRA_TEXT,
+                builder.toString()
+            )
         }
 
         startActivity(
@@ -1388,26 +1957,21 @@ class ChatActivity : AppCompatActivity() {
         )
     }
 
-    // ---------------------------------------------------------
-    // Thread management
-    // ---------------------------------------------------------
+    // =========================================================
+    // Chromatic threads
+    // =========================================================
 
     private fun showThreadsBottomSheet() {
         val dialog = BottomSheetDialog(this)
 
-        val view = layoutInflater.inflate(
-            android.R.layout.list_content,
-            null
-        )
-
-        val listView = view.findViewById<ListView>(
-            android.R.id.list
-        )
+        val listView = ListView(this)
 
         val items = arrayOf(
-            "إنشاء عقدة لونية جديدة",
+            "إنشاء خيط لوني جديد",
             "ربط رسالتين بخيط",
-            "عرض العقد المتاحة"
+            "عرض الخيوط اللونية",
+            "إضافة ملاحظة إلى خيط",
+            "عرض ملاحظات خيط"
         )
 
         listView.adapter = ArrayAdapter(
@@ -1416,17 +1980,21 @@ class ChatActivity : AppCompatActivity() {
             items
         )
 
-        listView.setOnItemClickListener { _, _, position, _ ->
+        listView.setOnItemClickListener {
+                _, _, position, _ ->
+
             dialog.dismiss()
 
             when (position) {
                 0 -> showCreateNodeDialog()
                 1 -> showLinkMessagesDialog()
                 2 -> showNodesListDialog()
+                3 -> showAddThreadAnnotationDialog()
+                4 -> showThreadAnnotationsDialog()
             }
         }
 
-        dialog.setContentView(view)
+        dialog.setContentView(listView)
         dialog.show()
     }
 
@@ -1443,60 +2011,51 @@ class ChatActivity : AppCompatActivity() {
         }
 
         val nameInput = EditText(this).apply {
-            hint = "اسم العقدة"
+            hint = "عنوان الخيط اللوني"
         }
 
         val definitionInput = EditText(this).apply {
-            hint = "تعريف العقدة"
+            hint = "تعريف الخيط أو الغرض منه"
+            minLines = 2
         }
 
-        val spinner = Spinner(this)
-
-        val colors = arrayOf(
-            "أحمر",
-            "أزرق",
-            "أخضر",
-            "أصفر",
-            "بنفسجي"
-        )
-
-        val colorHexes = arrayOf(
-            "#FF0000",
-            "#0000FF",
-            "#00FF00",
-            "#FFFF00",
-            "#800080"
-        )
-
-        spinner.adapter = ArrayAdapter(
-            this,
-            android.R.layout.simple_spinner_dropdown_item,
-            colors
-        )
+        val colorInput = EditText(this).apply {
+            hint = "لون HEX مثال: #00D4FF"
+            setText("#00D4FF")
+            singleLine = true
+        }
 
         layout.addView(nameInput)
         layout.addView(definitionInput)
-        layout.addView(spinner)
+        layout.addView(colorInput)
 
         AlertDialog.Builder(this)
-            .setTitle("إنشاء عقدة لونية")
+            .setTitle("إنشاء خيط لوني")
             .setView(layout)
             .setPositiveButton("حفظ") { _, _ ->
 
                 val name = nameInput.text.toString().trim()
+
                 val definition =
                     definitionInput.text.toString().trim()
 
-                if (name.isBlank() || definition.isBlank()) {
-                    showToast("أدخل الاسم والتعريف")
+                val color = colorInput.text.toString().trim()
+
+                if (
+                    name.isBlank() ||
+                    definition.isBlank() ||
+                    color.isBlank()
+                ) {
+                    showToast("أكمل بيانات الخيط")
                     return@setPositiveButton
                 }
 
-                val color = colorHexes[
-                    spinner.selectedItemPosition.coerceIn(
-                        colorHexes.indices
-                    )
-                ]
+                try {
+                    Color.parseColor(color)
+                } catch (_: Exception) {
+                    showToast("صيغة اللون غير صحيحة")
+                    return@setPositiveButton
+                }
 
                 lifecycleScope.launch {
                     try {
@@ -1508,10 +2067,12 @@ class ChatActivity : AppCompatActivity() {
                             )
                         }
 
-                        showToast("تم إنشاء العقدة")
+                        showToast("تم إنشاء الخيط اللوني")
 
                     } catch (e: Exception) {
-                        showToast("تعذر حفظ العقدة: ${e.message}")
+                        showToast(
+                            "تعذر حفظ الخيط: ${e.message}"
+                        )
                     }
                 }
             }
@@ -1527,28 +2088,41 @@ class ChatActivity : AppCompatActivity() {
                 }
 
                 if (nodes.isEmpty()) {
-                    showToast("لا توجد عقد مضافة")
+                    showToast("لا توجد خيوط لونية")
                     return@launch
                 }
 
                 val displayList = nodes.map {
-                    "${it["name"]} (${it["color_hex"]}): ${it["definition"]}"
+                    val name = it["name"] ?: "خيط"
+                    val color = it["color_hex"] ?: ""
+                    val definition = it["definition"] ?: ""
+
+                    "$name ($color)\n$definition"
                 }
 
                 AlertDialog.Builder(this@ChatActivity)
-                    .setTitle("العقد المتاحة")
-                    .setItems(displayList.toTypedArray(), null)
+                    .setTitle("الخيوط اللونية")
+                    .setItems(
+                        displayList.toTypedArray(),
+                        null
+                    )
                     .setPositiveButton("حسناً", null)
                     .show()
 
             } catch (e: Exception) {
-                showToast("تعذر جلب العقد: ${e.message}")
+                showToast(
+                    "تعذر جلب الخيوط: ${e.message}"
+                )
             }
         }
     }
 
     private fun showLinkMessagesDialog() {
-        if (messageList.size < 2) {
+        val messageSnapshot = messageList
+            .filter { !it.isThinking }
+            .toList()
+
+        if (messageSnapshot.size < 2) {
             showToast("تحتاج إلى رسالتين على الأقل")
             return
         }
@@ -1560,36 +2134,49 @@ class ChatActivity : AppCompatActivity() {
                 }
 
                 if (nodes.isEmpty()) {
-                    showToast("أنشئ عقدة لونية أولاً")
+                    showToast("أنشئ خيطاً لونياً أولاً")
                     return@launch
                 }
 
-                val messageSnapshot = messageList.toList()
-
                 val messageOptions = messageSnapshot.map {
-                    it.content.take(45)
+                    val sender = if (
+                        it.role == MessageRole.USER
+                    ) {
+                        "أنت"
+                    } else {
+                        "Monolith"
+                    }
+
+                    "$sender: ${it.content.take(55)}"
                 }.toTypedArray()
 
                 AlertDialog.Builder(this@ChatActivity)
-                    .setTitle("اختر الرسالة المصدر")
-                    .setItems(messageOptions) { _, sourceIndex ->
+                    .setTitle("اختر الرسالة الأولى")
+                    .setItems(messageOptions) {
+                            _, sourceIndex ->
 
                         AlertDialog.Builder(this@ChatActivity)
-                            .setTitle("اختر الرسالة الهدف")
-                            .setItems(messageOptions) { _, targetIndex ->
+                            .setTitle("اختر الرسالة الثانية")
+                            .setItems(messageOptions) {
+                                    _, targetIndex ->
 
                                 if (sourceIndex == targetIndex) {
-                                    showToast("لا يمكن ربط الرسالة بنفسها")
+                                    showToast(
+                                        "لا يمكن ربط الرسالة بنفسها"
+                                    )
                                     return@setItems
                                 }
 
                                 val nodeOptions = nodes.map {
-                                    it["name"] ?: "عقدة"
+                                    val name = it["name"] ?: "خيط"
+                                    val color = it["color_hex"] ?: ""
+                                    "$name ($color)"
                                 }.toTypedArray()
 
                                 AlertDialog.Builder(this@ChatActivity)
-                                    .setTitle("اختر العقدة")
-                                    .setItems(nodeOptions) { _, nodeIndex ->
+                                    .setTitle("اختر الخيط اللوني")
+                                    .setItems(nodeOptions) {
+                                            _, nodeIndex ->
 
                                         lifecycleScope.launch {
                                             try {
@@ -1611,9 +2198,9 @@ class ChatActivity : AppCompatActivity() {
                                                     )
                                                 }
 
-                                                showToast("تم ربط الرسالتين")
-
-                                                chatAdapter.notifyDataSetChanged()
+                                                showToast(
+                                                    "تم ربط الرسالتين بالخيط"
+                                                )
 
                                             } catch (e: Exception) {
                                                 showToast(
@@ -1629,26 +2216,188 @@ class ChatActivity : AppCompatActivity() {
                     .show()
 
             } catch (e: Exception) {
-                showToast("تعذر تحميل العقد: ${e.message}")
+                showToast(
+                    "تعذر تحميل الخيوط: ${e.message}"
+                )
             }
         }
     }
 
-    // ---------------------------------------------------------
+    private fun showAddThreadAnnotationDialog() {
+        selectThreadForMessage(
+            "اختر خيطاً لإضافة ملاحظة"
+        ) { threadId ->
+
+            val input = EditText(this).apply {
+                hint = "اكتب الملاحظة"
+                minLines = 3
+                setPadding(
+                    dpToPx(12),
+                    dpToPx(12),
+                    dpToPx(12),
+                    dpToPx(12)
+                )
+            }
+
+            AlertDialog.Builder(this)
+                .setTitle("ملاحظة الخيط")
+                .setView(input)
+                .setPositiveButton("حفظ") { _, _ ->
+
+                    val content = input.text.toString().trim()
+
+                    if (content.isBlank()) {
+                        showToast("الملاحظة فارغة")
+                        return@setPositiveButton
+                    }
+
+                    lifecycleScope.launch {
+                        try {
+                            withContext(Dispatchers.IO) {
+                                appDatabase.insertThreadAnnotation(
+                                    threadId,
+                                    content
+                                )
+                            }
+
+                            showToast("تم حفظ ملاحظة الخيط")
+
+                        } catch (e: Exception) {
+                            showToast(
+                                "تعذر حفظ الملاحظة: ${e.message}"
+                            )
+                        }
+                    }
+                }
+                .setNegativeButton("إلغاء", null)
+                .show()
+        }
+    }
+
+    private fun showThreadAnnotationsDialog() {
+        selectThreadForMessage(
+            "اختر خيطاً لعرض ملاحظاته"
+        ) { threadId ->
+
+            lifecycleScope.launch {
+                try {
+                    val annotations = withContext(Dispatchers.IO) {
+                        appDatabase.getAnnotationsForThread(
+                            threadId
+                        )
+                    }
+
+                    val content = if (annotations.isEmpty()) {
+                        "لا توجد ملاحظات لهذا الخيط."
+                    } else {
+                        annotations.mapIndexed { index, note ->
+                            "${index + 1}. $note"
+                        }.joinToString("\n\n")
+                    }
+
+                    AlertDialog.Builder(this@ChatActivity)
+                        .setTitle("ملاحظات الخيط")
+                        .setMessage(content)
+                        .setPositiveButton("حسناً", null)
+                        .show()
+
+                } catch (e: Exception) {
+                    showToast(
+                        "تعذر جلب الملاحظات: ${e.message}"
+                    )
+                }
+            }
+        }
+    }
+
+    private fun selectThreadForMessage(
+        title: String,
+        onSelected: (String) -> Unit
+    ) {
+        val messages = messageList
+            .filter { !it.isThinking }
+            .toList()
+
+        if (messages.isEmpty()) {
+            showToast("لا توجد رسائل")
+            return
+        }
+
+        val messageOptions = messages.map {
+            "${it.content.take(55)}"
+        }.toTypedArray()
+
+        AlertDialog.Builder(this)
+            .setTitle("اختر رسالة مرتبطة بالخيط")
+            .setItems(messageOptions) { _, index ->
+
+                lifecycleScope.launch {
+                    try {
+                        val threads = withContext(Dispatchers.IO) {
+                            appDatabase.getThreadsForMessage(
+                                messages[index].id
+                            )
+                        }
+
+                        if (threads.isEmpty()) {
+                            showToast(
+                                "هذه الرسالة لا ترتبط بأي خيط"
+                            )
+                            return@launch
+                        }
+
+                        val nodes = withContext(Dispatchers.IO) {
+                            appDatabase.getAllChromaticNodes()
+                        }
+
+                        val nodeMap = nodes.associateBy {
+                            it["id"]
+                        }
+
+                        val options = threads.map { thread ->
+                            val node = nodeMap[
+                                thread["node_id"]
+                            ]
+
+                            val name = node?.get("name")
+                                ?: "خيط غير معروف"
+
+                            val color = node?.get("color_hex")
+                                ?: ""
+
+                            "$name ($color)"
+                        }.toTypedArray()
+
+                        AlertDialog.Builder(this@ChatActivity)
+                            .setTitle(title)
+                            .setItems(options) { _, threadIndex ->
+                                val threadId =
+                                    threads[threadIndex]["id"]
+
+                                if (!threadId.isNullOrBlank()) {
+                                    onSelected(threadId)
+                                }
+                            }
+                            .show()
+
+                    } catch (e: Exception) {
+                        showToast(
+                            "تعذر جلب الخيوط: ${e.message}"
+                        )
+                    }
+                }
+            }
+            .show()
+    }
+
+    // =========================================================
     // Agents
-    // ---------------------------------------------------------
+    // =========================================================
 
     private fun showAgentsBottomSheet() {
         val dialog = BottomSheetDialog(this)
 
-        val view = layoutInflater.inflate(
-            android.R.layout.list_content,
-            null
-        )
-
-        val listView = view.findViewById<ListView>(
-            android.R.id.list
-        )
+        val listView = ListView(this)
 
         val items = arrayOf(
             "الوكيل الرئيسي",
@@ -1662,33 +2411,48 @@ class ChatActivity : AppCompatActivity() {
             items
         )
 
-        listView.setOnItemClickListener { _, _, position, _ ->
+        listView.setOnItemClickListener {
+                _, _, position, _ ->
 
             when (position) {
                 0 -> {
                     activeAgentId = 0
-                    showToast("تم تفعيل الوكيل الرئيسي")
+
+                    showToast(
+                        "تم تفعيل الوكيل الرئيسي"
+                    )
+
                     dialog.dismiss()
                 }
 
                 1 -> {
-                    if (!isModelLoaded) {
-                        showToast("حمّل النموذج المحلي أولاً")
+                    if (!modelManager.isTextModelLoaded) {
+                        showToast(
+                            "حمّل النموذج المحلي أولاً"
+                        )
                         return@setOnItemClickListener
                     }
 
                     try {
-                        val newId = modelManager.createSubAgent()
+                        val newId =
+                            modelManager.createSubAgent()
 
                         if (newId > 0) {
                             activeAgentId = newId
-                            showToast("تم إنشاء الوكيل $newId")
+
+                            showToast(
+                                "تم إنشاء الوكيل $newId"
+                            )
                         } else {
-                            showToast("تعذر إنشاء الوكيل")
+                            showToast(
+                                "تعذر إنشاء الوكيل الفرعي"
+                            )
                         }
 
                     } catch (e: Exception) {
-                        showToast("خطأ في إنشاء الوكيل: ${e.message}")
+                        showToast(
+                            "خطأ في إنشاء الوكيل: ${e.message}"
+                        )
                     }
 
                     dialog.dismiss()
@@ -1697,11 +2461,15 @@ class ChatActivity : AppCompatActivity() {
                 2 -> {
                     try {
                         NetworkManager.startP2PServer()
+
                         showToast(
-                            "تم استدعاء خدمة P2P؛ تحقق من تنفيذها الفعلي"
+                            "تم استدعاء خدمة P2P. " +
+                            "تنفيذ الاتصال الفعلي بالأجهزة ما زال منفصلاً."
                         )
                     } catch (e: Exception) {
-                        showToast("تعذر تشغيل P2P: ${e.message}")
+                        showToast(
+                            "تعذر تشغيل P2P: ${e.message}"
+                        )
                     }
 
                     dialog.dismiss()
@@ -1709,13 +2477,13 @@ class ChatActivity : AppCompatActivity() {
             }
         }
 
-        dialog.setContentView(view)
+        dialog.setContentView(listView)
         dialog.show()
     }
 
-    // ---------------------------------------------------------
+    // =========================================================
     // Controls
-    // ---------------------------------------------------------
+    // =========================================================
 
     private fun showControlsBottomSheet() {
         val dialog = BottomSheetDialog(this)
@@ -1725,20 +2493,25 @@ class ChatActivity : AppCompatActivity() {
             null
         )
 
-        val temperatureBar =
-            view.findViewById<SeekBar>(R.id.sbTemperature)
+        val temperatureBar = view.findViewById<SeekBar>(
+            R.id.sbTemperature
+        )
 
-        val temperatureValue =
-            view.findViewById<TextView>(R.id.tvTemperatureValue)
+        val temperatureValue = view.findViewById<TextView>(
+            R.id.tvTemperatureValue
+        )
 
-        val personaSpinner =
-            view.findViewById<Spinner>(R.id.spinnerPersona)
+        val personaSpinner = view.findViewById<Spinner>(
+            R.id.spinnerPersona
+        )
 
-        val thinkingCheckbox =
-            view.findViewById<CheckBox>(R.id.cbThinking)
+        val thinkingCheckbox = view.findViewById<CheckBox>(
+            R.id.cbThinking
+        )
 
-        val saveButton =
-            view.findViewById<Button>(R.id.btnSaveControls)
+        val saveButton = view.findViewById<Button>(
+            R.id.btnSaveControls
+        )
 
         val savedTemperature = securePrefs.getFloat(
             "temperature",
@@ -1746,6 +2519,7 @@ class ChatActivity : AppCompatActivity() {
         ).coerceIn(0f, 2f)
 
         temperatureBar.max = 200
+
         temperatureBar.progress =
             (savedTemperature * 100).toInt()
 
@@ -1777,14 +2551,18 @@ class ChatActivity : AppCompatActivity() {
             "default"
         )
 
-        val selectedIndex = personaKeys.indexOf(savedPersona)
+        val selectedIndex =
+            personaKeys.indexOf(savedPersona)
 
         if (selectedIndex >= 0) {
             personaSpinner.setSelection(selectedIndex)
         }
 
         thinkingCheckbox.isChecked =
-            securePrefs.getBoolean("enable_thinking", false)
+            securePrefs.getBoolean(
+                "enable_thinking",
+                false
+            )
 
         temperatureBar.setOnSeekBarChangeListener(
             object : SeekBar.OnSeekBarChangeListener {
@@ -1795,7 +2573,10 @@ class ChatActivity : AppCompatActivity() {
                     fromUser: Boolean
                 ) {
                     temperatureValue.text =
-                        String.format("%.1f", progress / 100f)
+                        String.format(
+                            "%.1f",
+                            progress / 100f
+                        )
                 }
 
                 override fun onStartTrackingTouch(
@@ -1813,7 +2594,10 @@ class ChatActivity : AppCompatActivity() {
                 temperatureBar.progress / 100f
 
             val persona =
-                personaKeys[personaSpinner.selectedItemPosition]
+                personaKeys[
+                    personaSpinner.selectedItemPosition
+                        .coerceIn(personaKeys.indices)
+                ]
 
             securePrefs.edit()
                 .putFloat("temperature", temperature)
@@ -1832,30 +2616,9 @@ class ChatActivity : AppCompatActivity() {
         dialog.show()
     }
 
-    // ---------------------------------------------------------
-    // Memory
-    // ---------------------------------------------------------
-
-    /*
-     * لا ننشئ ذكريات من طول الرسالة أو كلمات الشكر.
-     * هذه إشارات غير كافية لاستنتاج تفضيلات أو صفات شخصية.
-     *
-     * لا توجد في الملفات المقدمة واجهة موثوقة لإدارة الذكريات
-     * بموافقة المستخدم، لذلك لا نحقن ذكريات قديمة عشوائية
-     * في تعليمات النموذج.
-     */
-
-    private fun analyzeUserMessage(message: String) {
-        // متروكة عمداً دون استنتاجات تلقائية.
-    }
-
-    private suspend fun getMemoriesContext(): String {
-        return ""
-    }
-
-    // ---------------------------------------------------------
-    // Attach bottom sheet
-    // ---------------------------------------------------------
+    // =========================================================
+    // Attachments
+    // =========================================================
 
     private fun showAttachBottomSheet() {
         val dialog = BottomSheetDialog(this)
@@ -1871,7 +2634,10 @@ class ChatActivity : AppCompatActivity() {
             R.id.btnOptionImage
         )?.setOnClickListener {
             dialog.dismiss()
-            pickImagesLauncher.launch(arrayOf("image/*"))
+
+            pickImagesLauncher.launch(
+                arrayOf("image/*")
+            )
         }
 
         view.findViewById<LinearLayout>(
@@ -1892,36 +2658,48 @@ class ChatActivity : AppCompatActivity() {
             R.id.btnOptionAudio
         )?.setOnClickListener {
             dialog.dismiss()
-            showToast("ميزة تحليل الصوت غير موصولة بعد")
+
+            showToast(
+                "تحليل الملفات الصوتية لم يُربط بعد"
+            )
         }
 
         view.findViewById<LinearLayout>(
             R.id.btnOptionSearch
         )?.setOnClickListener {
             dialog.dismiss()
-            showToast("ميزة البحث غير موصولة بعد")
+
+            showToast(
+                "البحث الخارجي يحتاج إلى ربط خدمة البحث"
+            )
         }
 
         view.findViewById<LinearLayout>(
             R.id.btnOptionCamera
         )?.setOnClickListener {
             dialog.dismiss()
-            showToast("ميزة الكاميرا غير موصولة بعد")
+
+            showToast(
+                "التقاط الكاميرا يحتاج إلى ربط مسار الكاميرا"
+            )
         }
 
         view.findViewById<LinearLayout>(
             R.id.btnOptionAI
         )?.setOnClickListener {
             dialog.dismiss()
-            showToast("اختر النموذج من شريط الأدوات")
+
+            showToast(
+                "اختر النموذج من شريط الأدوات"
+            )
         }
 
         dialog.show()
     }
 
-    // ---------------------------------------------------------
+    // =========================================================
     // Pinned messages
-    // ---------------------------------------------------------
+    // =========================================================
 
     private fun showPinnedMessagesBottomSheet() {
         lifecycleScope.launch {
@@ -1937,24 +2715,24 @@ class ChatActivity : AppCompatActivity() {
                     return@launch
                 }
 
-                val dialog = BottomSheetDialog(this@ChatActivity)
-
-                val view = layoutInflater.inflate(
-                    android.R.layout.list_content,
-                    null
+                val dialog = BottomSheetDialog(
+                    this@ChatActivity
                 )
 
-                val listView = view.findViewById<ListView>(
-                    android.R.id.list
+                val listView = ListView(
+                    this@ChatActivity
                 )
 
                 listView.adapter = ArrayAdapter(
                     this@ChatActivity,
                     android.R.layout.simple_list_item_1,
-                    pinnedMessages.map { it.content }
+                    pinnedMessages.map {
+                        it.content
+                    }
                 )
 
-                listView.setOnItemClickListener { _, _, position, _ ->
+                listView.setOnItemClickListener {
+                        _, _, position, _ ->
 
                     val id = pinnedMessages[position].id
 
@@ -1963,24 +2741,28 @@ class ChatActivity : AppCompatActivity() {
                     }
 
                     if (index >= 0) {
-                        recyclerViewChat.smoothScrollToPosition(index)
+                        recyclerViewChat.smoothScrollToPosition(
+                            index
+                        )
                     }
 
                     dialog.dismiss()
                 }
 
-                dialog.setContentView(view)
+                dialog.setContentView(listView)
                 dialog.show()
 
             } catch (e: Exception) {
-                showToast("تعذر تحميل الرسائل المثبتة: ${e.message}")
+                showToast(
+                    "تعذر تحميل الرسائل المثبتة: ${e.message}"
+                )
             }
         }
     }
 
-    // ---------------------------------------------------------
+    // =========================================================
     // Dashboard
-    // ---------------------------------------------------------
+    // =========================================================
 
     private fun showDashboardBottomSheet() {
         val dialog = BottomSheetDialog(this)
@@ -1990,7 +2772,10 @@ class ChatActivity : AppCompatActivity() {
             null
         )
 
-        val apiKey = securePrefs.getString("api_key", null)
+        val apiKey = securePrefs.getString(
+            "api_key",
+            null
+        )
 
         val selectedModel = securePrefs.getString(
             "selected_model",
@@ -1998,37 +2783,49 @@ class ChatActivity : AppCompatActivity() {
         ) ?: "غير محدد"
 
         val provider = when {
-            apiKey.isNullOrBlank() -> "غير متصل"
+            apiKey.isNullOrBlank() -> "غير مهيأ"
             selectedModel.contains("groq", true) -> "Groq"
             selectedModel.contains("gpt", true) -> "OpenAI"
             else -> "مخصص"
         }
 
-        val connectionStatus =
-            view.findViewById<TextView>(R.id.tvConnectionStatus)
+        val connectionStatus = view.findViewById<TextView>(
+            R.id.tvConnectionStatus
+        )
 
-        val connectionIcon =
-            view.findViewById<ImageView>(R.id.ivConnectionIcon)
+        val connectionIcon = view.findViewById<ImageView>(
+            R.id.ivConnectionIcon
+        )
 
-        val providerName =
-            view.findViewById<TextView>(R.id.tvProviderName)
+        val providerName = view.findViewById<TextView>(
+            R.id.tvProviderName
+        )
 
-        val modelName =
-            view.findViewById<TextView>(R.id.tvModelName)
+        val modelName = view.findViewById<TextView>(
+            R.id.tvModelName
+        )
 
-        val messageCount =
-            view.findViewById<TextView>(R.id.tvMessageCount)
+        val messageCount = view.findViewById<TextView>(
+            R.id.tvMessageCount
+        )
 
-        val settingsButton =
-            view.findViewById<Button>(R.id.btnGoToSettings)
+        val settingsButton = view.findViewById<Button>(
+            R.id.btnGoToSettings
+        )
 
-        val connected = !apiKey.isNullOrBlank()
+        val configured = !apiKey.isNullOrBlank()
 
-        connectionStatus.text =
-            if (connected) "تم إعداد الاتصال" else "غير متصل"
+        connectionStatus.text = if (configured) {
+            "مفتاح الاتصال مهيأ"
+        } else {
+            "غير مهيأ"
+        }
 
-        val statusColor =
-            if (connected) Color.GREEN else Color.RED
+        val statusColor = if (configured) {
+            Color.GREEN
+        } else {
+            Color.RED
+        }
 
         connectionStatus.setTextColor(statusColor)
         connectionIcon.setColorFilter(statusColor)
@@ -2039,6 +2836,7 @@ class ChatActivity : AppCompatActivity() {
 
         settingsButton.setOnClickListener {
             dialog.dismiss()
+
             startActivity(
                 Intent(this, SettingsActivity::class.java)
             )
@@ -2048,11 +2846,11 @@ class ChatActivity : AppCompatActivity() {
         dialog.show()
     }
 
-    // ---------------------------------------------------------
-    // Edit message
-    // ---------------------------------------------------------
+    // =========================================================
+    // Edit messages
+    // =========================================================
 
-    private fun showEditDialog(msg: ChatMessage) {
+    private fun showEditDialog(message: ChatMessage) {
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
 
@@ -2065,9 +2863,10 @@ class ChatActivity : AppCompatActivity() {
         }
 
         val newContentInput = EditText(this).apply {
-            setText(msg.content)
+            setText(message.content)
             hint = "النص الجديد"
             setTextColor(Color.WHITE)
+            minLines = 2
         }
 
         val reasonInput = EditText(this).apply {
@@ -2081,7 +2880,6 @@ class ChatActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setTitle("تعديل الرسالة")
             .setView(layout)
-
             .setPositiveButton("حفظ") { _, _ ->
 
                 val newContent =
@@ -2091,7 +2889,9 @@ class ChatActivity : AppCompatActivity() {
                     reasonInput.text.toString().trim()
 
                 if (newContent.isBlank()) {
-                    showToast("لا يمكن حفظ رسالة فارغة")
+                    showToast(
+                        "لا يمكن حفظ رسالة فارغة"
+                    )
                     return@setPositiveButton
                 }
 
@@ -2101,30 +2901,38 @@ class ChatActivity : AppCompatActivity() {
                     try {
                         withContext(Dispatchers.IO) {
                             appDatabase.updateMessageContent(
-                                messageId = msg.id,
+                                messageId = message.id,
                                 newContent = newContent,
-                                originalContent = msg.content,
-                                reason = reason.ifBlank { null },
+                                originalContent = message.content,
+                                reason = reason.ifBlank {
+                                    null
+                                },
                                 timestamp = editTime
                             )
                         }
 
                         val index = messageList.indexOfFirst {
-                            it.id == msg.id
+                            it.id == message.id
                         }
 
                         if (index >= 0) {
                             val updated = messageList[index].copy(
                                 content = newContent,
                                 isEdited = true,
-                                originalContent = msg.content,
-                                editReason = reason.ifBlank { null },
+                                originalContent =
+                                    message.originalContent
+                                        ?: message.content,
+                                editReason = reason.ifBlank {
+                                    null
+                                },
                                 editedTimestamp = editTime
                             )
 
                             messageList[index] = updated
 
-                            chatAdapter.updateMessages(messageList)
+                            chatAdapter.updateMessages(
+                                messageList
+                            )
 
                             saveMessageToDb(updated)
                         }
@@ -2132,18 +2940,19 @@ class ChatActivity : AppCompatActivity() {
                         showToast("تم تعديل الرسالة")
 
                     } catch (e: Exception) {
-                        showToast("فشل تعديل الرسالة: ${e.message}")
+                        showToast(
+                            "فشل تعديل الرسالة: ${e.message}"
+                        )
                     }
                 }
             }
-
             .setNegativeButton("إلغاء", null)
             .show()
     }
 
-    // ---------------------------------------------------------
-    // Background and theme
-    // ---------------------------------------------------------
+    // =========================================================
+    // Theme and background
+    // =========================================================
 
     override fun onResume() {
         super.onResume()
@@ -2151,6 +2960,7 @@ class ChatActivity : AppCompatActivity() {
         if (!isActivityReady) return
 
         applyCurrentTheme()
+        updateModelIndicators()
     }
 
     private fun applyCurrentTheme() {
@@ -2159,8 +2969,11 @@ class ChatActivity : AppCompatActivity() {
             MODE_PRIVATE
         )
 
-        val rootLayout =
-            findViewById<LinearLayout>(R.id.rootLayout)
+        val rootLayout = findViewById<LinearLayout>(
+            R.id.rootLayout
+        )
+
+        val previousTheme = themeColorHex
 
         themeColorHex = settings.getString(
             "AppThemeColor",
@@ -2170,7 +2983,8 @@ class ChatActivity : AppCompatActivity() {
         val themeColor = try {
             Color.parseColor(themeColorHex)
         } catch (_: Exception) {
-            Color.parseColor("#00D4FF")
+            themeColorHex = "#00D4FF"
+            Color.parseColor(themeColorHex)
         }
 
         tvAppTitle.setTextColor(themeColor)
@@ -2187,13 +3001,25 @@ class ChatActivity : AppCompatActivity() {
             PorterDuff.Mode.SRC_IN
         )
 
+        // ChatAdapter يحتفظ بلون الإنشاء؛ لذلك نعيد إنشاءه
+        // فقط عند تغيّر لون المستخدم، مع الحفاظ على الرسائل.
+        if (
+            previousTheme != themeColorHex &&
+            ::chatAdapter.isInitialized
+        ) {
+            initializeAdapter()
+        }
+
         val backgroundUri = settings.getString(
             "AppBackgroundImage",
             null
         )
 
         if (backgroundUri.isNullOrBlank()) {
-            applyColorBackground(settings, rootLayout)
+            applyColorBackground(
+                settings,
+                rootLayout
+            )
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 rootLayout.foreground = null
@@ -2208,8 +3034,11 @@ class ChatActivity : AppCompatActivity() {
                     contentResolver.openInputStream(
                         Uri.parse(backgroundUri)
                     )?.use { input ->
+
                         val options = BitmapFactory.Options().apply {
                             inSampleSize = 2
+                            inPreferredConfig =
+                                Bitmap.Config.ARGB_8888
                         }
 
                         BitmapFactory.decodeStream(
@@ -2226,17 +3055,21 @@ class ChatActivity : AppCompatActivity() {
             if (isFinishing || isDestroyed) return@launch
 
             if (bitmap != null) {
-                rootLayout.background =
-                    BitmapDrawable(resources, bitmap)
+                rootLayout.background = BitmapDrawable(
+                    resources,
+                    bitmap
+                )
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    rootLayout.foreground =
-                        ColorDrawable(
-                            Color.parseColor("#55000000")
-                        )
+                    rootLayout.foreground = ColorDrawable(
+                        Color.parseColor("#55000000")
+                    )
                 }
             } else {
-                applyColorBackground(settings, rootLayout)
+                applyColorBackground(
+                    settings,
+                    rootLayout
+                )
             }
         }
     }
@@ -2259,23 +3092,41 @@ class ChatActivity : AppCompatActivity() {
         rootLayout.setBackgroundColor(color)
     }
 
-    // ---------------------------------------------------------
+    // =========================================================
+    // Memory integration point
+    // =========================================================
+
+    /*
+     * لم أضف استنتاجات تلقائية عن المستخدم هنا.
+     * ربط الذاكرة طويلة الأمد يجب أن يتم عبر واجهة ذاكرة
+     * فعلية ومحددة، وليس عبر تخمينات من نص الرسالة.
+     */
+
+    private fun analyzeUserMessage(message: String) {
+        // نقطة ربط مستقبلية.
+    }
+
+    private suspend fun getMemoriesContext(): String {
+        return ""
+    }
+
+    // =========================================================
     // TTS
-    // ---------------------------------------------------------
+    // =========================================================
 
     private fun initTtsIfNeeded() {
         if (ttsManager == null) {
             ttsManager = TtsManager(this) {
                 runOnUiThread {
-                    // لا توجد عملية واجهة مطلوبة هنا.
+                    // لا توجد عملية واجهة مطلوبة حالياً.
                 }
             }
         }
     }
 
-    // ---------------------------------------------------------
+    // =========================================================
     // Utilities
-    // ---------------------------------------------------------
+    // =========================================================
 
     private fun dpToPx(dp: Int): Int {
         return (
@@ -2297,23 +3148,25 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    // ---------------------------------------------------------
+    // =========================================================
     // Cleanup
-    // ---------------------------------------------------------
+    // =========================================================
 
     override fun onDestroy() {
+        isActivityReady = false
+
         synchronized(requestLock) {
-            activeApiCalls.values.forEach {
+            activeApiCalls.values.forEach { call ->
                 try {
-                    it.cancel()
+                    call.cancel()
                 } catch (_: Exception) {
                 }
             }
 
             activeApiCalls.clear()
 
-            activeLocalJobs.values.forEach {
-                it.cancel()
+            activeLocalJobs.values.forEach { job ->
+                job.cancel()
             }
 
             activeLocalJobs.clear()
@@ -2325,6 +3178,9 @@ class ChatActivity : AppCompatActivity() {
         }
 
         ttsManager = null
+
+        // لا نغلق ModelManager هنا؛ فهو محرك مشترك
+        // قد تستخدمه خدمات أخرى خارج عمر ChatActivity.
 
         super.onDestroy()
     }
