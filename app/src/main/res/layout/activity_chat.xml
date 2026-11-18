@@ -1,3 +1,4 @@
+
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -5,132 +6,376 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#0A0A0A"
-    android:padding="8dp">
+    android:background="#040817"
+    android:padding="0dp">
+
+    <!-- =============================================== -->
+    <!-- MONOLITH HEADER                                 -->
+    <!-- =============================================== -->
 
     <LinearLayout
+        android:id="@+id/topBar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="64dp"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:padding="4dp">
+        android:paddingStart="8dp"
+        android:paddingEnd="6dp"
+        android:background="#080D20">
 
         <ImageButton
             android:id="@+id/btnBack"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
+            android:layout_width="38dp"
+            android:layout_height="42dp"
             android:src="@drawable/ic_back"
+            android:scaleType="centerInside"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:tint="#FFFFFF" />
+            android:tint="#EAF4FF"
+            android:contentDescription="رجوع" />
 
-        <TextView
-            android:id="@+id/tvAppTitle"
+        <LinearLayout
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
+            android:layout_height="match_parent"
             android:layout_weight="1"
-            android:text="مونوليث"
-            android:textColor="#00FF00"
-            android:textSize="20sp"
-            android:textStyle="bold"
-            android:gravity="center" />
+            android:orientation="vertical"
+            android:gravity="center_vertical"
+            android:paddingStart="5dp">
+
+            <TextView
+                android:id="@+id/tvAppTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="MONOLITH"
+                android:textColor="#F2F7FF"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.08" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="مساعدك الذكي المتقدم"
+                android:textColor="#8296C2"
+                android:textSize="10sp" />
+
+        </LinearLayout>
+
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/modelSelector"
+            android:layout_width="wrap_content"
+            android:layout_height="38dp"
+            android:layout_marginEnd="4dp"
+            app:cardBackgroundColor="#17132F"
+            app:cardCornerRadius="20dp"
+            app:cardElevation="0dp"
+            app:strokeColor="#884B35C8"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:orientation="horizontal"
+                android:gravity="center"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="⬡"
+                    android:textColor="#C77BFF"
+                    android:textSize="18sp"
+                    android:layout_marginEnd="5dp" />
+
+                <TextView
+                    android:id="@+id/tvModelSelector"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="النموذج الافتراضي"
+                    android:textColor="#E8E5FF"
+                    android:textSize="11sp"
+                    android:maxLines="1" />
+
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
 
         <ImageButton
             android:id="@+id/btnDashboard"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
+            android:layout_width="38dp"
+            android:layout_height="42dp"
             android:src="@drawable/ic_vision"
+            android:scaleType="centerInside"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:tint="#00FF00" />
+            android:tint="#DCEBFF"
+            android:contentDescription="لوحة التحكم" />
 
         <ImageButton
             android:id="@+id/btnSettings"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
+            android:layout_width="38dp"
+            android:layout_height="42dp"
             android:src="@drawable/ic_settings"
+            android:scaleType="centerInside"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:tint="#FFFFFF" />
+            android:tint="#EAF4FF"
+            android:contentDescription="الإعدادات" />
+
     </LinearLayout>
+
+    <!-- =============================================== -->
+    <!-- CONVERSATION HISTORY STRIP                      -->
+    <!-- =============================================== -->
+
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/conversationHistoryStrip"
+        android:layout_width="match_parent"
+        android:layout_height="42dp"
+        android:layout_marginStart="24dp"
+        android:layout_marginEnd="24dp"
+        android:layout_marginTop="2dp"
+        android:layout_marginBottom="8dp"
+        app:cardBackgroundColor="#101A35"
+        app:cardCornerRadius="0dp"
+        app:cardElevation="0dp"
+        app:strokeColor="#263D70"
+        app:strokeWidth="1dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="horizontal"
+            android:gravity="center">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="⌄"
+                android:textColor="#AFC7FF"
+                android:textSize="19sp"
+                android:layout_marginEnd="12dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="سجل المحادثة"
+                android:textColor="#C5D5F5"
+                android:textSize="13sp" />
+
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- =============================================== -->
+    <!-- CHAT MESSAGES                                   -->
+    <!-- =============================================== -->
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recyclerViewChat"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:padding="8dp"
-        android:clipToPadding="false" />
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="12dp"
+        android:clipToPadding="false"
+        android:overScrollMode="never"
+        android:scrollbars="vertical" />
+
+    <!-- =============================================== -->
+    <!-- IMAGE / FILE PREVIEW                            -->
+    <!-- =============================================== -->
 
     <HorizontalScrollView
         android:id="@+id/imagePreviewContainer"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:visibility="gone"
-        android:padding="4dp"
-        android:background="#1A1A1A"
-        android:layout_marginTop="4dp"
+        android:padding="8dp"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="12dp"
+        android:layout_marginBottom="6dp"
+        android:background="#101A35"
         android:scrollbars="none">
 
         <LinearLayout
             android:id="@+id/previewListContainer"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="horizontal" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical" />
 
     </HorizontalScrollView>
 
-    <com.google.android.material.card.MaterialCardView
+    <!-- =============================================== -->
+    <!-- SMART SUGGESTIONS                               -->
+    <!-- =============================================== -->
+
+    <HorizontalScrollView
+        android:id="@+id/suggestionsScroll"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="4dp"
+        android:paddingBottom="10dp"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_marginEnd="8dp"
+                app:cardBackgroundColor="#101A35"
+                app:cardCornerRadius="22dp"
+                app:cardElevation="0dp"
+                app:strokeColor="#2862C8"
+                app:strokeWidth="1dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:paddingStart="15dp"
+                    android:paddingEnd="15dp"
+                    android:text="أعطني مثالاً عملياً"
+                    android:textColor="#E2E9FF"
+                    android:textSize="11sp" />
+
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_marginEnd="8dp"
+                app:cardBackgroundColor="#101A35"
+                app:cardCornerRadius="22dp"
+                app:cardElevation="0dp"
+                app:strokeColor="#2862C8"
+                app:strokeWidth="1dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:paddingStart="15dp"
+                    android:paddingEnd="15dp"
+                    android:text="ما الأدوات المتاحة؟"
+                    android:textColor="#E2E9FF"
+                    android:textSize="11sp" />
+
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                app:cardBackgroundColor="#101A35"
+                app:cardCornerRadius="22dp"
+                app:cardElevation="0dp"
+                app:strokeColor="#2862C8"
+                app:strokeWidth="1dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:paddingStart="15dp"
+                    android:paddingEnd="15dp"
+                    android:text="هل يدعم الفيديو؟"
+                    android:textColor="#E2E9FF"
+                    android:textSize="11sp" />
+
+            </com.google.android.material.card.MaterialCardView>
+
+        </LinearLayout>
+    </HorizontalScrollView>
+
+    <!-- =============================================== -->
+    <!-- MESSAGE COMPOSER                                -->
+    <!-- =============================================== -->
+
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/composerCard"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="12dp"
+        android:layout_marginBottom="12dp"
+        app:cardBackgroundColor="#0D1530"
         app:cardCornerRadius="30dp"
-        app:cardBackgroundColor="#CC1A1A1A"
         app:cardElevation="0dp"
-        app:strokeWidth="1dp"
-        app:strokeColor="#33FFFFFF">
+        app:strokeColor="#3855A9"
+        app:strokeWidth="1dp">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:padding="4dp">
+            android:padding="7dp">
 
             <ImageButton
                 android:id="@+id/btnAttach"
-                android:layout_width="48dp"
+                android:layout_width="42dp"
                 android:layout_height="48dp"
                 android:src="@drawable/ic_attach"
+                android:scaleType="centerInside"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:tint="#00FF00" />
+                android:tint="#D9E9FF"
+                android:contentDescription="إرفاق ملف" />
 
             <EditText
                 android:id="@+id/etMessage"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
+                android:minHeight="48dp"
                 android:hint="@string/chat_hint"
-                android:textColor="#FFFFFF"
-                android:textColorHint="#888888"
+                android:textColor="#F2F6FF"
+                android:textColorHint="#7888AE"
+                android:textSize="15sp"
                 android:background="@android:color/transparent"
-                android:padding="8dp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:paddingTop="10dp"
+                android:paddingBottom="10dp"
+                android:gravity="center_vertical"
                 android:imeOptions="actionSend"
-                android:maxLines="4" />
+                android:inputType="textCapSentences|textMultiLine"
+                android:maxLines="4"
+                android:overScrollMode="never" />
+
+            <View
+                android:layout_width="1dp"
+                android:layout_height="30dp"
+                android:layout_marginStart="3dp"
+                android:layout_marginEnd="3dp"
+                android:background="#35466F" />
 
             <ImageButton
                 android:id="@+id/btnMic"
-                android:layout_width="48dp"
+                android:layout_width="42dp"
                 android:layout_height="48dp"
                 android:src="@drawable/ic_mic"
+                android:scaleType="centerInside"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:tint="#FFFFFF" />
+                android:tint="#EAF4FF"
+                android:contentDescription="الإدخال الصوتي" />
 
             <ImageButton
                 android:id="@+id/btnSend"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
+                android:layout_width="50dp"
+                android:layout_height="50dp"
                 android:src="@drawable/ic_send"
+                android:scaleType="centerInside"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:tint="#00FF00"
-                android:layout_marginStart="4dp" />
+                android:tint="#FFFFFF"
+                android:layout_marginStart="3dp"
+                android:contentDescription="إرسال الرسالة" />
+
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
