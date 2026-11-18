@@ -1669,7 +1669,6 @@ class ChatActivity : AppCompatActivity() {
                             )
                             messageList[index] = updated
                             chatAdapter.updateMessages(messageList)
-                            // تمت إزالة استدعاء saveMessageToDb(updated) لتجنب التكرار
                         }
 
                         showToast("تم تعديل الرسالة")
@@ -1813,7 +1812,6 @@ class ChatActivity : AppCompatActivity() {
         }
         try { ttsManager?.shutdown() } catch (_: Exception) { }
         ttsManager = null
-        // ModelManager مشترك ولا يتم إغلاقه هنا.
         super.onDestroy()
     }
 }
