@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="monolith_toolbar_height">60dp</dimen>
+    <dimen name="monolith_input_height">54dp</dimen>
+    <dimen name="monolith_icon_size">24dp</dimen>
+    <dimen name="monolith_message_padding">14dp</dimen>
+    <dimen name="monolith_message_margin">10dp</dimen>
+    <dimen name="monolith_corner_radius">18dp</dimen>
+    <dimen name="monolith_screen_padding">16dp</dimen>
+</resources>
