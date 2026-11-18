@@ -6,6 +6,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
@@ -25,6 +26,56 @@ import io.noties.markwon.Markwon
 import io.noties.markwon.ext.tables.TablePlugin
 import io.noties.markwon.ext.tables.TableTheme
 
+/**
+ * Monolith Conversation Graph UI
+ *
+ * This file owns message presentation, relationship visualization,
+ * tool cards and message actions.
+ *
+ * Relationship/tool data is supplied through optional providers.
+ * The adapter does not invent database records.
+ */
+
+enum class RelationKind(
+    val label: String,
+    val color: Int
+) {
+    CONTEXT("سياق", Color.rgb(0, 212, 255)),
+    REFERENCE("مرجع", Color.rgb(168, 85, 247)),
+    CAUSAL("سبب ونتيجة", Color.rgb(255, 170, 60)),
+    DERIVATION("اشتقاق", Color.rgb(60, 220, 160)),
+    CONTRAST("تعارض", Color.rgb(255, 90, 120)),
+    DEPENDENCY("اعتماد", Color.rgb(120, 150, 255)),
+    CONTINUATION("استمرار", Color.rgb(220, 220, 240)),
+    CUSTOM("مخصص", Color.rgb(180, 180, 190))
+}
+
+data class MessageRelation(
+    val id: String,
+    val sourceMessageId: String,
+    val targetMessageId: String,
+    val kind: RelationKind,
+    val label: String = "",
+    val direction: String = "OUTGOING"
+)
+
+enum class ToolExecutionState {
+    QUEUED,
+    RUNNING,
+    COMPLETED,
+    FAILED,
+    CANCELLED
+}
+
+data class ToolPresentation(
+    val id: String,
+    val name: String,
+    val description: String = "",
+    val state: ToolExecutionState,
+    val result: String = "",
+    val durationMs: Long? = null
+)
+
 class ChatAdapter(
     context: Context,
     private val onEditClick: (ChatMessage) -> Unit,
@@ -32,44 +83,59 @@ class ChatAdapter(
     private val onSpeakClick: (String) -> Unit,
     private val onPinClick: (ChatMessage) -> Unit,
     private val themeColorHex: String,
-    private val onRegenerateClick: ((ChatMessage) -> Unit)? = null
+    private val onRegenerateClick: ((ChatMessage) -> Unit)? = null,
+
+    // Optional future graph integration.
+    private val relationProvider:
+        ((ChatMessage) -> List<MessageRelation>)? = null,
+
+    private val toolProvider:
+        ((ChatMessage) -> List<ToolPresentation>)? = null,
+
+    private val onRelationClick:
+        ((MessageRelation) -> Unit)? = null,
+
+    private val onToolClick:
+        ((ToolPresentation) -> Unit)? = null
+
 ) : ListAdapter<ChatMessage, ChatAdapter.ChatViewHolder>(DIFF_CALLBACK) {
 
     private val appContext = context.applicationContext
 
-    private val userBubbleColor = runCatching {
-        Color.parseColor(themeColorHex)
-    }.getOrDefault(Color.rgb(8, 48, 78))
+    private val userColor = parseColor(
+        themeColorHex,
+        Color.rgb(15, 75, 105)
+    )
 
-    private val aiBubbleColor = Color.rgb(20, 19, 48)
+    private val aiColor = Color.rgb(19, 22, 48)
+    private val surfaceColor = Color.rgb(11, 15, 31)
+    private val panelColor = Color.rgb(18, 23, 43)
+    private val borderColor = Color.rgb(51, 65, 100)
+    private val textColor = Color.rgb(235, 241, 255)
+    private val mutedColor = Color.rgb(145, 160, 190)
+    private val accentColor = Color.rgb(0, 212, 255)
+    private val purpleColor = Color.rgb(168, 85, 247)
 
-    private val surfaceColor = Color.rgb(12, 15, 35)
-
-    private val iconColor = Color.parseColor("#DCE7FF")
-
-    private val accentColor = Color.parseColor("#00D4FF")
-
-    private val purpleColor = Color.parseColor("#A855F7")
-
-    private val markwon: Markwon = Markwon.builder(appContext)
-        .usePlugin(
-            TablePlugin.create { builder: TableTheme.Builder ->
-                builder
-                    .tableCellPadding(16)
-                    .tableBorderWidth(2)
-                    .tableBorderColor(Color.parseColor("#39436A"))
-                    .tableHeaderRowBackgroundColor(
-                        Color.parseColor("#252447")
-                    )
-                    .tableOddRowBackgroundColor(
-                        Color.parseColor("#1C1D3A")
-                    )
-                    .tableEvenRowBackgroundColor(
-                        Color.parseColor("#17182F")
-                    )
-            }
-        )
-        .build()
+    private val markwon: Markwon =
+        Markwon.builder(appContext)
+            .usePlugin(
+                TablePlugin.create { builder: TableTheme.Builder ->
+                    builder
+                        .tableCellPadding(16)
+                        .tableBorderWidth(2)
+                        .tableBorderColor(Color.rgb(57, 67, 106))
+                        .tableHeaderRowBackgroundColor(
+                            Color.rgb(37, 36, 71)
+                        )
+                        .tableOddRowBackgroundColor(
+                            Color.rgb(28, 29, 58)
+                        )
+                        .tableEvenRowBackgroundColor(
+                            Color.rgb(23, 24, 47)
+                        )
+                }
+            )
+            .build()
 
     companion object {
         private const val TYPE_USER = 1
@@ -80,6 +146,8 @@ class ChatAdapter(
         private const val MENU_PIN = 3
         private const val MENU_SHARE = 4
         private const val MENU_EDIT = 5
+
+        private const val MAX_VISIBLE_PORTS = 4
 
         private val DIFF_CALLBACK =
             object : DiffUtil.ItemCallback<ChatMessage>() {
@@ -98,6 +166,17 @@ class ChatAdapter(
                     return oldItem == newItem
                 }
             }
+
+        private fun parseColor(
+            value: String,
+            fallback: Int
+        ): Int {
+            return try {
+                Color.parseColor(value)
+            } catch (_: Exception) {
+                fallback
+            }
+        }
     }
 
     override fun getItemViewType(position: Int): Int {
@@ -126,12 +205,7 @@ class ChatAdapter(
 
         return LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-
-            gravity = if (isUser) {
-                Gravity.END
-            } else {
-                Gravity.START
-            }
+            gravity = if (isUser) Gravity.END else Gravity.START
 
             layoutParams = RecyclerView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -139,22 +213,56 @@ class ChatAdapter(
             )
 
             setPadding(
-                dp(context, 12),
-                dp(context, 7),
-                dp(context, 12),
-                dp(context, 7)
+                dp(context, 10),
+                dp(context, 8),
+                dp(context, 10),
+                dp(context, 8)
             )
 
-            // Message card
+            // Identity header.
+            val header = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    bottomMargin = dp(context, 5)
+                }
+            }
 
+            val identityDot = View(context).apply {
+                background = circleDrawable(
+                    if (isUser) accentColor else purpleColor
+                )
+                layoutParams = LinearLayout.LayoutParams(
+                    dp(context, 7),
+                    dp(context, 7)
+                )
+            }
+
+            val identity = TextView(context).apply {
+                text = if (isUser) "YOU" else "MONOLITH"
+                textSize = 10f
+                letterSpacing = 0.12f
+                setTextColor(mutedColor)
+                setTypeface(null, Typeface.BOLD)
+                setPadding(dp(context, 7), 0, 0, 0)
+            }
+
+            header.addView(identityDot)
+            header.addView(identity)
+            addView(header)
+
+            // Message card.
             val card = CardView(context).apply {
                 radius = dp(context, 19).toFloat()
-                cardElevation = dp(context, 3).toFloat()
+                cardElevation = dp(context, 5).toFloat()
                 useCompatPadding = false
                 preventCornerOverlap = true
 
                 setCardBackgroundColor(
-                    if (isUser) userBubbleColor else aiBubbleColor
+                    if (isUser) userColor else aiColor
                 )
 
                 layoutParams = LinearLayout.LayoutParams(
@@ -162,25 +270,25 @@ class ChatAdapter(
                     ViewGroup.LayoutParams.WRAP_CONTENT
                 ).apply {
                     if (isUser) {
-                        marginStart = dp(context, 35)
+                        marginStart = dp(context, 32)
                     } else {
-                        marginEnd = dp(context, 35)
+                        marginEnd = dp(context, 32)
                     }
                 }
 
                 val message = TextView(context).apply {
                     textSize = 15.5f
-                    setTextColor(Color.WHITE)
+                    setTextColor(textColor)
 
                     setPadding(
                         dp(context, 17),
-                        dp(context, 13),
+                        dp(context, 14),
                         dp(context, 17),
-                        dp(context, 13)
+                        dp(context, 14)
                     )
 
                     maxWidth = (
-                        context.resources.displayMetrics.widthPixels * 0.80f
+                        context.resources.displayMetrics.widthPixels * 0.84f
                     ).toInt()
 
                     setTextIsSelectable(true)
@@ -199,8 +307,7 @@ class ChatAdapter(
 
             addView(card)
 
-            // Image attachments
-
+            // Attachments.
             val imageScroll = HorizontalScrollView(context).apply {
                 isHorizontalScrollBarEnabled = false
                 overScrollMode = View.OVER_SCROLL_NEVER
@@ -210,48 +317,79 @@ class ChatAdapter(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT
                 ).apply {
-                    topMargin = dp(context, 9)
+                    topMargin = dp(context, 8)
                 }
             }
 
             val imageContainer = LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
-
-                gravity = if (isUser) {
-                    Gravity.END
-                } else {
-                    Gravity.START
-                }
+                gravity = if (isUser) Gravity.END else Gravity.START
             }
 
             imageScroll.addView(imageContainer)
             addView(imageScroll)
 
-            // Compact action bar:
-            // Copy, Speak, More.
+            // Graph node panel.
+            val graphPanel = LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                visibility = View.GONE
 
+                background = roundedBackground(
+                    panelColor,
+                    dp(context, 14).toFloat(),
+                    borderColor,
+                    dp(context, 1)
+                )
+
+                setPadding(
+                    dp(context, 10),
+                    dp(context, 8),
+                    dp(context, 10),
+                    dp(context, 8)
+                )
+
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    topMargin = dp(context, 7)
+                }
+            }
+
+            addView(graphPanel)
+
+            // Tool execution cards.
+            val toolsContainer = LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                visibility = View.GONE
+
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    topMargin = dp(context, 7)
+                }
+            }
+
+            addView(toolsContainer)
+
+            // Action bar.
             val actions = LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
-
-                gravity = if (isUser) {
-                    Gravity.END
-                } else {
-                    Gravity.START
-                }
-
+                gravity = if (isUser) Gravity.END else Gravity.START
                 visibility = View.GONE
 
                 setPadding(
-                    dp(context, 5),
-                    dp(context, 5),
-                    dp(context, 5),
-                    dp(context, 5)
+                    dp(context, 4),
+                    dp(context, 4),
+                    dp(context, 4),
+                    dp(context, 4)
                 )
 
                 background = roundedBackground(
                     surfaceColor,
-                    dp(context, 24).toFloat(),
-                    Color.parseColor("#35416B"),
+                    dp(context, 22).toFloat(),
+                    borderColor,
                     dp(context, 1)
                 )
 
@@ -260,11 +398,6 @@ class ChatAdapter(
                     ViewGroup.LayoutParams.WRAP_CONTENT
                 ).apply {
                     topMargin = dp(context, 7)
-                    if (isUser) {
-                        marginEnd = dp(context, 4)
-                    } else {
-                        marginStart = dp(context, 4)
-                    }
                 }
             }
 
@@ -288,11 +421,27 @@ class ChatAdapter(
                 createActionButton(
                     context,
                     R.drawable.ic_more_vert,
-                    "المزيد من خيارات الرسالة"
+                    "خيارات الرسالة"
                 )
             )
 
             addView(actions)
+
+            // Relationship legend.
+            val legend = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                visibility = View.GONE
+
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    topMargin = dp(context, 5)
+                }
+            }
+
+            addView(legend)
         }
     }
 
@@ -303,10 +452,8 @@ class ChatAdapter(
     ): ImageView {
         return ImageView(context).apply {
             setImageResource(drawable)
-            setColorFilter(iconColor)
-
+            setColorFilter(textColor)
             contentDescription = description
-
             scaleType = ImageView.ScaleType.CENTER_INSIDE
 
             layoutParams = LinearLayout.LayoutParams(
@@ -340,19 +487,29 @@ class ChatAdapter(
 
         private val root = itemView as LinearLayout
 
-        private val card = root.getChildAt(0) as CardView
+        private val header =
+            root.getChildAt(0) as LinearLayout
+
+        private val card =
+            root.getChildAt(1) as CardView
 
         private val messageText =
             card.getChildAt(0) as TextView
 
         private val imageScroll =
-            root.getChildAt(1) as HorizontalScrollView
+            root.getChildAt(2) as HorizontalScrollView
 
         private val imageContainer =
             imageScroll.getChildAt(0) as LinearLayout
 
+        private val graphPanel =
+            root.getChildAt(3) as LinearLayout
+
+        private val toolsContainer =
+            root.getChildAt(4) as LinearLayout
+
         private val actionBar =
-            root.getChildAt(2) as LinearLayout
+            root.getChildAt(5) as LinearLayout
 
         private val copyButton =
             actionBar.getChildAt(0) as ImageView
@@ -363,16 +520,15 @@ class ChatAdapter(
         private val moreButton =
             actionBar.getChildAt(2) as ImageView
 
-        private var currentMessage: ChatMessage? = null
+        private val legend =
+            root.getChildAt(6) as LinearLayout
 
+        private var currentMessage: ChatMessage? = null
         private var renderedContent: String? = null
 
         init {
             copyButton.setOnClickListener {
-                val message = currentMessage
-                    ?: return@setOnClickListener
-
-                copyMessage(message)
+                currentMessage?.let { copyMessage(it) }
             }
 
             speakButton.setOnClickListener {
@@ -391,26 +547,27 @@ class ChatAdapter(
 
             val isUser = msg.role == MessageRole.USER
 
-            root.gravity = if (isUser) {
-                Gravity.END
-            } else {
-                Gravity.START
-            }
+            root.gravity = if (isUser) Gravity.END else Gravity.START
 
-            card.setCardBackgroundColor(
-                if (isUser) userBubbleColor else aiBubbleColor
+            val dot = header.getChildAt(0)
+            val identity = header.getChildAt(1) as TextView
+
+            dot.background = circleDrawable(
+                if (isUser) accentColor else purpleColor
             )
 
-            // Render Markdown only when content changes.
+            identity.text = if (isUser) "YOU" else "MONOLITH"
 
+            card.setCardBackgroundColor(
+                if (isUser) userColor else aiColor
+            )
+
+            // Message rendering.
             if (renderedContent != msg.content) {
                 if (msg.content.isEmpty()) {
                     messageText.text = ""
                 } else {
-                    markwon.setMarkdown(
-                        messageText,
-                        msg.content
-                    )
+                    markwon.setMarkdown(messageText, msg.content)
                 }
 
                 renderedContent = msg.content
@@ -423,87 +580,416 @@ class ChatAdapter(
             }
 
             bindImages(msg)
+            bindRelations(msg)
+            bindTools(msg)
 
             val canShowActions =
                 msg.content.isNotBlank() &&
                 msg.content != "جاري التفكير..." &&
                 !msg.isThinking
 
-            actionBar.visibility = if (canShowActions) {
-                View.VISIBLE
-            } else {
-                View.GONE
-            }
+            actionBar.visibility =
+                if (canShowActions) View.VISIBLE else View.GONE
 
-            // Show a subtle indication when the message
-            // has a reaction or is pinned.
-
-            val hasMessageState =
+            val hasState =
                 msg.isPinned ||
                 msg.reactionType == "LIKE" ||
                 msg.reactionType == "DISLIKE"
 
             moreButton.setColorFilter(
-                if (hasMessageState) {
-                    accentColor
-                } else {
-                    iconColor
-                }
+                if (hasState) accentColor else textColor
             )
 
             copyButton.isEnabled = msg.content.isNotEmpty()
-
             speakButton.isEnabled = msg.content.isNotEmpty()
 
-            copyButton.alpha = if (copyButton.isEnabled) {
-                1f
-            } else {
-                0.4f
+            copyButton.alpha =
+                if (copyButton.isEnabled) 1f else 0.4f
+
+            speakButton.alpha =
+                if (speakButton.isEnabled) 1f else 0.4f
+        }
+
+        private fun bindRelations(msg: ChatMessage) {
+            graphPanel.removeAllViews()
+            legend.removeAllViews()
+
+            val relations = try {
+                relationProvider?.invoke(msg).orEmpty()
+            } catch (_: Exception) {
+                emptyList()
             }
 
-            speakButton.alpha = if (speakButton.isEnabled) {
-                1f
-            } else {
-                0.4f
+            val visibleRelations =
+                relations.take(MAX_VISIBLE_PORTS)
+
+            if (visibleRelations.isEmpty()) {
+                graphPanel.visibility = View.GONE
+                legend.visibility = View.GONE
+                return
+            }
+
+            graphPanel.visibility = View.VISIBLE
+
+            val title = TextView(root.context).apply {
+                text = "MESSAGE CONNECTIONS"
+                textSize = 9f
+                letterSpacing = 0.13f
+                setTextColor(mutedColor)
+                setTypeface(null, Typeface.BOLD)
+            }
+
+            graphPanel.addView(title)
+
+            visibleRelations.forEachIndexed { index, relation ->
+                graphPanel.addView(
+                    createRelationRow(
+                        root.context,
+                        index + 1,
+                        relation
+                    )
+                )
+            }
+
+            // Show legend only for kinds actually present.
+            val kinds = visibleRelations
+                .map { it.kind }
+                .distinct()
+
+            kinds.forEach { kind ->
+                val item = LinearLayout(root.context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(
+                        dp(root.context, 5),
+                        dp(root.context, 3),
+                        dp(root.context, 8),
+                        dp(root.context, 3)
+                    )
+                }
+
+                val dot = View(root.context).apply {
+                    background = circleDrawable(kind.color)
+                    layoutParams = LinearLayout.LayoutParams(
+                        dp(root.context, 6),
+                        dp(root.context, 6)
+                    )
+                }
+
+                val label = TextView(root.context).apply {
+                    text = kind.label
+                    textSize = 9f
+                    setTextColor(mutedColor)
+                    setPadding(dp(root.context, 4), 0, 0, 0)
+                }
+
+                item.addView(dot)
+                item.addView(label)
+                legend.addView(item)
+            }
+
+            legend.visibility =
+                if (kinds.isNotEmpty()) View.VISIBLE else View.GONE
+        }
+
+        private fun createRelationRow(
+            context: Context,
+            portNumber: Int,
+            relation: MessageRelation
+        ): View {
+
+            return LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+
+                setPadding(
+                    0,
+                    dp(context, 7),
+                    0,
+                    dp(context, 3)
+                )
+
+                val port = TextView(context).apply {
+                    text = "P$portNumber"
+                    textSize = 9f
+                    setTypeface(null, Typeface.BOLD)
+                    setTextColor(relation.kind.color)
+
+                    background = roundedBackground(
+                        Color.argb(28, 255, 255, 255),
+                        dp(context, 6).toFloat(),
+                        relation.kind.color,
+                        dp(context, 1)
+                    )
+
+                    setPadding(
+                        dp(context, 7),
+                        dp(context, 4),
+                        dp(context, 7),
+                        dp(context, 4)
+                    )
+                }
+
+                val line = View(context).apply {
+                    setBackgroundColor(relation.kind.color)
+                    layoutParams = LinearLayout.LayoutParams(
+                        dp(context, 22),
+                        dp(context, 2)
+                    ).apply {
+                        marginStart = dp(context, 5)
+                        marginEnd = dp(context, 5)
+                    }
+                }
+
+                val details = LinearLayout(context).apply {
+                    orientation = LinearLayout.VERTICAL
+                    layoutParams = LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f
+                    )
+                }
+
+                val relationLabel = TextView(context).apply {
+                    text = relation.label.ifBlank {
+                        relation.kind.label
+                    }
+                    textSize = 11f
+                    setTextColor(textColor)
+                    maxLines = 1
+                }
+
+                val target = TextView(context).apply {
+                    text = relation.targetMessageId.take(12)
+                    textSize = 9f
+                    setTextColor(mutedColor)
+                    maxLines = 1
+                }
+
+                details.addView(relationLabel)
+                details.addView(target)
+
+                val direction = TextView(context).apply {
+                    text = if (
+                        relation.direction.equals(
+                            "INCOMING",
+                            ignoreCase = true
+                        )
+                    ) "IN" else "OUT"
+
+                    textSize = 8f
+                    setTextColor(relation.kind.color)
+                    setTypeface(null, Typeface.BOLD)
+                }
+
+                addView(port)
+                addView(line)
+                addView(details)
+                addView(direction)
+
+                isClickable = onRelationClick != null
+                isFocusable = onRelationClick != null
+
+                setOnClickListener {
+                    onRelationClick?.invoke(relation)
+                }
+            }
+        }
+
+        private fun bindTools(msg: ChatMessage) {
+            toolsContainer.removeAllViews()
+
+            val tools = try {
+                toolProvider?.invoke(msg).orEmpty()
+            } catch (_: Exception) {
+                emptyList()
+            }
+
+            if (tools.isEmpty()) {
+                toolsContainer.visibility = View.GONE
+                return
+            }
+
+            toolsContainer.visibility = View.VISIBLE
+
+            tools.forEach { tool ->
+                toolsContainer.addView(
+                    createToolCard(root.context, tool)
+                )
+            }
+        }
+
+        private fun createToolCard(
+            context: Context,
+            tool: ToolPresentation
+        ): View {
+
+            val stateColor = when (tool.state) {
+                ToolExecutionState.QUEUED ->
+                    Color.rgb(150, 160, 185)
+
+                ToolExecutionState.RUNNING ->
+                    accentColor
+
+                ToolExecutionState.COMPLETED ->
+                    Color.rgb(60, 220, 160)
+
+                ToolExecutionState.FAILED ->
+                    Color.rgb(255, 90, 110)
+
+                ToolExecutionState.CANCELLED ->
+                    Color.rgb(180, 150, 150)
+            }
+
+            val stateText = when (tool.state) {
+                ToolExecutionState.QUEUED -> "QUEUED"
+                ToolExecutionState.RUNNING -> "RUNNING"
+                ToolExecutionState.COMPLETED -> "COMPLETED"
+                ToolExecutionState.FAILED -> "FAILED"
+                ToolExecutionState.CANCELLED -> "CANCELLED"
+            }
+
+            return LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+
+                background = roundedBackground(
+                    Color.rgb(14, 20, 39),
+                    dp(context, 13).toFloat(),
+                    stateColor,
+                    dp(context, 1)
+                )
+
+                setPadding(
+                    dp(context, 12),
+                    dp(context, 10),
+                    dp(context, 12),
+                    dp(context, 10)
+                )
+
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    bottomMargin = dp(context, 7)
+                }
+
+                val heading = LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                }
+
+                val name = TextView(context).apply {
+                    text = tool.name
+                    textSize = 12f
+                    setTextColor(textColor)
+                    setTypeface(null, Typeface.BOLD)
+                    layoutParams = LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f
+                    )
+                }
+
+                val state = TextView(context).apply {
+                    text = stateText
+                    textSize = 9f
+                    setTextColor(stateColor)
+                    setTypeface(null, Typeface.BOLD)
+                }
+
+                heading.addView(name)
+                heading.addView(state)
+                addView(heading)
+
+                if (tool.description.isNotBlank()) {
+                    addView(
+                        TextView(context).apply {
+                            text = tool.description
+                            textSize = 10f
+                            setTextColor(mutedColor)
+                            setPadding(0, dp(context, 5), 0, 0)
+                        }
+                    )
+                }
+
+                if (tool.result.isNotBlank()) {
+                    addView(
+                        TextView(context).apply {
+                            text = tool.result
+                            textSize = 11f
+                            setTextColor(textColor)
+                            maxLines = 8
+                            setPadding(
+                                dp(context, 8),
+                                dp(context, 7),
+                                dp(context, 8),
+                                dp(context, 7)
+                            )
+
+                            background = roundedBackground(
+                                Color.rgb(8, 12, 25),
+                                dp(context, 8).toFloat()
+                            )
+
+                            layoutParams =
+                                LinearLayout.LayoutParams(
+                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                    ViewGroup.LayoutParams.WRAP_CONTENT
+                                ).apply {
+                                    topMargin = dp(context, 7)
+                                }
+                        }
+                    )
+                }
+
+                tool.durationMs?.let { duration ->
+                    addView(
+                        TextView(context).apply {
+                            text = "${duration} ms"
+                            textSize = 9f
+                            setTextColor(mutedColor)
+                            setPadding(0, dp(context, 5), 0, 0)
+                        }
+                    )
+                }
+
+                isClickable = onToolClick != null
+                isFocusable = onToolClick != null
+
+                setOnClickListener {
+                    onToolClick?.invoke(tool)
+                }
             }
         }
 
         private fun bindImages(msg: ChatMessage) {
             val uris = msg.attachmentUris.orEmpty()
 
-            imageScroll.visibility = if (uris.isEmpty()) {
-                View.GONE
-            } else {
-                View.VISIBLE
-            }
-
-            // Remove excess recycled image views.
+            imageScroll.visibility =
+                if (uris.isEmpty()) View.GONE else View.VISIBLE
 
             while (imageContainer.childCount > uris.size) {
                 val index = imageContainer.childCount - 1
-
                 val image =
                     imageContainer.getChildAt(index) as ImageView
 
                 Glide.with(image).clear(image)
-
                 imageContainer.removeViewAt(index)
             }
 
             uris.forEachIndexed { index, uri ->
-
                 val image: ImageView =
                     if (index < imageContainer.childCount) {
                         imageContainer.getChildAt(index) as ImageView
                     } else {
                         ImageView(root.context).apply {
-
-                            layoutParams = LinearLayout.LayoutParams(
-                                dp(root.context, 150),
-                                dp(root.context, 150)
-                            ).apply {
-                                marginEnd = dp(root.context, 8)
-                            }
+                            layoutParams =
+                                LinearLayout.LayoutParams(
+                                    dp(root.context, 148),
+                                    dp(root.context, 148)
+                                ).apply {
+                                    marginEnd = dp(root.context, 8)
+                                }
 
                             scaleType =
                                 ImageView.ScaleType.CENTER_CROP
@@ -514,9 +1000,7 @@ class ChatAdapter(
                             )
 
                             clipToOutline = true
-
-                            contentDescription =
-                                "Message attachment"
+                            contentDescription = "Message attachment"
 
                             imageContainer.addView(this)
                         }
@@ -535,10 +1019,7 @@ class ChatAdapter(
             ) as ClipboardManager
 
             clipboard.setPrimaryClip(
-                ClipData.newPlainText(
-                    "Monolith",
-                    msg.content
-                )
+                ClipData.newPlainText("Monolith", msg.content)
             )
 
             Toast.makeText(
@@ -551,10 +1032,7 @@ class ChatAdapter(
         private fun showMenu() {
             val msg = currentMessage ?: return
 
-            val popup = PopupMenu(
-                root.context,
-                moreButton
-            )
+            val popup = PopupMenu(root.context, moreButton)
 
             if (
                 msg.role == MessageRole.AI &&
@@ -602,9 +1080,6 @@ class ChatAdapter(
             )
 
             popup.setOnMenuItemClickListener { item ->
-
-                // Prevent actions on a recycled holder.
-
                 val current = currentMessage
                     ?: return@setOnMenuItemClickListener false
 
@@ -613,28 +1088,23 @@ class ChatAdapter(
                 }
 
                 when (item.itemId) {
-
-                    MENU_REGENERATE -> {
+                    MENU_REGENERATE ->
                         onRegenerateClick?.invoke(current)
-                    }
 
-                    MENU_REACTION -> {
+                    MENU_REACTION ->
                         onReactionClick(current)
-                    }
 
-                    MENU_PIN -> {
+                    MENU_PIN ->
                         onPinClick(current)
-                    }
 
-                    MENU_SHARE -> {
+                    MENU_SHARE ->
                         shareMessage(current)
-                    }
 
-                    MENU_EDIT -> {
+                    MENU_EDIT ->
                         onEditClick(current)
-                    }
 
-                    else -> return@setOnMenuItemClickListener false
+                    else ->
+                        return@setOnMenuItemClickListener false
                 }
 
                 true
@@ -646,11 +1116,7 @@ class ChatAdapter(
         private fun shareMessage(msg: ChatMessage) {
             val intent = Intent(Intent.ACTION_SEND).apply {
                 type = "text/plain"
-
-                putExtra(
-                    Intent.EXTRA_TEXT,
-                    msg.content
-                )
+                putExtra(Intent.EXTRA_TEXT, msg.content)
             }
 
             val chooser = Intent.createChooser(
@@ -670,29 +1136,29 @@ class ChatAdapter(
         fun recycle() {
             currentMessage = null
 
-            // Clear image requests before reuse.
-
             for (index in 0 until imageContainer.childCount) {
                 val image =
                     imageContainer.getChildAt(index) as ImageView
 
                 Glide.with(image).clear(image)
-
                 image.setImageDrawable(null)
             }
 
-            renderedContent = null
+            graphPanel.removeAllViews()
+            toolsContainer.removeAllViews()
+            legend.removeAllViews()
 
+            renderedContent = null
             messageText.text = ""
 
             imageScroll.visibility = View.GONE
-
+            graphPanel.visibility = View.GONE
+            toolsContainer.visibility = View.GONE
+            legend.visibility = View.GONE
             card.visibility = View.GONE
-
             actionBar.visibility = View.GONE
 
-            moreButton.setColorFilter(iconColor)
-
+            moreButton.setColorFilter(textColor)
             copyButton.alpha = 1f
             speakButton.alpha = 1f
         }
@@ -705,11 +1171,8 @@ class ChatAdapter(
         holder.bind(getItem(position))
     }
 
-    override fun onViewRecycled(
-        holder: ChatViewHolder
-    ) {
+    override fun onViewRecycled(holder: ChatViewHolder) {
         holder.recycle()
-
         super.onViewRecycled(holder)
     }
 
@@ -725,12 +1188,18 @@ class ChatAdapter(
     ): GradientDrawable {
         return GradientDrawable().apply {
             setColor(color)
-
             cornerRadius = radius
 
             if (strokeWidth > 0) {
                 setStroke(strokeWidth, strokeColor)
             }
+        }
+    }
+
+    private fun circleDrawable(color: Int): GradientDrawable {
+        return GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(color)
         }
     }
 
