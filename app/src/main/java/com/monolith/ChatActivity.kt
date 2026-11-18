@@ -81,7 +81,7 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var appDatabase: AppDatabase
     private lateinit var modelManager: ModelManager
     private lateinit var agentBrain: AgentBrain
-    private lateinit var memoryHelper: MemoryHelper // تمت الإضافة
+    private lateinit var memoryHelper: MemoryHelper
 
     private val messageList = mutableListOf<ChatMessage>()
     private val currentConversationId = CONVERSATION_ID
@@ -278,8 +278,6 @@ class ChatActivity : AppCompatActivity() {
             appDatabase = AppDatabase(applicationContext)
             modelManager = ModelManager.getInstance(applicationContext)
             agentBrain = AgentBrainFactory.create(applicationContext, modelManager)
-            
-            // تهيئة الذاكرة
             memoryHelper = MemoryHelper(appDatabase)
 
             initializeSecurePreferences()
@@ -326,8 +324,9 @@ class ChatActivity : AppCompatActivity() {
         imagePreviewContainer = findViewById(R.id.imagePreviewContainer)
         previewListContainer = findViewById(R.id.previewListContainer)
 
-        // تمت إزالة الأزرار الوهمية (btnLoadModel, btnLoadVisionModel, إلخ) والاعتماد على XML
-
+        // تم إزالة الأزرار الوهمية (btnLoadModel, btnLoadVisionModel, btnAgents, btnThreads) من هنا
+        // لأن عناصر XML هي المصدر الوحيد للواجهة.
+        
         recyclerViewChat.layoutManager = LinearLayoutManager(this).apply {
             stackFromEnd = false
         }
@@ -361,6 +360,15 @@ class ChatActivity : AppCompatActivity() {
         )
         recyclerViewChat.adapter = chatAdapter
         chatAdapter.updateMessages(messageList)
+    }
+
+    private fun createTopBarButton(iconResource: Int, tint: Int): ImageButton {
+        return ImageButton(this).apply {
+            setImageResource(iconResource)
+            setBackgroundColor(Color.TRANSPARENT)
+            setColorFilter(tint)
+            layoutParams = LinearLayout.LayoutParams(dpToPx(48), dpToPx(48))
+        }
     }
 
     private fun initializeTopBar() {
@@ -397,12 +405,12 @@ class ChatActivity : AppCompatActivity() {
             } else false
         }
 
-        // ربط زر اختيار النموذج
+        // ربط زر اختيار النموذج (TextView)
         findViewById<TextView>(R.id.modelSelector)?.setOnClickListener {
             showModelOptions()
         }
 
-        // ربط أزرار الاقتراحات
+        // ربط أزرار الاقتراحات الثلاثة
         findViewById<TextView>(R.id.btnSuggestionAnalyze)?.setOnClickListener {
             insertSuggestion("حلل الموضوع التالي بعمق، وافصل الحقائق عن الافتراضات: \n")
         }
@@ -411,6 +419,11 @@ class ChatActivity : AppCompatActivity() {
         }
         findViewById<TextView>(R.id.btnSuggestionVision)?.setOnClickListener {
             insertSuggestion("حلل الصورة المرفقة: وصف العناصر والعلاقات والتفاصيل المهمة: \n")
+        }
+
+        // ربط زر المايك (يحتاج لخدمة صوتية حقيقية)
+        findViewById<ImageButton>(R.id.btnMic)?.setOnClickListener {
+            showToast("خدمة التعرف على الصوت تحتاج إلى ربط (لم يتم اختراع API وهمي)")
         }
     }
 
@@ -422,6 +435,20 @@ class ChatActivity : AppCompatActivity() {
         etMessage.setSelection(etMessage.text.length)
         etMessage.requestFocus()
         updateSendButtonState()
+    }
+
+    private fun showModelOptions() {
+        val options = arrayOf("تحميل نموذج نصي", "تحميل نموذج الرؤية")
+        AlertDialog.Builder(this)
+            .setTitle("إدارة المحرك")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> pickModelLauncher.launch(arrayOf("*/*"))
+                    1 -> pickVisionGgufLauncher.launch(arrayOf("*/*"))
+                }
+            }
+            .setNegativeButton("إلغاء", null)
+            .show()
     }
 
     private fun updateSendButtonState() {
@@ -514,20 +541,6 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    private fun showModelOptions() {
-        val options = arrayOf("تحميل نموذج نصي", "تحميل نموذج الرؤية")
-        AlertDialog.Builder(this)
-            .setTitle("إدارة المحرك")
-            .setItems(options) { _, which ->
-                when (which) {
-                    0 -> pickModelLauncher.launch(arrayOf("*/*"))
-                    1 -> pickVisionGgufLauncher.launch(arrayOf("*/*"))
-                }
-            }
-            .setNegativeButton("إلغاء", null)
-            .show()
-    }
-
     private fun loadMessagesFromDb() {
         if (isLoadingMessages) return
         isLoadingMessages = true
@@ -563,6 +576,18 @@ class ChatActivity : AppCompatActivity() {
                 throw e
             } catch (e: Exception) {
                 android.util.Log.e("Monolith", "Message save failed", e)
+            }
+        }
+    }
+
+    private fun saveUserPreference(type: String, content: String) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                memoryHelper.savePreference(type, content)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                android.util.Log.e("Monolith", "Preference save failed", e)
             }
         }
     }
@@ -691,7 +716,6 @@ class ChatActivity : AppCompatActivity() {
         val job = lifecycleScope.launch {
             try {
                 val memoriesContext = getMemoriesContext()
-                
                 val enrichedPrompt = buildString {
                     append(userMessage.content)
                     
@@ -1085,6 +1109,408 @@ class ChatActivity : AppCompatActivity() {
         updateSendButtonState()
     }
 
+    private fun shareFullConversation() {
+        if (messageList.isEmpty()) {
+            showToast("لا توجد رسائل لمشاركتها")
+            return
+        }
+        val builder = StringBuilder()
+        builder.append("سجل محادثة Monolith\n\n")
+        messageList.forEach { message ->
+            val sender = if (message.role == MessageRole.USER) "أنت" else "Monolith"
+            builder.append(sender)
+            builder.append(": ")
+            builder.append(message.content)
+            builder.append("\n")
+            if (!message.attachmentUris.isNullOrEmpty()) {
+                builder.append("[عدد المرفقات: ${message.attachmentUris.size}]\n")
+            }
+            builder.append("\n")
+        }
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, builder.toString())
+        }
+        startActivity(Intent.createChooser(intent, "مشاركة سجل المحادثة"))
+    }
+
+    private fun showThreadsBottomSheet() {
+        val dialog = BottomSheetDialog(this)
+        val listView = ListView(this)
+        val items = arrayOf(
+            "إنشاء خيط لوني جديد",
+            "ربط رسالتين بخيط",
+            "عرض الخيوط اللونية",
+            "إضافة ملاحظة إلى خيط",
+            "عرض ملاحظات خيط"
+        )
+        listView.adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, items)
+        listView.setOnItemClickListener { _, _, position, _ ->
+            dialog.dismiss()
+            when (position) {
+                0 -> showCreateNodeDialog()
+                1 -> showLinkMessagesDialog()
+                2 -> showNodesListDialog()
+                3 -> showAddThreadAnnotationDialog()
+                4 -> showThreadAnnotationsDialog()
+            }
+        }
+        dialog.setContentView(listView)
+        dialog.show()
+    }
+
+    private fun showCreateNodeDialog() {
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dpToPx(16), dpToPx(16), dpToPx(16), dpToPx(16))
+        }
+        val nameInput = EditText(this).apply { hint = "عنوان الخيط اللوني" }
+        val definitionInput = EditText(this).apply {
+            hint = "تعريف الخيط أو الغرض منه"
+            minLines = 2
+        }
+        val colorInput = EditText(this).apply {
+            hint = "لون HEX مثال: #00D4FF"
+            setText("#00D4FF")
+            setSingleLine(true)
+        }
+        layout.addView(nameInput)
+        layout.addView(definitionInput)
+        layout.addView(colorInput)
+
+        AlertDialog.Builder(this)
+            .setTitle("إنشاء خيط لوني")
+            .setView(layout)
+            .setPositiveButton("حفظ") { _, _ ->
+                val name = nameInput.text.toString().trim()
+                val definition = definitionInput.text.toString().trim()
+                val color = colorInput.text.toString().trim()
+
+                if (name.isBlank() || definition.isBlank() || color.isBlank()) {
+                    showToast("أكمل بيانات الخيط")
+                    return@setPositiveButton
+                }
+
+                try {
+                    Color.parseColor(color)
+                } catch (_: Exception) {
+                    showToast("صيغة اللون غير صحيحة")
+                    return@setPositiveButton
+                }
+
+                lifecycleScope.launch {
+                    try {
+                        withContext(Dispatchers.IO) {
+                            appDatabase.insertChromaticNode(colorHex = color, name = name, definition = definition)
+                        }
+                        showToast("تم إنشاء الخيط اللوني")
+                    } catch (e: Exception) {
+                        showToast("تعذر حفظ الخيط: ${e.message}")
+                    }
+                }
+            }
+            .setNegativeButton("إلغاء", null)
+            .show()
+    }
+
+    private fun showNodesListDialog() {
+        lifecycleScope.launch {
+            try {
+                val nodes = withContext(Dispatchers.IO) {
+                    appDatabase.getAllChromaticNodes()
+                }
+                if (nodes.isEmpty()) {
+                    showToast("لا توجد خيوط لونية")
+                    return@launch
+                }
+                val displayList = nodes.map {
+                    val name = it["name"] ?: "خيط"
+                    val color = it["color_hex"] ?: ""
+                    val definition = it["definition"] ?: ""
+                    "$name ($color)\n$definition"
+                }
+                AlertDialog.Builder(this@ChatActivity)
+                    .setTitle("الخيوط اللونية")
+                    .setItems(displayList.toTypedArray(), null)
+                    .setPositiveButton("حسناً", null)
+                    .show()
+            } catch (e: Exception) {
+                showToast("تعذر جلب الخيوط: ${e.message}")
+            }
+        }
+    }
+
+    private fun showLinkMessagesDialog() {
+        val messageSnapshot = messageList.filter { !it.isThinking }.toList()
+        if (messageSnapshot.size < 2) {
+            showToast("تحتاج إلى رسالتين على الأقل")
+            return
+        }
+        lifecycleScope.launch {
+            try {
+                val nodes = withContext(Dispatchers.IO) {
+                    appDatabase.getAllChromaticNodes()
+                }
+                if (nodes.isEmpty()) {
+                    showToast("أنشئ خيطاً لونياً أولاً")
+                    return@launch
+                }
+                val messageOptions = messageSnapshot.map {
+                    val sender = if (it.role == MessageRole.USER) "أنت" else "Monolith"
+                    "$sender: ${it.content.take(55)}"
+                }.toTypedArray()
+
+                AlertDialog.Builder(this@ChatActivity)
+                    .setTitle("اختر الرسالة الأولى")
+                    .setItems(messageOptions) { _, sourceIndex ->
+                        AlertDialog.Builder(this@ChatActivity)
+                            .setTitle("اختر الرسالة الثانية")
+                            .setItems(messageOptions) { _, targetIndex ->
+                                if (sourceIndex == targetIndex) {
+                                    showToast("لا يمكن ربط الرسالة بنفسها")
+                                    return@setItems
+                                }
+                                val nodeOptions = nodes.map {
+                                    val name = it["name"] ?: "خيط"
+                                    val color = it["color_hex"] ?: ""
+                                    "$name ($color)"
+                                }.toTypedArray()
+
+                                AlertDialog.Builder(this@ChatActivity)
+                                    .setTitle("اختر الخيط اللوني")
+                                    .setItems(nodeOptions) { _, nodeIndex ->
+                                        lifecycleScope.launch {
+                                            try {
+                                                val sourceId = messageSnapshot[sourceIndex].id
+                                                val targetId = messageSnapshot[targetIndex].id
+                                                val nodeId = nodes[nodeIndex]["id"] ?: return@launch
+                                                withContext(Dispatchers.IO) {
+                                                    appDatabase.insertMessageThread(sourceId, targetId, nodeId)
+                                                }
+                                                showToast("تم ربط الرسالتين بالخيط")
+                                            } catch (e: Exception) {
+                                                showToast("تعذر إنشاء الرابط: ${e.message}")
+                                            }
+                                        }
+                                    }
+                                    .show()
+                            }
+                            .show()
+                    }
+                    .show()
+            } catch (e: Exception) {
+                showToast("تعذر تحميل الخيوط: ${e.message}")
+            }
+        }
+    }
+
+    private fun showAddThreadAnnotationDialog() {
+        selectThreadForMessage("اختر خيطاً لإضافة ملاحظة") { threadId ->
+            val input = EditText(this).apply {
+                hint = "اكتب الملاحظة"
+                minLines = 3
+                setPadding(dpToPx(12), dpToPx(12), dpToPx(12), dpToPx(12))
+            }
+            AlertDialog.Builder(this)
+                .setTitle("ملاحظة الخيط")
+                .setView(input)
+                .setPositiveButton("حفظ") { _, _ ->
+                    val content = input.text.toString().trim()
+                    if (content.isBlank()) {
+                        showToast("الملاحظة فارغة")
+                        return@setPositiveButton
+                    }
+                    lifecycleScope.launch {
+                        try {
+                            withContext(Dispatchers.IO) {
+                                appDatabase.insertThreadAnnotation(threadId, content)
+                            }
+                            showToast("تم حفظ ملاحظة الخيط")
+                        } catch (e: Exception) {
+                            showToast("تعذر حفظ الملاحظة: ${e.message}")
+                        }
+                    }
+                }
+                .setNegativeButton("إلغاء", null)
+                .show()
+        }
+    }
+
+    private fun showThreadAnnotationsDialog() {
+        selectThreadForMessage("اختر خيطاً لعرض ملاحظاته") { threadId ->
+            lifecycleScope.launch {
+                try {
+                    val annotations = withContext(Dispatchers.IO) {
+                        appDatabase.getAnnotationsForThread(threadId)
+                    }
+                    val content = if (annotations.isEmpty()) {
+                        "لا توجد ملاحظات لهذا الخيط."
+                    } else {
+                        annotations.mapIndexed { index, note ->
+                            "${index + 1}. $note"
+                        }.joinToString("\n\n")
+                    }
+                    AlertDialog.Builder(this@ChatActivity)
+                        .setTitle("ملاحظات الخيط")
+                        .setMessage(content)
+                        .setPositiveButton("حسناً", null)
+                        .show()
+                } catch (e: Exception) {
+                    showToast("تعذر جلب الملاحظات: ${e.message}")
+                }
+            }
+        }
+    }
+
+    private fun selectThreadForMessage(title: String, onSelected: (String) -> Unit) {
+        val messages = messageList.filter { !it.isThinking }.toList()
+        if (messages.isEmpty()) {
+            showToast("لا توجد رسائل")
+            return
+        }
+        val messageOptions = messages.map { it.content.take(55) }.toTypedArray()
+
+        AlertDialog.Builder(this)
+            .setTitle("اختر رسالة مرتبطة بالخيط")
+            .setItems(messageOptions) { _, index ->
+                lifecycleScope.launch {
+                    try {
+                        val threads = withContext(Dispatchers.IO) {
+                            appDatabase.getThreadsForMessage(messages[index].id)
+                        }
+                        if (threads.isEmpty()) {
+                            showToast("هذه الرسالة لا ترتبط بأي خيط")
+                            return@launch
+                        }
+                        val nodes = withContext(Dispatchers.IO) {
+                            appDatabase.getAllChromaticNodes()
+                        }
+                        val nodeMap = nodes.associateBy { it["id"] }
+                        val options = threads.map { thread ->
+                            val node = nodeMap[thread["node_id"]]
+                            val name = node?.get("name") ?: "خيط غير معروف"
+                            val color = node?.get("color_hex") ?: ""
+                            "$name ($color)"
+                        }.toTypedArray()
+
+                        AlertDialog.Builder(this@ChatActivity)
+                            .setTitle(title)
+                            .setItems(options) { _, threadIndex ->
+                                val threadId = threads[threadIndex]["id"]
+                                if (!threadId.isNullOrBlank()) {
+                                    onSelected(threadId)
+                                }
+                            }
+                            .show()
+                    } catch (e: Exception) {
+                        showToast("تعذر جلب الخيوط: ${e.message}")
+                    }
+                }
+            }
+            .show()
+    }
+
+    private fun showAgentsBottomSheet() {
+        val dialog = BottomSheetDialog(this)
+        val listView = ListView(this)
+        val items = arrayOf(
+            "الوكيل الرئيسي",
+            "إنشاء وكيل فرعي",
+            "خادم التعاون P2P"
+        )
+        listView.adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, items)
+        listView.setOnItemClickListener { _, _, position, _ ->
+            when (position) {
+                0 -> {
+                    activeAgentId = 0
+                    showToast("تم تفعيل الوكيل الرئيسي")
+                    dialog.dismiss()
+                }
+                1 -> {
+                    if (!modelManager.isTextModelLoaded) {
+                        showToast("حمّل النموذج المحلي أولاً")
+                        return@setOnItemClickListener
+                    }
+                    try {
+                        val newId = modelManager.createSubAgent()
+                        if (newId > 0) {
+                            activeAgentId = newId
+                            showToast("تم إنشاء الوكيل $newId")
+                        } else {
+                            showToast("تعذر إنشاء الوكيل الفرعي")
+                        }
+                    } catch (e: Exception) {
+                        showToast("خطأ في إنشاء الوكيل: ${e.message}")
+                    }
+                    dialog.dismiss()
+                }
+                2 -> {
+                    try {
+                        NetworkManager.startP2PServer()
+                        showToast("تم استدعاء خدمة P2P. تنفيذ الاتصال الفعلي بالأجهزة ما زال منفصلاً.")
+                    } catch (e: Exception) {
+                        showToast("تعذر تشغيل P2P: ${e.message}")
+                    }
+                    dialog.dismiss()
+                }
+            }
+        }
+        dialog.setContentView(listView)
+        dialog.show()
+    }
+
+    private fun showControlsBottomSheet() {
+        val dialog = BottomSheetDialog(this)
+        val view = layoutInflater.inflate(R.layout.bottom_sheet_controls, null)
+        val temperatureBar = view.findViewById<SeekBar>(R.id.sbTemperature)
+        val temperatureValue = view.findViewById<TextView>(R.id.tvTemperatureValue)
+        val personaSpinner = view.findViewById<Spinner>(R.id.spinnerPersona)
+        val thinkingCheckbox = view.findViewById<CheckBox>(R.id.cbThinking)
+        val saveButton = view.findViewById<Button>(R.id.btnSaveControls)
+
+        val savedTemperature = securePrefs.getFloat("temperature", 0.7f).coerceIn(0f, 2f)
+        temperatureBar.max = 200
+        temperatureBar.progress = (savedTemperature * 100).toInt()
+        temperatureValue.text = String.format("%.1f", savedTemperature)
+
+        val personas = arrayOf("افتراضي", "محلل نقدي", "موضوعي", "مبتكر")
+        val personaKeys = arrayOf("default", "analytical", "objective", "innovator")
+        personaSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, personas)
+
+        val savedPersona = securePrefs.getString("persona", "default")
+        val selectedIndex = personaKeys.indexOf(savedPersona)
+        if (selectedIndex >= 0) {
+            personaSpinner.setSelection(selectedIndex)
+        }
+
+        thinkingCheckbox.isChecked = securePrefs.getBoolean("enable_thinking", false)
+
+        temperatureBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                temperatureValue.text = String.format("%.1f", progress / 100f)
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+            override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+        })
+
+        saveButton.setOnClickListener {
+            val temperature = temperatureBar.progress / 100f
+            val persona = personaKeys[personaSpinner.selectedItemPosition.coerceIn(personaKeys.indices)]
+
+            securePrefs.edit()
+                .putFloat("temperature", temperature)
+                .putString("persona", persona)
+                .putBoolean("enable_thinking", thinkingCheckbox.isChecked)
+                .apply()
+
+            showToast("تم حفظ الإعدادات")
+            dialog.dismiss()
+        }
+
+        dialog.setContentView(view)
+        dialog.show()
+    }
+
     private fun showAttachBottomSheet() {
         val dialog = BottomSheetDialog(this)
         val view = layoutInflater.inflate(R.layout.bottom_sheet_attach, null)
@@ -1100,12 +1526,88 @@ class ChatActivity : AppCompatActivity() {
             pickDocumentLauncher.launch(arrayOf("text/plain", "text/*", "application/json"))
         }
 
-        // تطبيقاً للتعليمات: إخفاء الخيارات التي كانت تعرض Toast فقط لعدم وجود تنفيذ فعلي
-        view.findViewById<LinearLayout>(R.id.btnOptionAudio)?.visibility = View.GONE
-        view.findViewById<LinearLayout>(R.id.btnOptionSearch)?.visibility = View.GONE
-        view.findViewById<LinearLayout>(R.id.btnOptionCamera)?.visibility = View.GONE
-        view.findViewById<LinearLayout>(R.id.btnOptionAI)?.visibility = View.GONE
+        view.findViewById<LinearLayout>(R.id.btnOptionAudio)?.setOnClickListener {
+            dialog.dismiss()
+            showToast("تحليل الملفات الصوتية لم يُربط بعد")
+        }
 
+        view.findViewById<LinearLayout>(R.id.btnOptionSearch)?.setOnClickListener {
+            dialog.dismiss()
+            showToast("البحث الخارجي يحتاج إلى ربط خدمة البحث")
+        }
+
+        view.findViewById<LinearLayout>(R.id.btnOptionCamera)?.setOnClickListener {
+            dialog.dismiss()
+            showToast("التقاط الكاميرا يحتاج إلى ربط مسار الكاميرا")
+        }
+
+        view.findViewById<LinearLayout>(R.id.btnOptionAI)?.setOnClickListener {
+            dialog.dismiss()
+            showToast("اختر النموذج من إعدادات المحرك")
+        }
+
+        dialog.show()
+    }
+
+    private fun showPinnedMessagesBottomSheet() {
+        lifecycleScope.launch {
+            try {
+                val pinnedMessages = withContext(Dispatchers.IO) {
+                    appDatabase.getPinnedMessages(currentConversationId)
+                }
+                if (pinnedMessages.isEmpty()) {
+                    showToast("لا توجد رسائل مثبتة")
+                    return@launch
+                }
+                val dialog = BottomSheetDialog(this@ChatActivity)
+                val listView = ListView(this@ChatActivity)
+                listView.adapter = ArrayAdapter(this@ChatActivity, android.R.layout.simple_list_item_1, pinnedMessages.map { it.content })
+                listView.setOnItemClickListener { _, _, position, _ ->
+                    val id = pinnedMessages[position].id
+                    val index = messageList.indexOfFirst { it.id == id }
+                    if (index >= 0) {
+                        recyclerViewChat.smoothScrollToPosition(index)
+                    }
+                    dialog.dismiss()
+                }
+                dialog.setContentView(listView)
+                dialog.show()
+            } catch (e: Exception) {
+                showToast("تعذر تحميل الرسائل المثبتة: ${e.message}")
+            }
+        }
+    }
+
+    private fun showDashboardBottomSheet() {
+        val dialog = BottomSheetDialog(this)
+        val view = layoutInflater.inflate(R.layout.bottom_sheet_status, null)
+
+        val apiKey = securePrefs.getString("api_key", null)
+        val selectedModel = securePrefs.getString("selected_model", null) ?: "غير محدد"
+        val configured = !apiKey.isNullOrBlank()
+
+        val connectionStatus = view.findViewById<TextView>(R.id.tvConnectionStatus)
+        val connectionIcon = view.findViewById<ImageView>(R.id.ivConnectionIcon)
+        val providerName = view.findViewById<TextView>(R.id.tvProviderName)
+        val modelName = view.findViewById<TextView>(R.id.tvModelName)
+        val messageCount = view.findViewById<TextView>(R.id.tvMessageCount)
+        val settingsButton = view.findViewById<Button>(R.id.btnGoToSettings)
+
+        connectionStatus.text = if (configured) "اتصال خارجي مهيأ" else "لا يوجد اتصال خارجي مهيأ"
+        val statusColor = if (configured) Color.GREEN else Color.GRAY
+        connectionStatus.setTextColor(statusColor)
+        connectionIcon.setColorFilter(statusColor)
+
+        providerName.text = if (configured) "اتصال مخصص" else "محلي / غير محدد"
+        modelName.text = selectedModel
+        messageCount.text = messageList.size.toString()
+
+        settingsButton.setOnClickListener {
+            dialog.dismiss()
+            startActivity(Intent(this, SettingsActivity::class.java))
+        }
+
+        dialog.setContentView(view)
         dialog.show()
     }
 
@@ -1167,7 +1669,6 @@ class ChatActivity : AppCompatActivity() {
                             )
                             messageList[index] = updated
                             chatAdapter.updateMessages(messageList)
-                            
                             // تمت إزالة استدعاء saveMessageToDb(updated) لتجنب التكرار
                         }
 
@@ -1253,7 +1754,6 @@ class ChatActivity : AppCompatActivity() {
         rootLayout.setBackgroundColor(color)
     }
 
-    // تم تنفيذ نظام الذاكرة بناءً على التعليمات المرفقة
     private suspend fun getMemoriesContext(): String {
         return try {
             val memories = memoryHelper.getRecentMemories()
@@ -1313,6 +1813,7 @@ class ChatActivity : AppCompatActivity() {
         }
         try { ttsManager?.shutdown() } catch (_: Exception) { }
         ttsManager = null
+        // ModelManager مشترك ولا يتم إغلاقه هنا.
         super.onDestroy()
     }
 }
