@@ -54,6 +54,67 @@ static constexpr int MAX_GENERATION_TOKENS = 512;
 // JNI Helpers
 // =========================================================
 
+static void appendUtf8(std::string& out, uint32_t cp) {
+    if (cp <= 0x7F) {
+        out.push_back(static_cast<char>(cp));
+    } else if (cp <= 0x7FF) {
+        out.push_back(static_cast<char>(0xC0 | (cp >> 6)));
+        out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+    } else if (cp <= 0xFFFF) {
+        out.push_back(static_cast<char>(0xE0 | (cp >> 12)));
+        out.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
+        out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+    } else {
+        out.push_back(static_cast<char>(0xF0 | (cp >> 18)));
+        out.push_back(static_cast<char>(0x80 | ((cp >> 12) & 0x3F)));
+        out.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
+        out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+    }
+}
+
+static std::string jstringToUtf8(JNIEnv* env, jstring value) {
+    std::string out;
+
+    if (value == nullptr) {
+        return out;
+    }
+
+    const jsize length = env->GetStringLength(value);
+    const jchar* chars = env->GetStringChars(value, nullptr);
+
+    if (chars == nullptr) {
+        return out;
+    }
+
+    out.reserve(static_cast<size_t>(length) * 3);
+
+    for (jsize i = 0; i < length; ++i) {
+        uint32_t cp = chars[i];
+
+        if (cp >= 0xD800 && cp <= 0xDBFF && i + 1 < length) {
+            const uint32_t low = chars[i + 1];
+
+            if (low >= 0xDC00 && low <= 0xDFFF) {
+                cp = 0x10000 +
+                    ((cp - 0xD800) << 10) +
+                    (low - 0xDC00);
+
+                ++i;
+            } else {
+                cp = 0xFFFD;
+            }
+        } else if (cp >= 0xD800 && cp <= 0xDFFF) {
+            cp = 0xFFFD;
+        }
+
+        appendUtf8(out, cp);
+    }
+
+    env->ReleaseStringChars(value, chars);
+
+    return out;
+}
+
 static jstring makeResult(
     JNIEnv* env,
     const char* message
@@ -61,31 +122,25 @@ static jstring makeResult(
     return env->NewStringUTF(message);
 }
 
-// Convert standard UTF-8 into UTF-16.
-// JNI NewString expects UTF-16, avoiding problems with
-// supplementary Unicode characters and emoji.
+// =========================================================
+// UTF-8 To UTF-16
+// =========================================================
 
 static void appendUtf16(
     std::u16string& output,
     uint32_t codepoint
 ) {
     if (codepoint <= 0xFFFF) {
-        output.push_back(
-            static_cast<char16_t>(codepoint)
-        );
+        output.push_back(static_cast<char16_t>(codepoint));
     } else {
         codepoint -= 0x10000;
 
         output.push_back(
-            static_cast<char16_t>(
-                0xD800 + (codepoint >> 10)
-            )
+            static_cast<char16_t>(0xD800 + (codepoint >> 10))
         );
 
         output.push_back(
-            static_cast<char16_t>(
-                0xDC00 + (codepoint & 0x3FF)
-            )
+            static_cast<char16_t>(0xDC00 + (codepoint & 0x3FF))
         );
     }
 }
@@ -98,7 +153,6 @@ static std::u16string utf8ToUtf16(
     size_t i = 0;
 
     while (i < input.size()) {
-
         const uint8_t first =
             static_cast<uint8_t>(input[i]);
 
@@ -108,22 +162,13 @@ static std::u16string utf8ToUtf16(
         if (first <= 0x7F) {
             codepoint = first;
             count = 1;
-        } else if (
-            first >= 0xC2 &&
-            first <= 0xDF
-        ) {
+        } else if (first >= 0xC2 && first <= 0xDF) {
             codepoint = first & 0x1F;
             count = 2;
-        } else if (
-            first >= 0xE0 &&
-            first <= 0xEF
-        ) {
+        } else if (first >= 0xE0 && first <= 0xEF) {
             codepoint = first & 0x0F;
             count = 3;
-        } else if (
-            first >= 0xF0 &&
-            first <= 0xF4
-        ) {
+        } else if (first >= 0xF0 && first <= 0xF4) {
             codepoint = first & 0x07;
             count = 4;
         } else {
@@ -141,7 +186,6 @@ static std::u16string utf8ToUtf16(
         bool valid = true;
 
         for (size_t j = 1; j < count; ++j) {
-
             const uint8_t next =
                 static_cast<uint8_t>(input[i + j]);
 
@@ -161,8 +205,7 @@ static std::u16string utf8ToUtf16(
             (count == 3 && codepoint < 0x800) ||
             (count == 4 && codepoint < 0x10000) ||
             codepoint > 0x10FFFF ||
-            (codepoint >= 0xD800 &&
-             codepoint <= 0xDFFF)
+            (codepoint >= 0xD800 && codepoint <= 0xDFFF)
         ) {
             appendUtf16(output, 0xFFFD);
             ++i;
@@ -183,10 +226,18 @@ static jstring makeUtf8Result(
     const std::u16string converted =
         utf8ToUtf16(message);
 
+    if (
+        converted.size() >
+        static_cast<size_t>(std::numeric_limits<jsize>::max())
+    ) {
+        return makeResult(
+            env,
+            "حجم الإجابة أكبر من الحد المسموح."
+        );
+    }
+
     return env->NewString(
-        reinterpret_cast<const jchar*>(
-            converted.data()
-        ),
+        reinterpret_cast<const jchar*>(converted.data()),
         static_cast<jsize>(converted.size())
     );
 }
@@ -196,9 +247,7 @@ static jstring makeUtf8Result(
 // =========================================================
 
 static void releaseContexts() {
-
     for (llama_context* ctx : contexts) {
-
         if (ctx != nullptr) {
             llama_free(ctx);
         }
@@ -208,15 +257,12 @@ static void releaseContexts() {
 }
 
 static void releaseModel() {
-
     releaseContexts();
 
     vocab = nullptr;
 
     if (model != nullptr) {
-
         llama_model_free(model);
-
         model = nullptr;
     }
 }
@@ -241,7 +287,6 @@ static llama_context* createContext(
     uint32_t context_size,
     int threads
 ) {
-
     if (source_model == nullptr) {
         return nullptr;
     }
@@ -249,8 +294,22 @@ static llama_context* createContext(
     llama_context_params params =
         llama_context_default_params();
 
-    params.n_ctx = context_size;
+    // Adapt the requested context to the model's training limit.
+    const uint32_t trained_context =
+        llama_model_n_ctx_train(source_model);
 
+    if (trained_context > 0) {
+        context_size = std::min(
+            context_size,
+            trained_context
+        );
+    }
+
+    if (context_size < 2) {
+        return nullptr;
+    }
+
+    params.n_ctx = context_size;
     params.n_batch = context_size;
 
     params.n_ubatch = std::min(
@@ -268,7 +327,6 @@ static llama_context* createContext(
 }
 
 static bool resetContext(size_t agent_id) {
-
     if (
         agent_id >= contexts.size() ||
         model == nullptr
@@ -276,13 +334,10 @@ static bool resetContext(size_t agent_id) {
         return false;
     }
 
-    llama_context* old_context =
-        contexts[agent_id];
+    llama_context* old_context = contexts[agent_id];
 
     if (old_context != nullptr) {
-
         llama_free(old_context);
-
         contexts[agent_id] = nullptr;
     }
 
@@ -297,14 +352,9 @@ static bool resetContext(size_t agent_id) {
         : AGENT_THREADS;
 
     llama_context* new_context =
-        createContext(
-            model,
-            size,
-            threads
-        );
+        createContext(model, size, threads);
 
     if (new_context == nullptr) {
-
         LOGE(
             "Failed to recreate context for agent %zu",
             agent_id
@@ -327,28 +377,31 @@ static bool formatPrompt(
     const std::string& user_prompt,
     std::string& formatted_prompt
 ) {
-
-    if (source_model == nullptr) {
+    if (source_model == nullptr || user_prompt.empty()) {
         return false;
     }
 
-    // Ask llama.cpp for the model's own chat template.
-    const char* template_text =
-        llama_model_chat_template(
-            source_model,
-            nullptr
-        );
+    // Use the template stored in the model's GGUF metadata.
+    const char* tmpl =
+        llama_model_chat_template(source_model, nullptr);
 
-    // Some completion models do not provide a chat template.
-    // In that case, preserve the user's original prompt
-    // instead of forcing an unrelated ChatML format.
+    // No template usually means a base/completion model.
+    // Never force ChatML onto a model whose format is unknown.
+    if (tmpl == nullptr || tmpl[0] == '\0') {
+        formatted_prompt = user_prompt;
+
+        LOGI("No model chat template; using raw prompt.");
+
+        return true;
+    }
 
     if (
-        template_text == nullptr ||
-        template_text[0] == '\0'
+        user_prompt.size() >
+        static_cast<size_t>(
+            (std::numeric_limits<int32_t>::max() - 1024) / 2
+        )
     ) {
-        formatted_prompt = user_prompt;
-        return !formatted_prompt.empty();
+        return false;
     }
 
     llama_chat_message message;
@@ -356,26 +409,17 @@ static bool formatPrompt(
     message.role = "user";
     message.content = user_prompt.c_str();
 
-    const size_t initial_size =
+    size_t capacity =
         user_prompt.size() * 2 + 1024;
 
-    if (
-        initial_size >
-        static_cast<size_t>(
-            std::numeric_limits<int32_t>::max()
-        )
-    ) {
-        return false;
-    }
-
     std::vector<char> buffer(
-        initial_size,
+        capacity,
         '\0'
     );
 
-    int32_t result =
+    int32_t written =
         llama_chat_apply_template(
-            template_text,
+            tmpl,
             &message,
             1,
             true,
@@ -383,23 +427,18 @@ static bool formatPrompt(
             static_cast<int32_t>(buffer.size())
         );
 
-    // The template may require a larger output buffer.
-    if (result > static_cast<int32_t>(buffer.size())) {
-
-        if (
-            result >=
-            std::numeric_limits<int32_t>::max()
-        ) {
+    if (written > static_cast<int32_t>(buffer.size())) {
+        if (written == INT32_MAX) {
             return false;
         }
 
         buffer.assign(
-            static_cast<size_t>(result) + 1,
+            static_cast<size_t>(written) + 1,
             '\0'
         );
 
-        result = llama_chat_apply_template(
-            template_text,
+        written = llama_chat_apply_template(
+            tmpl,
             &message,
             1,
             true,
@@ -408,29 +447,32 @@ static bool formatPrompt(
         );
     }
 
-    if (result <= 0) {
-
-        LOGE(
-            "Chat template application failed: %d",
-            result
+    if (
+        written > 0 &&
+        static_cast<size_t>(written) < buffer.size()
+    ) {
+        formatted_prompt.assign(
+            buffer.data(),
+            static_cast<size_t>(written)
         );
 
-        return false;
+        if (!formatted_prompt.empty()) {
+            LOGI("Model chat template applied.");
+            return true;
+        }
     }
 
-    if (
-        static_cast<size_t>(result) >=
-        buffer.size()
-    ) {
-        return false;
-    }
-
-    formatted_prompt.assign(
-        buffer.data(),
-        static_cast<size_t>(result)
+    // This llama.cpp build supports a defined subset of templates.
+    // If the model's template is unsupported, raw prompt is safer
+    // than guessing a different format.
+    LOGE(
+        "Chat template failed or is unsupported (%d); using raw prompt.",
+        written
     );
 
-    return !formatted_prompt.empty();
+    formatted_prompt = user_prompt;
+
+    return true;
 }
 
 // =========================================================
@@ -441,7 +483,6 @@ static bool tokenizePrompt(
     const std::string& prompt,
     std::vector<llama_token>& tokens
 ) {
-
     if (vocab == nullptr || prompt.empty()) {
         return false;
     }
@@ -469,10 +510,7 @@ static bool tokenizePrompt(
             true
         );
 
-    if (
-        required >= 0 ||
-        required == INT32_MIN
-    ) {
+    if (required >= 0 || required == INT32_MIN) {
         LOGE(
             "Token count calculation failed: %d",
             required
@@ -512,6 +550,7 @@ static bool tokenizePrompt(
         );
 
         tokens.clear();
+
         return false;
     }
 
@@ -533,7 +572,6 @@ Java_com_monolith_ModelManager_nativeLoadModel(
     jobject,
     jstring modelPath
 ) {
-
     if (modelPath == nullptr) {
         return makeResult(
             env,
@@ -541,32 +579,19 @@ Java_com_monolith_ModelManager_nativeLoadModel(
         );
     }
 
-    const char* path =
-        env->GetStringUTFChars(
-            modelPath,
-            nullptr
-        );
+    std::string native_path =
+        jstringToUtf8(env, modelPath);
 
-    if (path == nullptr) {
+    if (native_path.empty()) {
         return makeResult(
             env,
             "تعذر قراءة مسار النموذج."
         );
     }
 
-    std::string native_path(path);
-
-    env->ReleaseStringUTFChars(
-        modelPath,
-        path
-    );
-
-    std::lock_guard<std::mutex> lock(
-        engine_mutex
-    );
+    std::lock_guard<std::mutex> lock(engine_mutex);
 
     try {
-
         LOGI(
             "Loading model: %s",
             native_path.c_str()
@@ -575,9 +600,7 @@ Java_com_monolith_ModelManager_nativeLoadModel(
         releaseModel();
 
         if (!backend_initialized) {
-
             llama_backend_init();
-
             backend_initialized = true;
         }
 
@@ -590,7 +613,6 @@ Java_com_monolith_ModelManager_nativeLoadModel(
         );
 
         if (model == nullptr) {
-
             LOGE("Model loading failed.");
 
             return makeResult(
@@ -602,7 +624,6 @@ Java_com_monolith_ModelManager_nativeLoadModel(
         vocab = llama_model_get_vocab(model);
 
         if (vocab == nullptr) {
-
             releaseModel();
 
             return makeResult(
@@ -619,7 +640,6 @@ Java_com_monolith_ModelManager_nativeLoadModel(
             );
 
         if (main_context == nullptr) {
-
             releaseModel();
 
             return makeResult(
@@ -628,7 +648,12 @@ Java_com_monolith_ModelManager_nativeLoadModel(
             );
         }
 
-        contexts.push_back(main_context);
+        try {
+            contexts.push_back(main_context);
+        } catch (...) {
+            llama_free(main_context);
+            throw;
+        }
 
         const char* chat_template =
             llama_model_chat_template(
@@ -637,7 +662,7 @@ Java_com_monolith_ModelManager_nativeLoadModel(
             );
 
         LOGI(
-            "Model metadata: context=%d embedding=%d layers=%d",
+            "Model metadata: context=%u embedding=%d layers=%d",
             llama_model_n_ctx_train(model),
             llama_model_n_embd(model),
             llama_model_n_layer(model)
@@ -658,10 +683,7 @@ Java_com_monolith_ModelManager_nativeLoadModel(
         );
 
     } catch (...) {
-
-        LOGE(
-            "Unexpected error during model loading."
-        );
+        LOGE("Unexpected error during model loading.");
 
         releaseModel();
 
@@ -682,20 +704,13 @@ Java_com_monolith_ModelManager_nativeCreateSubAgent(
     JNIEnv*,
     jobject
 ) {
+    std::lock_guard<std::mutex> lock(engine_mutex);
 
-    std::lock_guard<std::mutex> lock(
-        engine_mutex
-    );
-
-    if (
-        model == nullptr ||
-        vocab == nullptr
-    ) {
+    if (model == nullptr || vocab == nullptr) {
         return -1;
     }
 
     try {
-
         llama_context* sub_context =
             createContext(
                 model,
@@ -704,20 +719,19 @@ Java_com_monolith_ModelManager_nativeCreateSubAgent(
             );
 
         if (sub_context == nullptr) {
-
-            LOGE(
-                "Sub-agent context creation failed."
-            );
-
+            LOGE("Sub-agent context creation failed.");
             return -1;
         }
 
-        contexts.push_back(sub_context);
+        try {
+            contexts.push_back(sub_context);
+        } catch (...) {
+            llama_free(sub_context);
+            throw;
+        }
 
         const int agent_id =
-            static_cast<int>(
-                contexts.size() - 1
-            );
+            static_cast<int>(contexts.size() - 1);
 
         LOGI(
             "Sub-agent created: %d",
@@ -727,11 +741,7 @@ Java_com_monolith_ModelManager_nativeCreateSubAgent(
         return agent_id;
 
     } catch (...) {
-
-        LOGE(
-            "Sub-agent creation exception."
-        );
-
+        LOGE("Sub-agent creation exception.");
         return -1;
     }
 }
@@ -745,19 +755,15 @@ static bool decodeGeneratedToken(
     llama_token token,
     int current_position
 ) {
-
     llama_batch batch =
-        llama_batch_init(
-            1,
-            0,
-            1
-        );
+        llama_batch_init(1, 0, 1);
 
     if (
         batch.token == nullptr ||
         batch.pos == nullptr ||
         batch.n_seq_id == nullptr ||
         batch.seq_id == nullptr ||
+        batch.seq_id[0] == nullptr ||
         batch.logits == nullptr
     ) {
         llama_batch_free(batch);
@@ -775,10 +781,7 @@ static bool decodeGeneratedToken(
     batch.logits[0] = true;
 
     const int result =
-        llama_decode(
-            ctx,
-            batch
-        );
+        llama_decode(ctx, batch);
 
     llama_batch_free(batch);
 
@@ -794,7 +797,6 @@ static bool appendTokenPiece(
     llama_token token,
     std::string& output
 ) {
-
     char buffer[256];
 
     int32_t piece_size =
@@ -808,7 +810,6 @@ static bool appendTokenPiece(
         );
 
     if (piece_size > 0) {
-
         output.append(
             buffer,
             static_cast<size_t>(piece_size)
@@ -828,7 +829,6 @@ static bool appendTokenPiece(
     const size_t required =
         static_cast<size_t>(-piece_size);
 
-    // Prevent an unreasonable allocation.
     if (
         required == 0 ||
         required > 1024 * 1024
@@ -836,26 +836,21 @@ static bool appendTokenPiece(
         return false;
     }
 
-    std::vector<char> large_buffer(
-        required
-    );
+    std::vector<char> large_buffer(required);
 
     piece_size =
         llama_token_to_piece(
             source_vocab,
             token,
             large_buffer.data(),
-            static_cast<int32_t>(
-                large_buffer.size()
-            ),
+            static_cast<int32_t>(large_buffer.size()),
             0,
             true
         );
 
     if (
         piece_size <= 0 ||
-        static_cast<size_t>(piece_size) >
-            large_buffer.size()
+        static_cast<size_t>(piece_size) > large_buffer.size()
     ) {
         return false;
     }
@@ -880,7 +875,6 @@ Java_com_monolith_ModelManager_nativeGenerate(
     jstring prompt,
     jint agent_id
 ) {
-
     if (prompt == nullptr) {
         return makeResult(
             env,
@@ -888,25 +882,8 @@ Java_com_monolith_ModelManager_nativeGenerate(
         );
     }
 
-    const char* prompt_chars =
-        env->GetStringUTFChars(
-            prompt,
-            nullptr
-        );
-
-    if (prompt_chars == nullptr) {
-        return makeResult(
-            env,
-            "تعذر قراءة النص."
-        );
-    }
-
-    std::string user_prompt(prompt_chars);
-
-    env->ReleaseStringUTFChars(
-        prompt,
-        prompt_chars
-    );
+    std::string user_prompt =
+        jstringToUtf8(env, prompt);
 
     if (user_prompt.empty()) {
         return makeResult(
@@ -915,14 +892,9 @@ Java_com_monolith_ModelManager_nativeGenerate(
         );
     }
 
-    std::lock_guard<std::mutex> lock(
-        engine_mutex
-    );
+    std::lock_guard<std::mutex> lock(engine_mutex);
 
-    if (
-        model == nullptr ||
-        vocab == nullptr
-    ) {
+    if (model == nullptr || vocab == nullptr) {
         return makeResult(
             env,
             "النموذج غير محمل."
@@ -931,8 +903,7 @@ Java_com_monolith_ModelManager_nativeGenerate(
 
     if (
         agent_id < 0 ||
-        static_cast<size_t>(agent_id) >=
-            contexts.size()
+        static_cast<size_t>(agent_id) >= contexts.size()
     ) {
         return makeResult(
             env,
@@ -941,16 +912,8 @@ Java_com_monolith_ModelManager_nativeGenerate(
     }
 
     try {
-
-        // -------------------------------------------------
-        // Reset Context
-        // -------------------------------------------------
-
-        if (
-            !resetContext(
-                static_cast<size_t>(agent_id)
-            )
-        ) {
+        // Reset context for a clean generation.
+        if (!resetContext(static_cast<size_t>(agent_id))) {
             return makeResult(
                 env,
                 "فشل إعادة تهيئة سياق الوكيل."
@@ -967,8 +930,7 @@ Java_com_monolith_ModelManager_nativeGenerate(
             );
         }
 
-        const uint32_t n_ctx =
-            llama_n_ctx(ctx);
+        const uint32_t n_ctx = llama_n_ctx(ctx);
 
         if (n_ctx < 2) {
             return makeResult(
@@ -977,10 +939,7 @@ Java_com_monolith_ModelManager_nativeGenerate(
             );
         }
 
-        // -------------------------------------------------
-        // Model-Specific Prompt
-        // -------------------------------------------------
-
+        // Model-specific prompt formatting.
         std::string formatted_prompt;
 
         if (
@@ -996,18 +955,10 @@ Java_com_monolith_ModelManager_nativeGenerate(
             );
         }
 
-        // -------------------------------------------------
-        // Tokenization
-        // -------------------------------------------------
-
+        // Tokenization.
         std::vector<llama_token> tokens;
 
-        if (
-            !tokenizePrompt(
-                formatted_prompt,
-                tokens
-            )
-        ) {
+        if (!tokenizePrompt(formatted_prompt, tokens)) {
             return makeResult(
                 env,
                 "فشل تحويل النص إلى رموز."
@@ -1024,26 +975,17 @@ Java_com_monolith_ModelManager_nativeGenerate(
             );
         }
 
-        // -------------------------------------------------
-        // Prompt Evaluation
-        // -------------------------------------------------
-
+        // Evaluate prompt.
         llama_batch prompt_batch =
             llama_batch_get_one(
                 tokens.data(),
-                static_cast<int32_t>(
-                    tokens.size()
-                )
+                static_cast<int32_t>(tokens.size())
             );
 
         const int prompt_result =
-            llama_decode(
-                ctx,
-                prompt_batch
-            );
+            llama_decode(ctx, prompt_batch);
 
         if (prompt_result != 0) {
-
             LOGE(
                 "Prompt decoding failed: %d",
                 prompt_result
@@ -1055,10 +997,7 @@ Java_com_monolith_ModelManager_nativeGenerate(
             );
         }
 
-        // -------------------------------------------------
-        // Sampler Initialization
-        // -------------------------------------------------
-
+        // Initialize sampler.
         SamplerPtr sampler(
             llama_sampler_chain_init(
                 llama_sampler_chain_default_params()
@@ -1082,31 +1021,24 @@ Java_com_monolith_ModelManager_nativeGenerate(
             );
         }
 
-        // The chain takes ownership of the sampler.
+        // Sampler chain takes ownership.
         llama_sampler_chain_add(
             sampler.get(),
             greedy
         );
 
-        // -------------------------------------------------
-        // Generation
-        // -------------------------------------------------
-
+        // Generation loop.
         std::string output;
 
         int current_position =
-            static_cast<int>(
-                tokens.size()
-            );
+            static_cast<int>(tokens.size());
 
         int generated = 0;
 
         while (
             generated < MAX_GENERATION_TOKENS &&
-            current_position <
-                static_cast<int>(n_ctx)
+            current_position < static_cast<int>(n_ctx)
         ) {
-
             const llama_token token =
                 llama_sampler_sample(
                     sampler.get(),
@@ -1114,36 +1046,14 @@ Java_com_monolith_ModelManager_nativeGenerate(
                     -1
                 );
 
-            if (
-                llama_vocab_is_eog(
-                    vocab,
-                    token
-                )
-            ) {
+            if (llama_vocab_is_eog(vocab, token)) {
                 break;
             }
 
-            // ---------------------------------------------
-            // Convert token into UTF-8 text
-            // ---------------------------------------------
-
-            if (
-                !appendTokenPiece(
-                    vocab,
-                    token,
-                    output
-                )
-            ) {
-                LOGE(
-                    "Token-to-piece conversion failed."
-                );
-
+            if (!appendTokenPiece(vocab, token, output)) {
+                LOGE("Token-to-piece conversion failed.");
                 break;
             }
-
-            // ---------------------------------------------
-            // Decode token to obtain next logits
-            // ---------------------------------------------
 
             if (
                 !decodeGeneratedToken(
@@ -1152,11 +1062,7 @@ Java_com_monolith_ModelManager_nativeGenerate(
                     current_position
                 )
             ) {
-
-                LOGE(
-                    "Generated token decoding failed."
-                );
-
+                LOGE("Generated token decoding failed.");
                 break;
             }
 
@@ -1172,23 +1078,16 @@ Java_com_monolith_ModelManager_nativeGenerate(
         );
 
         if (output.empty()) {
-
             return makeResult(
                 env,
                 "لم ينتج النموذج إجابة. تحقق من توافق قالب المحادثة والنموذج."
             );
         }
 
-        return makeUtf8Result(
-            env,
-            output
-        );
+        return makeUtf8Result(env, output);
 
     } catch (...) {
-
-        LOGE(
-            "Unexpected generation exception."
-        );
+        LOGE("Unexpected generation exception.");
 
         return makeResult(
             env,
@@ -1207,27 +1106,18 @@ Java_com_monolith_ModelManager_nativeUnloadModel(
     JNIEnv*,
     jobject
 ) {
+    std::lock_guard<std::mutex> lock(engine_mutex);
 
-    std::lock_guard<std::mutex> lock(
-        engine_mutex
-    );
-
-    LOGI(
-        "Unloading native model."
-    );
+    LOGI("Unloading native model.");
 
     releaseModel();
 
     if (backend_initialized) {
-
         llama_backend_free();
-
         backend_initialized = false;
     }
 
-    LOGI(
-        "Native model unloaded."
-    );
+    LOGI("Native model unloaded.");
 }
 
 } // namespace Monolith
