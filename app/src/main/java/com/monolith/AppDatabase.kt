@@ -1,84 +1,507 @@
+
 package com.monolith
 
 import android.content.ContentValues
 import android.content.Context
+import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import java.util.UUID
 
-class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_database", null, 6) { // تم رفع الإصدار إلى 6
+class AppDatabase(context: Context) : SQLiteOpenHelper(
+    context,
+    "monolith_database",
+    null,
+    7
+) {
+
+    companion object {
+        private const val DB_VERSION = 7
+
+        private fun createCoreTables(db: SQLiteDatabase) {
+
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS messages (
+                    id TEXT PRIMARY KEY,
+                    conversationId TEXT,
+                    senderId TEXT,
+                    role TEXT,
+                    content TEXT,
+                    timestamp INTEGER,
+                    attachmentUris TEXT,
+                    isEncrypted INTEGER,
+                    reactionType TEXT,
+                    reactionColor TEXT,
+                    linkedMessageIds TEXT,
+                    isPinned INTEGER,
+                    pinCategory TEXT,
+                    iconType TEXT,
+                    pathColor TEXT,
+                    uuid TEXT,
+                    modelName TEXT,
+                    isEdited INTEGER,
+                    originalContent TEXT,
+                    editReason TEXT,
+                    editedTimestamp INTEGER
+                )
+            """)
+
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS memories (
+                    id TEXT PRIMARY KEY,
+                    type TEXT,
+                    content TEXT,
+                    timestamp INTEGER,
+                    confidence REAL
+                )
+            """)
+
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS notes (
+                    id TEXT PRIMARY KEY,
+                    title TEXT,
+                    content TEXT,
+                    type TEXT,
+                    timestamp INTEGER,
+                    dueDate INTEGER,
+                    reminderTime INTEGER,
+                    isPinned INTEGER,
+                    colorHex TEXT,
+                    coverPattern TEXT,
+                    coverSticker TEXT
+                )
+            """)
+
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS tags (
+                    id TEXT PRIMARY KEY,
+                    name TEXT
+                )
+            """)
+
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS note_tag_cross_ref (
+                    noteId TEXT,
+                    tagId TEXT,
+                    PRIMARY KEY(noteId, tagId)
+                )
+            """)
+
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS conversations (
+                    id TEXT PRIMARY KEY,
+                    title TEXT,
+                    createdAt INTEGER,
+                    lastModified INTEGER
+                )
+            """)
+
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS user_profile (
+                    id TEXT PRIMARY KEY,
+                    name TEXT,
+                    bio TEXT,
+                    profileImageUri TEXT,
+                    publicKey TEXT,
+                    isCurrentUser INTEGER,
+                    followersCount INTEGER,
+                    followingCount INTEGER
+                )
+            """)
+
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS encrypted_files (
+                    id TEXT PRIMARY KEY,
+                    originalName TEXT,
+                    encryptedPath TEXT,
+                    uniquePasswordEncrypted TEXT,
+                    isSteganography INTEGER,
+                    carrierImagePath TEXT,
+                    fileSize INTEGER,
+                    dateEncrypted INTEGER
+                )
+            """)
+
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS virtual_albums (
+                    id TEXT PRIMARY KEY,
+                    name TEXT,
+                    coverUri TEXT,
+                    createdAt INTEGER,
+                    isVault INTEGER,
+                    sortOrder INTEGER
+                )
+            """)
+
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS album_media_cross_ref (
+                    albumId TEXT,
+                    mediaUri TEXT,
+                    PRIMARY KEY(albumId, mediaUri)
+                )
+            """)
+        }
+
+        private fun createAgentTables(db: SQLiteDatabase) {
+
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS skills (
+                    id TEXT PRIMARY KEY,
+                    name TEXT,
+                    description TEXT,
+                    action_json TEXT,
+                    success_count INTEGER,
+                    timestamp INTEGER
+                )
+            """)
+
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS blind_spots (
+                    id TEXT PRIMARY KEY,
+                    x INTEGER,
+                    y INTEGER,
+                    width INTEGER,
+                    height INTEGER,
+                    context TEXT,
+                    confidence REAL,
+                    timestamp INTEGER
+                )
+            """)
+
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS code_vault (
+                    id TEXT PRIMARY KEY,
+                    file_name TEXT,
+                    content TEXT,
+                    version INTEGER,
+                    timestamp INTEGER
+                )
+            """)
+
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS audio_memory (
+                    id TEXT PRIMARY KEY,
+                    file_path TEXT,
+                    transcription TEXT,
+                    duration INTEGER,
+                    timestamp INTEGER
+                )
+            """)
+
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS file_memory (
+                    id TEXT PRIMARY KEY,
+                    file_path TEXT,
+                    file_type TEXT,
+                    description TEXT,
+                    timestamp INTEGER
+                )
+            """)
+
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS chromatic_nodes (
+                    id TEXT PRIMARY KEY,
+                    color_hex TEXT,
+                    name TEXT,
+                    definition TEXT,
+                    timestamp INTEGER
+                )
+            """)
+
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS message_threads (
+                    id TEXT PRIMARY KEY,
+                    source_msg_id TEXT,
+                    target_msg_id TEXT,
+                    node_id TEXT,
+                    timestamp INTEGER
+                )
+            """)
+
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS thread_annotations (
+                    id TEXT PRIMARY KEY,
+                    thread_id TEXT,
+                    content TEXT,
+                    timestamp INTEGER
+                )
+            """)
+
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS agent_lifecycle_log (
+                    id TEXT PRIMARY KEY,
+                    event_type TEXT,
+                    reason TEXT,
+                    timestamp INTEGER,
+                    duration_active INTEGER
+                )
+            """)
+
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS agent_performance_log (
+                    id TEXT PRIMARY KEY,
+                    goal TEXT,
+                    status TEXT,
+                    steps_taken INTEGER,
+                    latency_ms INTEGER,
+                    self_rating INTEGER,
+                    reflection_note TEXT,
+                    suggested_solution TEXT,
+                    timestamp INTEGER
+                )
+            """)
+
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS agent_task_queue (
+                    id TEXT PRIMARY KEY,
+                    task_goal TEXT,
+                    current_step INTEGER,
+                    status TEXT,
+                    timestamp INTEGER
+                )
+            """)
+
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS agent_tasks (
+                    id TEXT PRIMARY KEY,
+                    parent_task_id TEXT,
+                    task_type TEXT,
+                    goal TEXT,
+                    status TEXT,
+                    priority TEXT,
+                    payload TEXT,
+                    result TEXT,
+                    timestamp INTEGER,
+                    updated_at INTEGER
+                )
+            """)
+        }
+
+        private fun createMessageArchitecture(db: SQLiteDatabase) {
+
+            // Extended message metadata without changing legacy messages.
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS message_runtime_metadata (
+                    message_id TEXT PRIMARY KEY,
+                    thread_id TEXT,
+                    parent_message_id TEXT,
+                    reply_to_message_id TEXT,
+                    branch_id TEXT,
+                    branch_index INTEGER DEFAULT 0,
+                    status TEXT DEFAULT 'NORMAL',
+                    is_streaming INTEGER DEFAULT 0,
+                    generation_started_at INTEGER,
+                    generation_completed_at INTEGER,
+                    generation_duration_ms INTEGER,
+                    error_message TEXT,
+                    model_id TEXT,
+                    model_provider TEXT,
+                    input_tokens INTEGER,
+                    output_tokens INTEGER,
+                    total_tokens INTEGER,
+                    metadata_json TEXT,
+                    FOREIGN KEY(message_id) REFERENCES messages(id)
+                        ON DELETE CASCADE
+                )
+            """)
+
+            // Explicit relationships between messages.
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS message_relations (
+                    id TEXT PRIMARY KEY,
+                    source_message_id TEXT NOT NULL,
+                    target_message_id TEXT NOT NULL,
+                    relation_kind TEXT NOT NULL,
+                    label TEXT,
+                    is_directed INTEGER DEFAULT 1,
+                    created_at INTEGER NOT NULL,
+                    UNIQUE(source_message_id, target_message_id, relation_kind),
+                    FOREIGN KEY(source_message_id) REFERENCES messages(id)
+                        ON DELETE CASCADE,
+                    FOREIGN KEY(target_message_id) REFERENCES messages(id)
+                        ON DELETE CASCADE
+                )
+            """)
+
+            // Conversation branches.
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS message_branches (
+                    id TEXT PRIMARY KEY,
+                    conversation_id TEXT,
+                    parent_message_id TEXT,
+                    branch_name TEXT,
+                    branch_index INTEGER DEFAULT 0,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                )
+            """)
+
+            // Tool execution history.
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS message_tool_executions (
+                    id TEXT PRIMARY KEY,
+                    message_id TEXT NOT NULL,
+                    tool_name TEXT NOT NULL,
+                    description TEXT,
+                    state TEXT NOT NULL,
+                    result TEXT,
+                    error TEXT,
+                    started_at INTEGER,
+                    completed_at INTEGER,
+                    duration_ms INTEGER,
+                    FOREIGN KEY(message_id) REFERENCES messages(id)
+                        ON DELETE CASCADE
+                )
+            """)
+
+            // Generation events and progress.
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS message_generation_events (
+                    id TEXT PRIMARY KEY,
+                    message_id TEXT NOT NULL,
+                    event_type TEXT NOT NULL,
+                    event_data TEXT,
+                    timestamp INTEGER NOT NULL,
+                    FOREIGN KEY(message_id) REFERENCES messages(id)
+                        ON DELETE CASCADE
+                )
+            """)
+
+            // Indexes for frequently accessed relationships.
+            db.execSQL("""
+                CREATE INDEX IF NOT EXISTS idx_messages_conversation
+                ON messages(conversationId, timestamp)
+            """)
+
+            db.execSQL("""
+                CREATE INDEX IF NOT EXISTS idx_message_relations_source
+                ON message_relations(source_message_id)
+            """)
+
+            db.execSQL("""
+                CREATE INDEX IF NOT EXISTS idx_message_relations_target
+                ON message_relations(target_message_id)
+            """)
+
+            db.execSQL("""
+                CREATE INDEX IF NOT EXISTS idx_message_runtime_thread
+                ON message_runtime_metadata(thread_id)
+            """)
+
+            db.execSQL("""
+                CREATE INDEX IF NOT EXISTS idx_tool_message
+                ON message_tool_executions(message_id)
+            """)
+
+            db.execSQL("""
+                CREATE INDEX IF NOT EXISTS idx_agent_tasks_status
+                ON agent_tasks(status, task_type)
+            """)
+        }
+    }
+
+    // =========================================================
+    // DATABASE LIFECYCLE
+    // =========================================================
+
+    override fun onConfigure(db: SQLiteDatabase) {
+        super.onConfigure(db)
+        db.setForeignKeyConstraintsEnabled(true)
+    }
 
     override fun onCreate(db: SQLiteDatabase) {
-        // الجداول القديمة (من الإصدار 1)
-        db.execSQL("CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, conversationId TEXT, senderId TEXT, role TEXT, content TEXT, timestamp INTEGER, attachmentUris TEXT, isEncrypted INTEGER, reactionType TEXT, reactionColor TEXT, linkedMessageIds TEXT, isPinned INTEGER, pinCategory TEXT, iconType TEXT, pathColor TEXT, uuid TEXT, modelName TEXT, isEdited INTEGER, originalContent TEXT, editReason TEXT, editedTimestamp INTEGER)")
-        db.execSQL("CREATE TABLE IF NOT EXISTS memories (id TEXT PRIMARY KEY, type TEXT, content TEXT, timestamp INTEGER, confidence REAL)")
-        db.execSQL("CREATE TABLE IF NOT EXISTS notes (id TEXT PRIMARY KEY, title TEXT, content TEXT, type TEXT, timestamp INTEGER, dueDate INTEGER, reminderTime INTEGER, isPinned INTEGER, colorHex TEXT, coverPattern TEXT, coverSticker TEXT)")
-        db.execSQL("CREATE TABLE IF NOT EXISTS tags (id TEXT PRIMARY KEY, name TEXT)")
-        db.execSQL("CREATE TABLE IF NOT EXISTS note_tag_cross_ref (noteId TEXT, tagId TEXT, PRIMARY KEY(noteId, tagId))")
-        db.execSQL("CREATE TABLE IF NOT EXISTS conversations (id TEXT PRIMARY KEY, title TEXT, createdAt INTEGER, lastModified INTEGER)")
-        db.execSQL("CREATE TABLE IF NOT EXISTS user_profile (id TEXT PRIMARY KEY, name TEXT, bio TEXT, profileImageUri TEXT, publicKey TEXT, isCurrentUser INTEGER, followersCount INTEGER, followingCount INTEGER)")
-        db.execSQL("CREATE TABLE IF NOT EXISTS encrypted_files (id TEXT PRIMARY KEY, originalName TEXT, encryptedPath TEXT, uniquePasswordEncrypted TEXT, isSteganography INTEGER, carrierImagePath TEXT, fileSize INTEGER, dateEncrypted INTEGER)")
-        db.execSQL("CREATE TABLE IF NOT EXISTS virtual_albums (id TEXT PRIMARY KEY, name TEXT, coverUri TEXT, createdAt INTEGER, isVault INTEGER, sortOrder INTEGER)")
-        db.execSQL("CREATE TABLE IF NOT EXISTS album_media_cross_ref (albumId TEXT, mediaUri TEXT, PRIMARY KEY(albumId, mediaUri))")
-
-        // الجداول الجديدة (من الإصدار 2)
-        db.execSQL("CREATE TABLE IF NOT EXISTS skills (id TEXT PRIMARY KEY, name TEXT, description TEXT, action_json TEXT, success_count INTEGER, timestamp INTEGER)")
-        db.execSQL("CREATE TABLE IF NOT EXISTS blind_spots (id TEXT PRIMARY KEY, x INTEGER, y INTEGER, width INTEGER, height INTEGER, context TEXT, confidence REAL, timestamp INTEGER)")
-        db.execSQL("CREATE TABLE IF NOT EXISTS code_vault (id TEXT PRIMARY KEY, file_name TEXT, content TEXT, version INTEGER, timestamp INTEGER)")
-        db.execSQL("CREATE TABLE IF NOT EXISTS audio_memory (id TEXT PRIMARY KEY, file_path TEXT, transcription TEXT, duration INTEGER, timestamp INTEGER)")
-        db.execSQL("CREATE TABLE IF NOT EXISTS file_memory (id TEXT PRIMARY KEY, file_path TEXT, file_type TEXT, description TEXT, timestamp INTEGER)")
-
-        // الجداول الجديدة (الإصدار 3 - الخيوط اللونية)
-        db.execSQL("CREATE TABLE IF NOT EXISTS chromatic_nodes (id TEXT PRIMARY KEY, color_hex TEXT, name TEXT, definition TEXT, timestamp INTEGER)")
-        db.execSQL("CREATE TABLE IF NOT EXISTS message_threads (id TEXT PRIMARY KEY, source_msg_id TEXT, target_msg_id TEXT, node_id TEXT, timestamp INTEGER)")
-        db.execSQL("CREATE TABLE IF NOT EXISTS thread_annotations (id TEXT PRIMARY KEY, thread_id TEXT, content TEXT, timestamp INTEGER)")
-
-        // الجداول الجديدة (الإصدار 4 - تتبع حياة الوكيل وتقييم الأداء)
-        db.execSQL("CREATE TABLE IF NOT EXISTS agent_lifecycle_log (id TEXT PRIMARY KEY, event_type TEXT, reason TEXT, timestamp INTEGER, duration_active INTEGER)")
-        db.execSQL("CREATE TABLE IF NOT EXISTS agent_performance_log (id TEXT PRIMARY KEY, goal TEXT, status TEXT, steps_taken INTEGER, latency_ms INTEGER, self_rating INTEGER, reflection_note TEXT, suggested_solution TEXT, timestamp INTEGER)")
-
-        // الجداول الجديدة (الإصدار 5 - استكمال المهام)
-        db.execSQL("CREATE TABLE IF NOT EXISTS agent_task_queue (id TEXT PRIMARY KEY, task_goal TEXT, current_step INTEGER, status TEXT, timestamp INTEGER)")
-
-        // الجداول الجديدة (الإصدار 6 - مدير المهام المتوازية)
-        db.execSQL("CREATE TABLE IF NOT EXISTS agent_tasks (id TEXT PRIMARY KEY, parent_task_id TEXT, task_type TEXT, goal TEXT, status TEXT, priority TEXT, payload TEXT, result TEXT, timestamp INTEGER, updated_at INTEGER)")
-    }
-
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // هجرة آمنة للإصدار 2 (بدون حذف بيانات)
-        if (oldVersion < 2) {
-            db.execSQL("CREATE TABLE IF NOT EXISTS skills (id TEXT PRIMARY KEY, name TEXT, description TEXT, action_json TEXT, success_count INTEGER, timestamp INTEGER)")
-            db.execSQL("CREATE TABLE IF NOT EXISTS blind_spots (id TEXT PRIMARY KEY, x INTEGER, y INTEGER, width INTEGER, height INTEGER, context TEXT, confidence REAL, timestamp INTEGER)")
-            db.execSQL("CREATE TABLE IF NOT EXISTS code_vault (id TEXT PRIMARY KEY, file_name TEXT, content TEXT, version INTEGER, timestamp INTEGER)")
-            db.execSQL("CREATE TABLE IF NOT EXISTS audio_memory (id TEXT PRIMARY KEY, file_path TEXT, transcription TEXT, duration INTEGER, timestamp INTEGER)")
-            db.execSQL("CREATE TABLE IF NOT EXISTS file_memory (id TEXT PRIMARY KEY, file_path TEXT, file_type TEXT, description TEXT, timestamp INTEGER)")
-        }
-        // هجرة آمنة للإصدار 3 (بدون حذف بيانات)
-        if (oldVersion < 3) {
-            db.execSQL("CREATE TABLE IF NOT EXISTS chromatic_nodes (id TEXT PRIMARY KEY, color_hex TEXT, name TEXT, definition TEXT, timestamp INTEGER)")
-            db.execSQL("CREATE TABLE IF NOT EXISTS message_threads (id TEXT PRIMARY KEY, source_msg_id TEXT, target_msg_id TEXT, node_id TEXT, timestamp INTEGER)")
-            db.execSQL("CREATE TABLE IF NOT EXISTS thread_annotations (id TEXT PRIMARY KEY, thread_id TEXT, content TEXT, timestamp INTEGER)")
-        }
-        // هجرة آمنة للإصدار 4 (بدون حذف بيانات)
-        if (oldVersion < 4) {
-            db.execSQL("CREATE TABLE IF NOT EXISTS agent_lifecycle_log (id TEXT PRIMARY KEY, event_type TEXT, reason TEXT, timestamp INTEGER, duration_active INTEGER)")
-            db.execSQL("CREATE TABLE IF NOT EXISTS agent_performance_log (id TEXT PRIMARY KEY, goal TEXT, status TEXT, steps_taken INTEGER, latency_ms INTEGER, self_rating INTEGER, reflection_note TEXT, suggested_solution TEXT, timestamp INTEGER)")
-        }
-        // هجرة آمنة للإصدار 5 (بدون حذف بيانات)
-        if (oldVersion < 5) {
-            db.execSQL("CREATE TABLE IF NOT EXISTS agent_task_queue (id TEXT PRIMARY KEY, task_goal TEXT, current_step INTEGER, status TEXT, timestamp INTEGER)")
-        }
-        // هجرة آمنة للإصدار 6 (بدون حذف بيانات)
-        if (oldVersion < 6) {
-            db.execSQL("CREATE TABLE IF NOT EXISTS agent_tasks (id TEXT PRIMARY KEY, parent_task_id TEXT, task_type TEXT, goal TEXT, status TEXT, priority TEXT, payload TEXT, result TEXT, timestamp INTEGER, updated_at INTEGER)")
+        db.beginTransaction()
+        try {
+            createCoreTables(db)
+            createAgentTables(db)
+            createMessageArchitecture(db)
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
         }
     }
 
-    // ==========================================
-    // الدوال القديمة (لم يتم تغييرها إطلاقاً)
-    // ==========================================
+    override fun onUpgrade(
+        db: SQLiteDatabase,
+        oldVersion: Int,
+        newVersion: Int
+    ) {
+        db.beginTransaction()
+        try {
+            if (oldVersion < 2) {
+                createAgentTables(db)
+            } else {
+                createAgentTables(db)
+            }
+
+            if (oldVersion < 3) {
+                createMessageArchitecture(db)
+            } else if (oldVersion < 7) {
+                createMessageArchitecture(db)
+            }
+
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    // =========================================================
+    // INTERNAL HELPERS
+    // =========================================================
+
+    private fun insertReplace(
+        table: String,
+        values: ContentValues
+    ): Long {
+        return writableDatabase.insertWithOnConflict(
+            table,
+            null,
+            values,
+            SQLiteDatabase.CONFLICT_REPLACE
+        )
+    }
+
+    private fun queryMaps(
+        sql: String,
+        args: Array<String>? = null
+    ): List<Map<String, String>> {
+        val result = mutableListOf<Map<String, String>>()
+        val db = readableDatabase
+
+        db.rawQuery(sql, args).use { cursor ->
+            while (cursor.moveToNext()) {
+                val map = mutableMapOf<String, String>()
+
+                for (i in 0 until cursor.columnCount) {
+                    if (!cursor.isNull(i)) {
+                        map[cursor.getColumnName(i)] =
+                            cursor.getString(i)
+                    }
+                }
+
+                result.add(map)
+            }
+        }
+
+        return result
+    }
+
+    private fun cursorString(
+        cursor: Cursor,
+        column: String
+    ): String? {
+        val index = cursor.getColumnIndex(column)
+        return if (index >= 0 && !cursor.isNull(index)) {
+            cursor.getString(index)
+        } else null
+    }
+
+    // =========================================================
+    // MESSAGES - LEGACY API
+    // =========================================================
+
     fun insertMessage(message: MessageEntity) {
-        val db = writableDatabase
         val values = ContentValues().apply {
             put("id", message.id)
             put("conversationId", message.conversationId)
@@ -102,84 +525,77 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
             put("editReason", message.editReason)
             put("editedTimestamp", message.editedTimestamp)
         }
-        db.insertWithOnConflict("messages", null, values, SQLiteDatabase.CONFLICT_REPLACE)
-        db.close()
+
+        insertReplace("messages", values)
     }
 
-    fun getMessagesForConversation(conversationId: String): List<MessageEntity> {
-        val db = readableDatabase
-        val cursor = db.rawQuery("SELECT * FROM messages WHERE conversationId = ? ORDER BY timestamp ASC", arrayOf(conversationId))
+    private fun readMessage(cursor: Cursor): MessageEntity {
+        return MessageEntity(
+            id = cursor.getString(cursor.getColumnIndexOrThrow("id")),
+            conversationId = cursor.getString(cursor.getColumnIndexOrThrow("conversationId")),
+            senderId = cursor.getString(cursor.getColumnIndexOrThrow("senderId")),
+            role = cursor.getString(cursor.getColumnIndexOrThrow("role")),
+            content = cursor.getString(cursor.getColumnIndexOrThrow("content")),
+            timestamp = cursor.getLong(cursor.getColumnIndexOrThrow("timestamp")),
+            attachmentUris = cursor.getString(cursor.getColumnIndexOrThrow("attachmentUris")),
+            isEncrypted = cursor.getInt(cursor.getColumnIndexOrThrow("isEncrypted")) == 1,
+            reactionType = cursor.getString(cursor.getColumnIndexOrThrow("reactionType")),
+            reactionColor = cursor.getString(cursor.getColumnIndexOrThrow("reactionColor")),
+            linkedMessageIds = cursor.getString(cursor.getColumnIndexOrThrow("linkedMessageIds")),
+            isPinned = cursor.getInt(cursor.getColumnIndexOrThrow("isPinned")) == 1,
+            pinCategory = cursor.getString(cursor.getColumnIndexOrThrow("pinCategory")),
+            iconType = cursor.getString(cursor.getColumnIndexOrThrow("iconType")),
+            pathColor = cursor.getString(cursor.getColumnIndexOrThrow("pathColor")),
+            uuid = cursor.getString(cursor.getColumnIndexOrThrow("uuid")),
+            modelName = cursor.getString(cursor.getColumnIndexOrThrow("modelName")),
+            isEdited = cursor.getInt(cursor.getColumnIndexOrThrow("isEdited")) == 1,
+            originalContent = cursor.getString(cursor.getColumnIndexOrThrow("originalContent")),
+            editReason = cursor.getString(cursor.getColumnIndexOrThrow("editReason")),
+            editedTimestamp = cursor.getLong(cursor.getColumnIndexOrThrow("editedTimestamp"))
+        )
+    }
+
+    fun getMessagesForConversation(
+        conversationId: String
+    ): List<MessageEntity> {
         val list = mutableListOf<MessageEntity>()
-        if (cursor.moveToFirst()) {
-            do {
-                list.add(MessageEntity(
-                    id = cursor.getString(cursor.getColumnIndexOrThrow("id")),
-                    conversationId = cursor.getString(cursor.getColumnIndexOrThrow("conversationId")),
-                    senderId = cursor.getString(cursor.getColumnIndexOrThrow("senderId")),
-                    role = cursor.getString(cursor.getColumnIndexOrThrow("role")),
-                    content = cursor.getString(cursor.getColumnIndexOrThrow("content")),
-                    timestamp = cursor.getLong(cursor.getColumnIndexOrThrow("timestamp")),
-                    attachmentUris = cursor.getString(cursor.getColumnIndexOrThrow("attachmentUris")),
-                    isEncrypted = cursor.getInt(cursor.getColumnIndexOrThrow("isEncrypted")) == 1,
-                    reactionType = cursor.getString(cursor.getColumnIndexOrThrow("reactionType")),
-                    reactionColor = cursor.getString(cursor.getColumnIndexOrThrow("reactionColor")),
-                    linkedMessageIds = cursor.getString(cursor.getColumnIndexOrThrow("linkedMessageIds")),
-                    isPinned = cursor.getInt(cursor.getColumnIndexOrThrow("isPinned")) == 1,
-                    pinCategory = cursor.getString(cursor.getColumnIndexOrThrow("pinCategory")),
-                    iconType = cursor.getString(cursor.getColumnIndexOrThrow("iconType")),
-                    pathColor = cursor.getString(cursor.getColumnIndexOrThrow("pathColor")),
-                    uuid = cursor.getString(cursor.getColumnIndexOrThrow("uuid")),
-                    modelName = cursor.getString(cursor.getColumnIndexOrThrow("modelName")),
-                    isEdited = cursor.getInt(cursor.getColumnIndexOrThrow("isEdited")) == 1,
-                    originalContent = cursor.getString(cursor.getColumnIndexOrThrow("originalContent")),
-                    editReason = cursor.getString(cursor.getColumnIndexOrThrow("editReason")),
-                    editedTimestamp = cursor.getLong(cursor.getColumnIndexOrThrow("editedTimestamp"))
-                ))
-            } while (cursor.moveToNext())
+
+        readableDatabase.rawQuery(
+            "SELECT * FROM messages WHERE conversationId = ? ORDER BY timestamp ASC",
+            arrayOf(conversationId)
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                list.add(readMessage(cursor))
+            }
         }
-        cursor.close()
-        db.close()
+
         return list
     }
 
-    fun getPinnedMessages(conversationId: String): List<MessageEntity> {
-        val db = readableDatabase
-        val cursor = db.rawQuery("SELECT * FROM messages WHERE conversationId = ? AND isPinned = 1 ORDER BY timestamp DESC", arrayOf(conversationId))
+    fun getPinnedMessages(
+        conversationId: String
+    ): List<MessageEntity> {
         val list = mutableListOf<MessageEntity>()
-        if (cursor.moveToFirst()) {
-            do {
-                list.add(MessageEntity(
-                    id = cursor.getString(cursor.getColumnIndexOrThrow("id")),
-                    conversationId = cursor.getString(cursor.getColumnIndexOrThrow("conversationId")),
-                    senderId = cursor.getString(cursor.getColumnIndexOrThrow("senderId")),
-                    role = cursor.getString(cursor.getColumnIndexOrThrow("role")),
-                    content = cursor.getString(cursor.getColumnIndexOrThrow("content")),
-                    timestamp = cursor.getLong(cursor.getColumnIndexOrThrow("timestamp")),
-                    attachmentUris = cursor.getString(cursor.getColumnIndexOrThrow("attachmentUris")),
-                    isEncrypted = cursor.getInt(cursor.getColumnIndexOrThrow("isEncrypted")) == 1,
-                    reactionType = cursor.getString(cursor.getColumnIndexOrThrow("reactionType")),
-                    reactionColor = cursor.getString(cursor.getColumnIndexOrThrow("reactionColor")),
-                    linkedMessageIds = cursor.getString(cursor.getColumnIndexOrThrow("linkedMessageIds")),
-                    isPinned = cursor.getInt(cursor.getColumnIndexOrThrow("isPinned")) == 1,
-                    pinCategory = cursor.getString(cursor.getColumnIndexOrThrow("pinCategory")),
-                    iconType = cursor.getString(cursor.getColumnIndexOrThrow("iconType")),
-                    pathColor = cursor.getString(cursor.getColumnIndexOrThrow("pathColor")),
-                    uuid = cursor.getString(cursor.getColumnIndexOrThrow("uuid")),
-                    modelName = cursor.getString(cursor.getColumnIndexOrThrow("modelName")),
-                    isEdited = cursor.getInt(cursor.getColumnIndexOrThrow("isEdited")) == 1,
-                    originalContent = cursor.getString(cursor.getColumnIndexOrThrow("originalContent")),
-                    editReason = cursor.getString(cursor.getColumnIndexOrThrow("editReason")),
-                    editedTimestamp = cursor.getLong(cursor.getColumnIndexOrThrow("editedTimestamp"))
-                ))
-            } while (cursor.moveToNext())
+
+        readableDatabase.rawQuery(
+            "SELECT * FROM messages WHERE conversationId = ? AND isPinned = 1 ORDER BY timestamp DESC",
+            arrayOf(conversationId)
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                list.add(readMessage(cursor))
+            }
         }
-        cursor.close()
-        db.close()
+
         return list
     }
 
-    fun updateMessageContent(messageId: String, newContent: String, originalContent: String, reason: String?, timestamp: Long) {
-        val db = writableDatabase
+    fun updateMessageContent(
+        messageId: String,
+        newContent: String,
+        originalContent: String,
+        reason: String?,
+        timestamp: Long
+    ) {
         val values = ContentValues().apply {
             put("content", newContent)
             put("isEdited", 1)
@@ -187,22 +603,356 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
             put("editReason", reason)
             put("editedTimestamp", timestamp)
         }
-        db.update("messages", values, "id = ?", arrayOf(messageId))
-        db.close()
+
+        writableDatabase.update(
+            "messages",
+            values,
+            "id = ?",
+            arrayOf(messageId)
+        )
     }
 
-    fun updatePinnedStatus(messageId: String, isPinned: Boolean, category: String?) {
-        val db = writableDatabase
+    fun updatePinnedStatus(
+        messageId: String,
+        isPinned: Boolean,
+        category: String?
+    ) {
         val values = ContentValues().apply {
             put("isPinned", if (isPinned) 1 else 0)
             put("pinCategory", category)
         }
-        db.update("messages", values, "id = ?", arrayOf(messageId))
-        db.close()
+
+        writableDatabase.update(
+            "messages",
+            values,
+            "id = ?",
+            arrayOf(messageId)
+        )
     }
 
+    // =========================================================
+    // MESSAGE RUNTIME METADATA
+    // =========================================================
+
+    fun saveMessageRuntimeMetadata(
+        messageId: String,
+        threadId: String? = null,
+        parentMessageId: String? = null,
+        replyToMessageId: String? = null,
+        branchId: String? = null,
+        branchIndex: Int = 0,
+        status: String = "NORMAL",
+        isStreaming: Boolean = false,
+        generationStartedAt: Long? = null,
+        generationCompletedAt: Long? = null,
+        generationDurationMs: Long? = null,
+        errorMessage: String? = null,
+        modelId: String? = null,
+        modelProvider: String? = null,
+        inputTokens: Int? = null,
+        outputTokens: Int? = null,
+        totalTokens: Int? = null,
+        metadataJson: String? = null
+    ) {
+        val values = ContentValues().apply {
+            put("message_id", messageId)
+            put("thread_id", threadId)
+            put("parent_message_id", parentMessageId)
+            put("reply_to_message_id", replyToMessageId)
+            put("branch_id", branchId)
+            put("branch_index", branchIndex)
+            put("status", status)
+            put("is_streaming", if (isStreaming) 1 else 0)
+            put("generation_started_at", generationStartedAt)
+            put("generation_completed_at", generationCompletedAt)
+            put("generation_duration_ms", generationDurationMs)
+            put("error_message", errorMessage)
+            put("model_id", modelId)
+            put("model_provider", modelProvider)
+            put("input_tokens", inputTokens)
+            put("output_tokens", outputTokens)
+            put("total_tokens", totalTokens)
+            put("metadata_json", metadataJson)
+        }
+
+        insertReplace("message_runtime_metadata", values)
+    }
+
+    fun getMessageRuntimeMetadata(
+        messageId: String
+    ): Map<String, String>? {
+        return queryMaps(
+            "SELECT * FROM message_runtime_metadata WHERE message_id = ?",
+            arrayOf(messageId)
+        ).firstOrNull()
+    }
+
+    fun deleteMessageRuntimeMetadata(messageId: String) {
+        writableDatabase.delete(
+            "message_runtime_metadata",
+            "message_id = ?",
+            arrayOf(messageId)
+        )
+    }
+
+    // =========================================================
+    // MESSAGE RELATIONSHIPS
+    // =========================================================
+
+    fun insertMessageRelation(
+        sourceMessageId: String,
+        targetMessageId: String,
+        relationKind: String,
+        label: String? = null,
+        isDirected: Boolean = true,
+        id: String = UUID.randomUUID().toString()
+    ): String {
+        val values = ContentValues().apply {
+            put("id", id)
+            put("source_message_id", sourceMessageId)
+            put("target_message_id", targetMessageId)
+            put("relation_kind", relationKind)
+            put("label", label)
+            put("is_directed", if (isDirected) 1 else 0)
+            put("created_at", System.currentTimeMillis())
+        }
+
+        writableDatabase.insertWithOnConflict(
+            "message_relations",
+            null,
+            values,
+            SQLiteDatabase.CONFLICT_REPLACE
+        )
+
+        return id
+    }
+
+    fun getRelationsForMessage(
+        messageId: String
+    ): List<Map<String, String>> {
+        return queryMaps(
+            """
+            SELECT * FROM message_relations
+            WHERE source_message_id = ? OR target_message_id = ?
+            ORDER BY created_at ASC
+            """.trimIndent(),
+            arrayOf(messageId, messageId)
+        )
+    }
+
+    fun getOutgoingRelations(
+        messageId: String
+    ): List<Map<String, String>> {
+        return queryMaps(
+            """
+            SELECT * FROM message_relations
+            WHERE source_message_id = ?
+            ORDER BY created_at ASC
+            """.trimIndent(),
+            arrayOf(messageId)
+        )
+    }
+
+    fun deleteMessageRelation(relationId: String) {
+        writableDatabase.delete(
+            "message_relations",
+            "id = ?",
+            arrayOf(relationId)
+        )
+    }
+
+    fun deleteRelationsForMessage(messageId: String) {
+        writableDatabase.delete(
+            "message_relations",
+            "source_message_id = ? OR target_message_id = ?",
+            arrayOf(messageId, messageId)
+        )
+    }
+
+    // =========================================================
+    // MESSAGE BRANCHES
+    // =========================================================
+
+    fun createMessageBranch(
+        conversationId: String?,
+        parentMessageId: String?,
+        branchName: String?,
+        branchIndex: Int = 0
+    ): String {
+        val id = UUID.randomUUID().toString()
+        val now = System.currentTimeMillis()
+
+        val values = ContentValues().apply {
+            put("id", id)
+            put("conversation_id", conversationId)
+            put("parent_message_id", parentMessageId)
+            put("branch_name", branchName)
+            put("branch_index", branchIndex)
+            put("created_at", now)
+            put("updated_at", now)
+        }
+
+        insertReplace("message_branches", values)
+        return id
+    }
+
+    fun getBranchesForConversation(
+        conversationId: String
+    ): List<Map<String, String>> {
+        return queryMaps(
+            """
+            SELECT * FROM message_branches
+            WHERE conversation_id = ?
+            ORDER BY created_at ASC
+            """.trimIndent(),
+            arrayOf(conversationId)
+        )
+    }
+
+    fun updateBranchName(
+        branchId: String,
+        name: String
+    ) {
+        val values = ContentValues().apply {
+            put("branch_name", name)
+            put("updated_at", System.currentTimeMillis())
+        }
+
+        writableDatabase.update(
+            "message_branches",
+            values,
+            "id = ?",
+            arrayOf(branchId)
+        )
+    }
+
+    fun deleteMessageBranch(branchId: String) {
+        writableDatabase.delete(
+            "message_branches",
+            "id = ?",
+            arrayOf(branchId)
+        )
+    }
+
+    // =========================================================
+    // TOOL EXECUTIONS
+    // =========================================================
+
+    fun insertToolExecution(
+        messageId: String,
+        toolName: String,
+        description: String? = null,
+        state: String = "QUEUED",
+        result: String? = null,
+        error: String? = null,
+        startedAt: Long? = null,
+        completedAt: Long? = null,
+        durationMs: Long? = null,
+        id: String = UUID.randomUUID().toString()
+    ): String {
+        val values = ContentValues().apply {
+            put("id", id)
+            put("message_id", messageId)
+            put("tool_name", toolName)
+            put("description", description)
+            put("state", state)
+            put("result", result)
+            put("error", error)
+            put("started_at", startedAt)
+            put("completed_at", completedAt)
+            put("duration_ms", durationMs)
+        }
+
+        insertReplace("message_tool_executions", values)
+        return id
+    }
+
+    fun updateToolExecution(
+        executionId: String,
+        state: String,
+        result: String? = null,
+        error: String? = null,
+        completedAt: Long? = null,
+        durationMs: Long? = null
+    ) {
+        val values = ContentValues().apply {
+            put("state", state)
+            put("result", result)
+            put("error", error)
+            put("completed_at", completedAt)
+            put("duration_ms", durationMs)
+        }
+
+        writableDatabase.update(
+            "message_tool_executions",
+            values,
+            "id = ?",
+            arrayOf(executionId)
+        )
+    }
+
+    fun getToolExecutions(
+        messageId: String
+    ): List<Map<String, String>> {
+        return queryMaps(
+            """
+            SELECT * FROM message_tool_executions
+            WHERE message_id = ?
+            ORDER BY started_at ASC
+            """.trimIndent(),
+            arrayOf(messageId)
+        )
+    }
+
+    fun deleteToolExecution(executionId: String) {
+        writableDatabase.delete(
+            "message_tool_executions",
+            "id = ?",
+            arrayOf(executionId)
+        )
+    }
+
+    // =========================================================
+    // GENERATION EVENTS
+    // =========================================================
+
+    fun insertGenerationEvent(
+        messageId: String,
+        eventType: String,
+        eventData: String? = null
+    ): String {
+        val id = UUID.randomUUID().toString()
+
+        val values = ContentValues().apply {
+            put("id", id)
+            put("message_id", messageId)
+            put("event_type", eventType)
+            put("event_data", eventData)
+            put("timestamp", System.currentTimeMillis())
+        }
+
+        insertReplace("message_generation_events", values)
+        return id
+    }
+
+    fun getGenerationEvents(
+        messageId: String
+    ): List<Map<String, String>> {
+        return queryMaps(
+            """
+            SELECT * FROM message_generation_events
+            WHERE message_id = ?
+            ORDER BY timestamp ASC
+            """.trimIndent(),
+            arrayOf(messageId)
+        )
+    }
+
+    // =========================================================
+    // MEMORIES
+    // =========================================================
+
     fun insertMemory(memory: MemoryEntity) {
-        val db = writableDatabase
         val values = ContentValues().apply {
             put("id", memory.id)
             put("type", memory.type)
@@ -210,32 +960,38 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
             put("timestamp", memory.timestamp)
             put("confidence", memory.confidence)
         }
-        db.insertWithOnConflict("memories", null, values, SQLiteDatabase.CONFLICT_REPLACE)
-        db.close()
+
+        insertReplace("memories", values)
     }
 
     fun getRecentMemories(): List<MemoryEntity> {
-        val db = readableDatabase
-        val cursor = db.rawQuery("SELECT * FROM memories ORDER BY timestamp DESC LIMIT 20", null)
         val list = mutableListOf<MemoryEntity>()
-        if (cursor.moveToFirst()) {
-            do {
-                list.add(MemoryEntity(
-                    id = cursor.getString(cursor.getColumnIndexOrThrow("id")),
-                    type = cursor.getString(cursor.getColumnIndexOrThrow("type")),
-                    content = cursor.getString(cursor.getColumnIndexOrThrow("content")),
-                    timestamp = cursor.getLong(cursor.getColumnIndexOrThrow("timestamp")),
-                    confidence = cursor.getFloat(cursor.getColumnIndexOrThrow("confidence"))
-                ))
-            } while (cursor.moveToNext())
+
+        readableDatabase.rawQuery(
+            "SELECT * FROM memories ORDER BY timestamp DESC LIMIT 20",
+            null
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                list.add(
+                    MemoryEntity(
+                        id = cursor.getString(cursor.getColumnIndexOrThrow("id")),
+                        type = cursor.getString(cursor.getColumnIndexOrThrow("type")),
+                        content = cursor.getString(cursor.getColumnIndexOrThrow("content")),
+                        timestamp = cursor.getLong(cursor.getColumnIndexOrThrow("timestamp")),
+                        confidence = cursor.getFloat(cursor.getColumnIndexOrThrow("confidence"))
+                    )
+                )
+            }
         }
-        cursor.close()
-        db.close()
+
         return list
     }
 
+    // =========================================================
+    // NOTES
+    // =========================================================
+
     fun insertNote(note: NoteEntity) {
-        val db = writableDatabase
         val values = ContentValues().apply {
             put("id", note.id)
             put("title", note.title)
@@ -249,44 +1005,48 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
             put("coverPattern", note.coverPattern)
             put("coverSticker", note.coverSticker)
         }
-        db.insertWithOnConflict("notes", null, values, SQLiteDatabase.CONFLICT_REPLACE)
-        db.close()
+
+        insertReplace("notes", values)
     }
 
     fun getAllNotes(): List<NoteEntity> {
-        val db = readableDatabase
-        val cursor = db.rawQuery("SELECT * FROM notes ORDER BY timestamp DESC", null)
         val list = mutableListOf<NoteEntity>()
-        if (cursor.moveToFirst()) {
-            do {
-                list.add(NoteEntity(
-                    id = cursor.getString(cursor.getColumnIndexOrThrow("id")),
-                    title = cursor.getString(cursor.getColumnIndexOrThrow("title")),
-                    content = cursor.getString(cursor.getColumnIndexOrThrow("content")),
-                    type = cursor.getString(cursor.getColumnIndexOrThrow("type")),
-                    timestamp = cursor.getLong(cursor.getColumnIndexOrThrow("timestamp")),
-                    dueDate = cursor.getLong(cursor.getColumnIndexOrThrow("dueDate")),
-                    reminderTime = cursor.getLong(cursor.getColumnIndexOrThrow("reminderTime")),
-                    isPinned = cursor.getInt(cursor.getColumnIndexOrThrow("isPinned")) == 1,
-                    colorHex = cursor.getString(cursor.getColumnIndexOrThrow("colorHex")),
-                    coverPattern = cursor.getString(cursor.getColumnIndexOrThrow("coverPattern")),
-                    coverSticker = cursor.getString(cursor.getColumnIndexOrThrow("coverSticker"))
-                ))
-            } while (cursor.moveToNext())
+
+        readableDatabase.rawQuery(
+            "SELECT * FROM notes ORDER BY timestamp DESC",
+            null
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                list.add(
+                    NoteEntity(
+                        id = cursor.getString(cursor.getColumnIndexOrThrow("id")),
+                        title = cursor.getString(cursor.getColumnIndexOrThrow("title")),
+                        content = cursor.getString(cursor.getColumnIndexOrThrow("content")),
+                        type = cursor.getString(cursor.getColumnIndexOrThrow("type")),
+                        timestamp = cursor.getLong(cursor.getColumnIndexOrThrow("timestamp")),
+                        dueDate = cursor.getLong(cursor.getColumnIndexOrThrow("dueDate")),
+                        reminderTime = cursor.getLong(cursor.getColumnIndexOrThrow("reminderTime")),
+                        isPinned = cursor.getInt(cursor.getColumnIndexOrThrow("isPinned")) == 1,
+                        colorHex = cursor.getString(cursor.getColumnIndexOrThrow("colorHex")),
+                        coverPattern = cursor.getString(cursor.getColumnIndexOrThrow("coverPattern")),
+                        coverSticker = cursor.getString(cursor.getColumnIndexOrThrow("coverSticker"))
+                    )
+                )
+            }
         }
-        cursor.close()
-        db.close()
+
         return list
     }
 
     fun deleteNote(id: String) {
-        val db = writableDatabase
-        db.delete("notes", "id = ?", arrayOf(id))
-        db.close()
+        writableDatabase.delete("notes", "id = ?", arrayOf(id))
     }
 
+    // =========================================================
+    // ALBUMS
+    // =========================================================
+
     fun insertAlbum(album: VirtualAlbumEntity) {
-        val db = writableDatabase
         val values = ContentValues().apply {
             put("id", album.id)
             put("name", album.name)
@@ -295,76 +1055,102 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
             put("isVault", if (album.isVault) 1 else 0)
             put("sortOrder", album.sortOrder)
         }
-        db.insertWithOnConflict("virtual_albums", null, values, SQLiteDatabase.CONFLICT_REPLACE)
-        db.close()
+
+        insertReplace("virtual_albums", values)
     }
 
     fun addMediaToAlbum(albumId: String, mediaUri: String) {
-        val db = writableDatabase
         val values = ContentValues().apply {
             put("albumId", albumId)
             put("mediaUri", mediaUri)
         }
-        db.insertWithOnConflict("album_media_cross_ref", null, values, SQLiteDatabase.CONFLICT_IGNORE)
-        db.close()
+
+        writableDatabase.insertWithOnConflict(
+            "album_media_cross_ref",
+            null,
+            values,
+            SQLiteDatabase.CONFLICT_IGNORE
+        )
     }
 
     fun getMediaForAlbum(albumId: String): List<String> {
-        val db = readableDatabase
-        val cursor = db.rawQuery("SELECT mediaUri FROM album_media_cross_ref WHERE albumId = ?", arrayOf(albumId))
         val list = mutableListOf<String>()
-        if (cursor.moveToFirst()) {
-            do {
-                list.add(cursor.getString(cursor.getColumnIndexOrThrow("mediaUri")))
-            } while (cursor.moveToNext())
+
+        readableDatabase.rawQuery(
+            "SELECT mediaUri FROM album_media_cross_ref WHERE albumId = ?",
+            arrayOf(albumId)
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                list.add(cursor.getString(0))
+            }
         }
-        cursor.close()
-        db.close()
+
         return list
     }
 
     fun deleteAlbum(albumId: String) {
         val db = writableDatabase
-        db.delete("virtual_albums", "id = ?", arrayOf(albumId))
-        db.delete("album_media_cross_ref", "albumId = ?", arrayOf(albumId))
-        db.close()
+        db.beginTransaction()
+
+        try {
+            db.delete("album_media_cross_ref", "albumId = ?", arrayOf(albumId))
+            db.delete("virtual_albums", "id = ?", arrayOf(albumId))
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
     }
 
+    fun getAllVirtualAlbums(): List<VirtualAlbumEntity> {
+        val list = mutableListOf<VirtualAlbumEntity>()
+
+        readableDatabase.rawQuery(
+            "SELECT * FROM virtual_albums ORDER BY sortOrder ASC",
+            null
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                list.add(
+                    VirtualAlbumEntity(
+                        id = cursor.getString(cursor.getColumnIndexOrThrow("id")),
+                        name = cursor.getString(cursor.getColumnIndexOrThrow("name")),
+                        coverUri = cursor.getString(cursor.getColumnIndexOrThrow("coverUri")),
+                        createdAt = cursor.getLong(cursor.getColumnIndexOrThrow("createdAt")),
+                        isVault = cursor.getInt(cursor.getColumnIndexOrThrow("isVault")) == 1,
+                        sortOrder = cursor.getInt(cursor.getColumnIndexOrThrow("sortOrder"))
+                    )
+                )
+            }
+        }
+
+        return list
+    }
+
+    // =========================================================
+    // CONVERSATIONS
+    // =========================================================
+
     fun insertConversation(conversation: ConversationEntity) {
-        val db = writableDatabase
         val values = ContentValues().apply {
             put("id", conversation.id)
             put("title", conversation.title)
             put("createdAt", conversation.createdAt)
             put("lastModified", conversation.lastModified)
         }
-        db.insertWithOnConflict("conversations", null, values, SQLiteDatabase.CONFLICT_REPLACE)
-        db.close()
+
+        insertReplace("conversations", values)
     }
 
-    fun getAllVirtualAlbums(): List<VirtualAlbumEntity> {
-        val db = readableDatabase
-        val cursor = db.rawQuery("SELECT * FROM virtual_albums", null)
-        val list = mutableListOf<VirtualAlbumEntity>()
-        if (cursor.moveToFirst()) {
-            do {
-                list.add(VirtualAlbumEntity(
-                    id = cursor.getString(cursor.getColumnIndexOrThrow("id")),
-                    name = cursor.getString(cursor.getColumnIndexOrThrow("name")),
-                    coverUri = cursor.getString(cursor.getColumnIndexOrThrow("coverUri")),
-                    createdAt = cursor.getLong(cursor.getColumnIndexOrThrow("createdAt")),
-                    isVault = cursor.getInt(cursor.getColumnIndexOrThrow("isVault")) == 1,
-                    sortOrder = cursor.getInt(cursor.getColumnIndexOrThrow("sortOrder"))
-                ))
-            } while (cursor.moveToNext())
-        }
-        cursor.close()
-        db.close()
-        return list
-    }
+    // =========================================================
+    // SKILLS
+    // =========================================================
 
-    fun insertSkill(id: String, name: String, description: String, actionJson: String, successCount: Int) {
-        val db = writableDatabase
+    fun insertSkill(
+        id: String,
+        name: String,
+        description: String,
+        actionJson: String,
+        successCount: Int
+    ) {
         val values = ContentValues().apply {
             put("id", id)
             put("name", name)
@@ -373,31 +1159,28 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
             put("success_count", successCount)
             put("timestamp", System.currentTimeMillis())
         }
-        db.insertWithOnConflict("skills", null, values, SQLiteDatabase.CONFLICT_REPLACE)
-        db.close()
+
+        insertReplace("skills", values)
     }
 
     fun getAllSkills(): List<Map<String, String>> {
-        val db = readableDatabase
-        val cursor = db.rawQuery("SELECT * FROM skills ORDER BY success_count DESC", null)
-        val list = mutableListOf<Map<String, String>>()
-        if (cursor.moveToFirst()) {
-            do {
-                val map = mutableMapOf<String, String>()
-                map["id"] = cursor.getString(cursor.getColumnIndexOrThrow("id"))
-                map["name"] = cursor.getString(cursor.getColumnIndexOrThrow("name"))
-                map["description"] = cursor.getString(cursor.getColumnIndexOrThrow("description"))
-                map["action_json"] = cursor.getString(cursor.getColumnIndexOrThrow("action_json"))
-                list.add(map)
-            } while (cursor.moveToNext())
-        }
-        cursor.close()
-        db.close()
-        return list
+        return queryMaps(
+            "SELECT * FROM skills ORDER BY success_count DESC"
+        )
     }
 
-    fun insertBlindSpot(x: Int, y: Int, width: Int, height: Int, context: String, confidence: Float) {
-        val db = writableDatabase
+    // =========================================================
+    // COMPUTER VISION MEMORY
+    // =========================================================
+
+    fun insertBlindSpot(
+        x: Int,
+        y: Int,
+        width: Int,
+        height: Int,
+        context: String,
+        confidence: Float
+    ) {
         val values = ContentValues().apply {
             put("id", UUID.randomUUID().toString())
             put("x", x)
@@ -408,12 +1191,19 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
             put("confidence", confidence)
             put("timestamp", System.currentTimeMillis())
         }
-        db.insert("blind_spots", null, values)
-        db.close()
+
+        writableDatabase.insert("blind_spots", null, values)
     }
 
-    fun insertCode(fileName: String, content: String, version: Int) {
-        val db = writableDatabase
+    // =========================================================
+    // CODE VAULT
+    // =========================================================
+
+    fun insertCode(
+        fileName: String,
+        content: String,
+        version: Int
+    ) {
         val values = ContentValues().apply {
             put("id", UUID.randomUUID().toString())
             put("file_name", fileName)
@@ -421,24 +1211,37 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
             put("version", version)
             put("timestamp", System.currentTimeMillis())
         }
-        db.insert("code_vault", null, values)
-        db.close()
+
+        writableDatabase.insert("code_vault", null, values)
     }
 
     fun getLatestCode(fileName: String): String? {
-        val db = readableDatabase
-        val cursor = db.rawQuery("SELECT content FROM code_vault WHERE file_name = ? ORDER BY version DESC LIMIT 1", arrayOf(fileName))
-        var content: String? = null
-        if (cursor.moveToFirst()) {
-            content = cursor.getString(cursor.getColumnIndexOrThrow("content"))
+        readableDatabase.rawQuery(
+            """
+            SELECT content FROM code_vault
+            WHERE file_name = ?
+            ORDER BY version DESC
+            LIMIT 1
+            """.trimIndent(),
+            arrayOf(fileName)
+        ).use { cursor ->
+            if (cursor.moveToFirst()) {
+                return cursor.getString(0)
+            }
         }
-        cursor.close()
-        db.close()
-        return content
+
+        return null
     }
 
-    fun insertAudioMemory(filePath: String, transcription: String, duration: Int) {
-        val db = writableDatabase
+    // =========================================================
+    // AUDIO AND FILE MEMORY
+    // =========================================================
+
+    fun insertAudioMemory(
+        filePath: String,
+        transcription: String,
+        duration: Int
+    ) {
         val values = ContentValues().apply {
             put("id", UUID.randomUUID().toString())
             put("file_path", filePath)
@@ -446,12 +1249,15 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
             put("duration", duration)
             put("timestamp", System.currentTimeMillis())
         }
-        db.insert("audio_memory", null, values)
-        db.close()
+
+        writableDatabase.insert("audio_memory", null, values)
     }
 
-    fun insertFileMemory(filePath: String, fileType: String, description: String) {
-        val db = writableDatabase
+    fun insertFileMemory(
+        filePath: String,
+        fileType: String,
+        description: String
+    ) {
         val values = ContentValues().apply {
             put("id", UUID.randomUUID().toString())
             put("file_path", filePath)
@@ -459,16 +1265,20 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
             put("description", description)
             put("timestamp", System.currentTimeMillis())
         }
-        db.insert("file_memory", null, values)
-        db.close()
+
+        writableDatabase.insert("file_memory", null, values)
     }
 
-    // ==========================================
-    // الدوال الجديدة (للخيوط اللونية والعقد والتعليقات)
-    // ==========================================
+    // =========================================================
+    // CHROMATIC NODES
+    // =========================================================
 
-    fun insertChromaticNode(id: String = UUID.randomUUID().toString(), colorHex: String, name: String, definition: String) {
-        val db = writableDatabase
+    fun insertChromaticNode(
+        id: String = UUID.randomUUID().toString(),
+        colorHex: String,
+        name: String,
+        definition: String
+    ) {
         val values = ContentValues().apply {
             put("id", id)
             put("color_hex", colorHex)
@@ -476,31 +1286,23 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
             put("definition", definition)
             put("timestamp", System.currentTimeMillis())
         }
-        db.insertWithOnConflict("chromatic_nodes", null, values, SQLiteDatabase.CONFLICT_REPLACE)
-        db.close()
+
+        insertReplace("chromatic_nodes", values)
     }
 
     fun getAllChromaticNodes(): List<Map<String, String>> {
-        val db = readableDatabase
-        val cursor = db.rawQuery("SELECT * FROM chromatic_nodes", null)
-        val list = mutableListOf<Map<String, String>>()
-        if (cursor.moveToFirst()) {
-            do {
-                val map = mutableMapOf<String, String>()
-                map["id"] = cursor.getString(cursor.getColumnIndexOrThrow("id"))
-                map["color_hex"] = cursor.getString(cursor.getColumnIndexOrThrow("color_hex"))
-                map["name"] = cursor.getString(cursor.getColumnIndexOrThrow("name"))
-                map["definition"] = cursor.getString(cursor.getColumnIndexOrThrow("definition"))
-                list.add(map)
-            } while (cursor.moveToNext())
-        }
-        cursor.close()
-        db.close()
-        return list
+        return queryMaps("SELECT * FROM chromatic_nodes")
     }
 
-    fun insertMessageThread(sourceMsgId: String, targetMsgId: String, nodeId: String) {
-        val db = writableDatabase
+    // =========================================================
+    // LEGACY MESSAGE THREADS
+    // =========================================================
+
+    fun insertMessageThread(
+        sourceMsgId: String,
+        targetMsgId: String,
+        nodeId: String
+    ) {
         val values = ContentValues().apply {
             put("id", UUID.randomUUID().toString())
             put("source_msg_id", sourceMsgId)
@@ -508,61 +1310,64 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
             put("node_id", nodeId)
             put("timestamp", System.currentTimeMillis())
         }
-        db.insert("message_threads", null, values)
-        db.close()
+
+        writableDatabase.insert("message_threads", null, values)
     }
 
-    fun getThreadsForMessage(messageId: String): List<Map<String, String>> {
-        val db = readableDatabase
-        val cursor = db.rawQuery("SELECT * FROM message_threads WHERE source_msg_id = ? OR target_msg_id = ?", arrayOf(messageId, messageId))
-        val list = mutableListOf<Map<String, String>>()
-        if (cursor.moveToFirst()) {
-            do {
-                val map = mutableMapOf<String, String>()
-                map["id"] = cursor.getString(cursor.getColumnIndexOrThrow("id"))
-                map["source_msg_id"] = cursor.getString(cursor.getColumnIndexOrThrow("source_msg_id"))
-                map["target_msg_id"] = cursor.getString(cursor.getColumnIndexOrThrow("target_msg_id"))
-                map["node_id"] = cursor.getString(cursor.getColumnIndexOrThrow("node_id"))
-                list.add(map)
-            } while (cursor.moveToNext())
-        }
-        cursor.close()
-        db.close()
-        return list
+    fun getThreadsForMessage(
+        messageId: String
+    ): List<Map<String, String>> {
+        return queryMaps(
+            """
+            SELECT * FROM message_threads
+            WHERE source_msg_id = ? OR target_msg_id = ?
+            """.trimIndent(),
+            arrayOf(messageId, messageId)
+        )
     }
 
-    fun insertThreadAnnotation(threadId: String, content: String) {
-        val db = writableDatabase
+    fun insertThreadAnnotation(
+        threadId: String,
+        content: String
+    ) {
         val values = ContentValues().apply {
             put("id", UUID.randomUUID().toString())
             put("thread_id", threadId)
             put("content", content)
             put("timestamp", System.currentTimeMillis())
         }
-        db.insert("thread_annotations", null, values)
-        db.close()
+
+        writableDatabase.insert("thread_annotations", null, values)
     }
 
     fun getAnnotationsForThread(threadId: String): List<String> {
-        val db = readableDatabase
-        val cursor = db.rawQuery("SELECT content FROM thread_annotations WHERE thread_id = ? ORDER BY timestamp ASC", arrayOf(threadId))
         val list = mutableListOf<String>()
-        if (cursor.moveToFirst()) {
-            do {
-                list.add(cursor.getString(cursor.getColumnIndexOrThrow("content")))
-            } while (cursor.moveToNext())
+
+        readableDatabase.rawQuery(
+            """
+            SELECT content FROM thread_annotations
+            WHERE thread_id = ?
+            ORDER BY timestamp ASC
+            """.trimIndent(),
+            arrayOf(threadId)
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                list.add(cursor.getString(0))
+            }
         }
-        cursor.close()
-        db.close()
+
         return list
     }
 
-    // ==========================================
-    // الدوال الجديدة (الإصدار 4 - تتبع حياة الوكيل وتقييم الأداء)
-    // ==========================================
+    // =========================================================
+    // AGENT LIFECYCLE
+    // =========================================================
 
-    fun insertLifecycleEvent(eventType: String, reason: String, durationActive: Int) {
-        val db = writableDatabase
+    fun insertLifecycleEvent(
+        eventType: String,
+        reason: String,
+        durationActive: Int
+    ) {
         val values = ContentValues().apply {
             put("id", UUID.randomUUID().toString())
             put("event_type", eventType)
@@ -570,32 +1375,35 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
             put("timestamp", System.currentTimeMillis())
             put("duration_active", durationActive)
         }
-        db.insert("agent_lifecycle_log", null, values)
-        db.close()
+
+        writableDatabase.insert("agent_lifecycle_log", null, values)
     }
 
-    fun getRecentLifecycleEvents(limit: Int = 10): List<Map<String, String>> {
-        val db = readableDatabase
-        val cursor = db.rawQuery("SELECT * FROM agent_lifecycle_log ORDER BY timestamp DESC LIMIT ?", arrayOf(limit.toString()))
-        val list = mutableListOf<Map<String, String>>()
-        if (cursor.moveToFirst()) {
-            do {
-                val map = mutableMapOf<String, String>()
-                map["id"] = cursor.getString(cursor.getColumnIndexOrThrow("id"))
-                map["event_type"] = cursor.getString(cursor.getColumnIndexOrThrow("event_type"))
-                map["reason"] = cursor.getString(cursor.getColumnIndexOrThrow("reason"))
-                map["timestamp"] = cursor.getLong(cursor.getColumnIndexOrThrow("timestamp")).toString()
-                map["duration_active"] = cursor.getInt(cursor.getColumnIndexOrThrow("duration_active")).toString()
-                list.add(map)
-            } while (cursor.moveToNext())
-        }
-        cursor.close()
-        db.close()
-        return list
+    fun getRecentLifecycleEvents(
+        limit: Int = 10
+    ): List<Map<String, String>> {
+        return queryMaps(
+            """
+            SELECT * FROM agent_lifecycle_log
+            ORDER BY timestamp DESC LIMIT ?
+            """.trimIndent(),
+            arrayOf(limit.coerceAtLeast(1).toString())
+        )
     }
 
-    fun insertPerformanceLog(goal: String, status: String, steps: Int, latencyMs: Long, selfRating: Int, reflection: String, solution: String) {
-        val db = writableDatabase
+    // =========================================================
+    // AGENT PERFORMANCE
+    // =========================================================
+
+    fun insertPerformanceLog(
+        goal: String,
+        status: String,
+        steps: Int,
+        latencyMs: Long,
+        selfRating: Int,
+        reflection: String,
+        solution: String
+    ) {
         val values = ContentValues().apply {
             put("id", UUID.randomUUID().toString())
             put("goal", goal)
@@ -607,39 +1415,27 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
             put("suggested_solution", solution)
             put("timestamp", System.currentTimeMillis())
         }
-        db.insert("agent_performance_log", null, values)
-        db.close()
+
+        writableDatabase.insert("agent_performance_log", null, values)
     }
 
-    fun getRecentPerformanceLogs(limit: Int = 10): List<Map<String, String>> {
-        val db = readableDatabase
-        val cursor = db.rawQuery("SELECT * FROM agent_performance_log ORDER BY timestamp DESC LIMIT ?", arrayOf(limit.toString()))
-        val list = mutableListOf<Map<String, String>>()
-        if (cursor.moveToFirst()) {
-            do {
-                val map = mutableMapOf<String, String>()
-                map["id"] = cursor.getString(cursor.getColumnIndexOrThrow("id"))
-                map["goal"] = cursor.getString(cursor.getColumnIndexOrThrow("goal"))
-                map["status"] = cursor.getString(cursor.getColumnIndexOrThrow("status"))
-                map["steps_taken"] = cursor.getInt(cursor.getColumnIndexOrThrow("steps_taken")).toString()
-                map["latency_ms"] = cursor.getLong(cursor.getColumnIndexOrThrow("latency_ms")).toString()
-                map["self_rating"] = cursor.getInt(cursor.getColumnIndexOrThrow("self_rating")).toString()
-                map["reflection_note"] = cursor.getString(cursor.getColumnIndexOrThrow("reflection_note"))
-                map["suggested_solution"] = cursor.getString(cursor.getColumnIndexOrThrow("suggested_solution"))
-                map["timestamp"] = cursor.getLong(cursor.getColumnIndexOrThrow("timestamp")).toString()
-                list.add(map)
-            } while (cursor.moveToNext())
-        }
-        cursor.close()
-        db.close()
-        return list
+    fun getRecentPerformanceLogs(
+        limit: Int = 10
+    ): List<Map<String, String>> {
+        return queryMaps(
+            """
+            SELECT * FROM agent_performance_log
+            ORDER BY timestamp DESC LIMIT ?
+            """.trimIndent(),
+            arrayOf(limit.coerceAtLeast(1).toString())
+        )
     }
 
-    // ==========================================
-    // الدوال الجديدة (الإصدار 5 - استكمال المهام)
-    // ==========================================
+    // =========================================================
+    // LEGACY TASK QUEUE
+    // =========================================================
+
     fun insertTaskToQueue(taskGoal: String) {
-        val db = writableDatabase
         val values = ContentValues().apply {
             put("id", UUID.randomUUID().toString())
             put("task_goal", taskGoal)
@@ -647,87 +1443,199 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "monolith_databa
             put("status", "PENDING")
             put("timestamp", System.currentTimeMillis())
         }
-        db.insert("agent_task_queue", null, values)
-        db.close()
+
+        writableDatabase.insert("agent_task_queue", null, values)
     }
 
     fun getPendingTask(): Map<String, String>? {
-        val db = readableDatabase
-        val cursor = db.rawQuery("SELECT * FROM agent_task_queue WHERE status = 'PENDING' ORDER BY timestamp ASC LIMIT 1", null)
-        var map: MutableMap<String, String>? = null
-        if (cursor.moveToFirst()) {
-            map = mutableMapOf()
-            map["id"] = cursor.getString(cursor.getColumnIndexOrThrow("id"))
-            map["task_goal"] = cursor.getString(cursor.getColumnIndexOrThrow("task_goal"))
-            map["current_step"] = cursor.getInt(cursor.getColumnIndexOrThrow("current_step")).toString()
-        }
-        cursor.close()
-        db.close()
-        return map
+        return queryMaps(
+            """
+            SELECT * FROM agent_task_queue
+            WHERE status = 'PENDING'
+            ORDER BY timestamp ASC LIMIT 1
+            """
+        ).firstOrNull()
     }
 
-    fun updateTaskStatus(taskId: String, status: String) {
-        val db = writableDatabase
+    fun updateTaskStatus(
+        taskId: String,
+        status: String
+    ) {
         val values = ContentValues().apply {
             put("status", status)
         }
-        db.update("agent_task_queue", values, "id = ?", arrayOf(taskId))
-        db.close()
+
+        writableDatabase.update(
+            "agent_task_queue",
+            values,
+            "id = ?",
+            arrayOf(taskId)
+        )
     }
 
-    // ==========================================
-    // الدوال الجديدة (الإصدار 6 - مدير المهام المتوازية)
-    // ==========================================
-    
-    fun insertManagedTask(parentTaskId: String?, taskType: String, goal: String, priority: String, payload: String = "") {
-        val db = writableDatabase
+    // =========================================================
+    // MANAGED / PARALLEL TASKS
+    // =========================================================
+
+    fun insertManagedTask(
+        parentTaskId: String?,
+        taskType: String,
+        goal: String,
+        priority: String,
+        payload: String = ""
+    ) {
+        val now = System.currentTimeMillis()
+
         val values = ContentValues().apply {
             put("id", UUID.randomUUID().toString())
             put("parent_task_id", parentTaskId)
-            put("task_type", taskType) // FOREGROUND, BACKGROUND, PLANNING
+            put("task_type", taskType)
             put("goal", goal)
-            put("status", "PENDING") // PENDING, RUNNING, COMPLETED, FAILED, PAUSED
-            put("priority", priority) // HIGH, MEDIUM, LOW
+            put("status", "PENDING")
+            put("priority", priority)
             put("payload", payload)
             put("result", "")
-            put("timestamp", System.currentTimeMillis())
-            put("updated_at", System.currentTimeMillis())
+            put("timestamp", now)
+            put("updated_at", now)
         }
-        db.insert("agent_tasks", null, values)
-        db.close()
+
+        writableDatabase.insert("agent_tasks", null, values)
     }
 
-    fun getTasksByTypeAndStatus(taskType: String, status: String, limit: Int = 5): List<Map<String, String>> {
-        val db = readableDatabase
-        val cursor = db.rawQuery("SELECT * FROM agent_tasks WHERE task_type = ? AND status = ? ORDER BY priority DESC, timestamp ASC LIMIT ?", arrayOf(taskType, status, limit.toString()))
-        val list = mutableListOf<Map<String, String>>()
-        if (cursor.moveToFirst()) {
-            do {
-                val map = mutableMapOf<String, String>()
-                map["id"] = cursor.getString(cursor.getColumnIndexOrThrow("id"))
-                map["parent_task_id"] = cursor.getString(cursor.getColumnIndexOrThrow("parent_task_id")) ?: ""
-                map["task_type"] = cursor.getString(cursor.getColumnIndexOrThrow("task_type"))
-                map["goal"] = cursor.getString(cursor.getColumnIndexOrThrow("goal"))
-                map["status"] = cursor.getString(cursor.getColumnIndexOrThrow("status"))
-                map["priority"] = cursor.getString(cursor.getColumnIndexOrThrow("priority"))
-                map["payload"] = cursor.getString(cursor.getColumnIndexOrThrow("payload"))
-                map["result"] = cursor.getString(cursor.getColumnIndexOrThrow("result"))
-                list.add(map)
-            } while (cursor.moveToNext())
-        }
-        cursor.close()
-        db.close()
-        return list
+    fun getTasksByTypeAndStatus(
+        taskType: String,
+        status: String,
+        limit: Int = 5
+    ): List<Map<String, String>> {
+        return queryMaps(
+            """
+            SELECT * FROM agent_tasks
+            WHERE task_type = ? AND status = ?
+            ORDER BY
+                CASE priority
+                    WHEN 'HIGH' THEN 0
+                    WHEN 'MEDIUM' THEN 1
+                    ELSE 2
+                END,
+                timestamp ASC
+            LIMIT ?
+            """.trimIndent(),
+            arrayOf(
+                taskType,
+                status,
+                limit.coerceAtLeast(1).toString()
+            )
+        )
     }
 
-    fun updateManagedTaskStatus(taskId: String, status: String, result: String = "") {
-        val db = writableDatabase
+    fun updateManagedTaskStatus(
+        taskId: String,
+        status: String,
+        result: String = ""
+    ) {
         val values = ContentValues().apply {
             put("status", status)
             put("result", result)
             put("updated_at", System.currentTimeMillis())
         }
-        db.update("agent_tasks", values, "id = ?", arrayOf(taskId))
-        db.close()
+
+        writableDatabase.update(
+            "agent_tasks",
+            values,
+            "id = ?",
+            arrayOf(taskId)
+        )
+    }
+
+    fun getManagedTask(
+        taskId: String
+    ): Map<String, String>? {
+        return queryMaps(
+            "SELECT * FROM agent_tasks WHERE id = ?",
+            arrayOf(taskId)
+        ).firstOrNull()
+    }
+
+    fun getChildTasks(
+        parentTaskId: String
+    ): List<Map<String, String>> {
+        return queryMaps(
+            """
+            SELECT * FROM agent_tasks
+            WHERE parent_task_id = ?
+            ORDER BY timestamp ASC
+            """.trimIndent(),
+            arrayOf(parentTaskId)
+        )
+    }
+
+    fun deleteManagedTask(taskId: String) {
+        writableDatabase.delete(
+            "agent_tasks",
+            "id = ?",
+            arrayOf(taskId)
+        )
+    }
+
+    // =========================================================
+    // DATABASE MAINTENANCE
+    // =========================================================
+
+    fun getDatabaseVersion(): Int {
+        return readableDatabase.version
+    }
+
+    fun deleteConversationMessages(conversationId: String) {
+        val db = writableDatabase
+
+        db.beginTransaction()
+        try {
+            val messageIds = mutableListOf<String>()
+
+            db.rawQuery(
+                "SELECT id FROM messages WHERE conversationId = ?",
+                arrayOf(conversationId)
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    messageIds.add(cursor.getString(0))
+                }
+            }
+
+            for (messageId in messageIds) {
+                db.delete(
+                    "message_relations",
+                    "source_message_id = ? OR target_message_id = ?",
+                    arrayOf(messageId, messageId)
+                )
+
+                db.delete(
+                    "message_runtime_metadata",
+                    "message_id = ?",
+                    arrayOf(messageId)
+                )
+
+                db.delete(
+                    "message_tool_executions",
+                    "message_id = ?",
+                    arrayOf(messageId)
+                )
+
+                db.delete(
+                    "message_generation_events",
+                    "message_id = ?",
+                    arrayOf(messageId)
+                )
+            }
+
+            db.delete(
+                "messages",
+                "conversationId = ?",
+                arrayOf(conversationId)
+            )
+
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
     }
 }
