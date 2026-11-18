@@ -1,382 +1,434 @@
-
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/rootLayout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#040817"
-    android:padding="0dp">
+    android:background="@drawable/monolith_bg_chat"
+    android:fitsSystemWindows="true">
 
-    <!-- =============================================== -->
-    <!-- MONOLITH HEADER                                 -->
-    <!-- =============================================== -->
+    <!-- ===================================== -->
+    <!-- 01. TOP NAVIGATION -->
+    <!-- ===================================== -->
 
     <LinearLayout
-        android:id="@+id/topBar"
+        android:id="@+id/topToolbar"
         android:layout_width="match_parent"
-        android:layout_height="64dp"
+        android:layout_height="@dimen/monolith_toolbar_height"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:paddingStart="8dp"
-        android:paddingEnd="6dp"
-        android:background="#080D20">
+        android:paddingStart="10dp"
+        android:paddingEnd="10dp"
+        android:background="@drawable/monolith_bg_toolbar">
 
         <ImageButton
             android:id="@+id/btnBack"
-            android:layout_width="38dp"
+            android:layout_width="42dp"
             android:layout_height="42dp"
-            android:src="@drawable/ic_back"
-            android:scaleType="centerInside"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:tint="#EAF4FF"
-            android:contentDescription="رجوع" />
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/monolith_ic_close"
+            android:rotation="45"
+            android:contentDescription="Back"
+            android:padding="10dp"
+            android:tint="@color/monolith_text"/>
 
         <LinearLayout
             android:layout_width="0dp"
-            android:layout_height="match_parent"
+            android:layout_height="wrap_content"
             android:layout_weight="1"
             android:orientation="vertical"
             android:gravity="center_vertical"
-            android:paddingStart="5dp">
+            android:paddingStart="8dp">
 
             <TextView
                 android:id="@+id/tvAppTitle"
-                android:layout_width="match_parent"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="MONOLITH"
-                android:textColor="#F2F7FF"
-                android:textSize="18sp"
+                android:textColor="@color/monolith_text"
+                android:textSize="17sp"
                 android:textStyle="bold"
-                android:letterSpacing="0.08" />
+                android:letterSpacing="0.12"/>
 
             <TextView
-                android:layout_width="match_parent"
+                android:id="@+id/tvAppSubtitle"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="مساعدك الذكي المتقدم"
-                android:textColor="#8296C2"
-                android:textSize="10sp" />
+                android:text="INTJ-S  •  INTELLIGENCE SYSTEM"
+                android:textColor="@color/monolith_accent"
+                android:textSize="9sp"
+                android:letterSpacing="0.08"/>
 
         </LinearLayout>
-
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/modelSelector"
-            android:layout_width="wrap_content"
-            android:layout_height="38dp"
-            android:layout_marginEnd="4dp"
-            app:cardBackgroundColor="#17132F"
-            app:cardCornerRadius="20dp"
-            app:cardElevation="0dp"
-            app:strokeColor="#884B35C8"
-            app:strokeWidth="1dp">
-
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="match_parent"
-                android:orientation="horizontal"
-                android:gravity="center"
-                android:paddingStart="10dp"
-                android:paddingEnd="10dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="⬡"
-                    android:textColor="#C77BFF"
-                    android:textSize="18sp"
-                    android:layout_marginEnd="5dp" />
-
-                <TextView
-                    android:id="@+id/tvModelSelector"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="النموذج الافتراضي"
-                    android:textColor="#E8E5FF"
-                    android:textSize="11sp"
-                    android:maxLines="1" />
-
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
 
         <ImageButton
             android:id="@+id/btnDashboard"
-            android:layout_width="38dp"
-            android:layout_height="42dp"
-            android:src="@drawable/ic_vision"
-            android:scaleType="centerInside"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:tint="#DCEBFF"
-            android:contentDescription="لوحة التحكم" />
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/monolith_ic_more"
+            android:contentDescription="Dashboard"
+            android:padding="9dp"
+            android:tint="@color/monolith_text_secondary"/>
 
         <ImageButton
             android:id="@+id/btnSettings"
-            android:layout_width="38dp"
-            android:layout_height="42dp"
-            android:src="@drawable/ic_settings"
-            android:scaleType="centerInside"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:tint="#EAF4FF"
-            android:contentDescription="الإعدادات" />
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/monolith_ic_more"
+            android:contentDescription="Settings"
+            android:padding="9dp"
+            android:tint="@color/monolith_accent"/>
 
     </LinearLayout>
 
-    <!-- =============================================== -->
-    <!-- CONVERSATION HISTORY STRIP                      -->
-    <!-- =============================================== -->
+    <!-- ===================================== -->
+    <!-- 02. MODEL CONTROL BAR -->
+    <!-- ===================================== -->
 
-    <com.google.android.material.card.MaterialCardView
+    <LinearLayout
+        android:id="@+id/modelControlBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="11dp"
+        android:paddingBottom="11dp">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="42dp"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="ACTIVE INTELLIGENCE"
+                android:textColor="@color/monolith_text_secondary"
+                android:textSize="9sp"
+                android:letterSpacing="0.1"/>
+
+            <TextView
+                android:id="@+id/modelSelector"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Local AI Engine  ▾"
+                android:textColor="@color/monolith_text"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:layout_marginTop="3dp"/>
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="30dp"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:background="@drawable/monolith_bg_input">
+
+            <View
+                android:layout_width="7dp"
+                android:layout_height="7dp"
+                android:background="#42D6C5"/>
+
+            <TextView
+                android:id="@+id/tvEngineStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text=" READY"
+                android:textColor="@color/monolith_accent"
+                android:textSize="10sp"
+                android:textStyle="bold"/>
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <!-- ===================================== -->
+    <!-- 03. CONVERSATION HISTORY STRIP -->
+    <!-- ===================================== -->
+
+    <HorizontalScrollView
         android:id="@+id/conversationHistoryStrip"
         android:layout_width="match_parent"
         android:layout_height="42dp"
-        android:layout_marginStart="24dp"
-        android:layout_marginEnd="24dp"
-        android:layout_marginTop="2dp"
-        android:layout_marginBottom="8dp"
-        app:cardBackgroundColor="#101A35"
-        app:cardCornerRadius="0dp"
-        app:cardElevation="0dp"
-        app:strokeColor="#263D70"
-        app:strokeWidth="1dp">
+        android:scrollbars="none"
+        android:fillViewport="false">
 
         <LinearLayout
-            android:layout_width="match_parent"
+            android:layout_width="wrap_content"
             android:layout_height="match_parent"
             android:orientation="horizontal"
-            android:gravity="center">
+            android:gravity="center_vertical"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp">
 
             <TextView
+                android:id="@+id/tvCurrentConversation"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="⌄"
-                android:textColor="#AFC7FF"
-                android:textSize="19sp"
-                android:layout_marginEnd="12dp" />
+                android:layout_height="30dp"
+                android:gravity="center"
+                android:paddingStart="13dp"
+                android:paddingEnd="13dp"
+                android:background="@drawable/monolith_bg_input"
+                android:text="Current Conversation"
+                android:textColor="@color/monolith_text"
+                android:textSize="11sp"/>
 
             <TextView
+                android:id="@+id/tvHistoryLabel"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="سجل المحادثة"
-                android:textColor="#C5D5F5"
-                android:textSize="13sp" />
+                android:layout_height="30dp"
+                android:gravity="center"
+                android:paddingStart="13dp"
+                android:paddingEnd="13dp"
+                android:text="+ History"
+                android:textColor="@color/monolith_text_secondary"
+                android:textSize="11sp"/>
 
         </LinearLayout>
-    </com.google.android.material.card.MaterialCardView>
-
-    <!-- =============================================== -->
-    <!-- CHAT MESSAGES                                   -->
-    <!-- =============================================== -->
-
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/recyclerViewChat"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:paddingStart="12dp"
-        android:paddingEnd="12dp"
-        android:paddingTop="8dp"
-        android:paddingBottom="12dp"
-        android:clipToPadding="false"
-        android:overScrollMode="never"
-        android:scrollbars="vertical" />
-
-    <!-- =============================================== -->
-    <!-- IMAGE / FILE PREVIEW                            -->
-    <!-- =============================================== -->
-
-    <HorizontalScrollView
-        android:id="@+id/imagePreviewContainer"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:visibility="gone"
-        android:padding="8dp"
-        android:layout_marginStart="12dp"
-        android:layout_marginEnd="12dp"
-        android:layout_marginBottom="6dp"
-        android:background="#101A35"
-        android:scrollbars="none">
-
-        <LinearLayout
-            android:id="@+id/previewListContainer"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical" />
 
     </HorizontalScrollView>
 
-    <!-- =============================================== -->
-    <!-- SMART SUGGESTIONS                               -->
-    <!-- =============================================== -->
+    <!-- ===================================== -->
+    <!-- 04. CHAT CONTENT -->
+    <!-- ===================================== -->
+
+    <FrameLayout
+        android:id="@+id/chatContentContainer"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/recyclerViewChat"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:paddingTop="16dp"
+            android:paddingBottom="18dp"
+            android:overScrollMode="ifContentScrolls"
+            android:scrollbars="vertical"/>
+
+    </FrameLayout>
+
+    <!-- ===================================== -->
+    <!-- 05. SUGGESTED ACTIONS -->
+    <!-- ===================================== -->
 
     <HorizontalScrollView
         android:id="@+id/suggestionsScroll"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:paddingStart="12dp"
-        android:paddingEnd="12dp"
-        android:paddingTop="4dp"
-        android:paddingBottom="10dp"
-        android:scrollbars="none">
+        android:layout_height="42dp"
+        android:scrollbars="none"
+        android:fillViewport="false">
 
         <LinearLayout
+            android:id="@+id/suggestionsContainer"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_height="match_parent"
             android:orientation="horizontal"
-            android:gravity="center_vertical">
+            android:gravity="center_vertical"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp">
 
-            <com.google.android.material.card.MaterialCardView
+            <TextView
+                android:id="@+id/btnSuggestionAnalyze"
                 android:layout_width="wrap_content"
-                android:layout_height="36dp"
+                android:layout_height="30dp"
+                android:gravity="center"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
                 android:layout_marginEnd="8dp"
-                app:cardBackgroundColor="#101A35"
-                app:cardCornerRadius="22dp"
-                app:cardElevation="0dp"
-                app:strokeColor="#2862C8"
-                app:strokeWidth="1dp">
+                android:background="@drawable/monolith_bg_input"
+                android:text="Analyze"
+                android:textColor="@color/monolith_text_secondary"
+                android:textSize="11sp"/>
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="match_parent"
-                    android:gravity="center"
-                    android:paddingStart="15dp"
-                    android:paddingEnd="15dp"
-                    android:text="أعطني مثالاً عملياً"
-                    android:textColor="#E2E9FF"
-                    android:textSize="11sp" />
-
-            </com.google.android.material.card.MaterialCardView>
-
-            <com.google.android.material.card.MaterialCardView
+            <TextView
+                android:id="@+id/btnSuggestionCode"
                 android:layout_width="wrap_content"
-                android:layout_height="36dp"
+                android:layout_height="30dp"
+                android:gravity="center"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
                 android:layout_marginEnd="8dp"
-                app:cardBackgroundColor="#101A35"
-                app:cardCornerRadius="22dp"
-                app:cardElevation="0dp"
-                app:strokeColor="#2862C8"
-                app:strokeWidth="1dp">
+                android:background="@drawable/monolith_bg_input"
+                android:text="Programming"
+                android:textColor="@color/monolith_text_secondary"
+                android:textSize="11sp"/>
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="match_parent"
-                    android:gravity="center"
-                    android:paddingStart="15dp"
-                    android:paddingEnd="15dp"
-                    android:text="ما الأدوات المتاحة؟"
-                    android:textColor="#E2E9FF"
-                    android:textSize="11sp" />
-
-            </com.google.android.material.card.MaterialCardView>
-
-            <com.google.android.material.card.MaterialCardView
+            <TextView
+                android:id="@+id/btnSuggestionVision"
                 android:layout_width="wrap_content"
-                android:layout_height="36dp"
-                app:cardBackgroundColor="#101A35"
-                app:cardCornerRadius="22dp"
-                app:cardElevation="0dp"
-                app:strokeColor="#2862C8"
-                app:strokeWidth="1dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="match_parent"
-                    android:gravity="center"
-                    android:paddingStart="15dp"
-                    android:paddingEnd="15dp"
-                    android:text="هل يدعم الفيديو؟"
-                    android:textColor="#E2E9FF"
-                    android:textSize="11sp" />
-
-            </com.google.android.material.card.MaterialCardView>
+                android:layout_height="30dp"
+                android:gravity="center"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:background="@drawable/monolith_bg_input"
+                android:text="Vision"
+                android:textColor="@color/monolith_text_secondary"
+                android:textSize="11sp"/>
 
         </LinearLayout>
+
     </HorizontalScrollView>
 
-    <!-- =============================================== -->
-    <!-- MESSAGE COMPOSER                                -->
-    <!-- =============================================== -->
+    <!-- ===================================== -->
+    <!-- 06. ATTACHMENT PREVIEW -->
+    <!-- ===================================== -->
 
-    <com.google.android.material.card.MaterialCardView
+    <LinearLayout
+        android:id="@+id/imagePreviewContainer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp"
+        android:paddingTop="8dp">
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:id="@+id/previewListContainer"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"/>
+
+        </HorizontalScrollView>
+
+    </LinearLayout>
+
+    <!-- ===================================== -->
+    <!-- 07. MESSAGE COMPOSER -->
+    <!-- ===================================== -->
+
+    <LinearLayout
         android:id="@+id/composerCard"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginStart="12dp"
-        android:layout_marginEnd="12dp"
-        android:layout_marginBottom="12dp"
-        app:cardBackgroundColor="#0D1530"
-        app:cardCornerRadius="30dp"
-        app:cardElevation="0dp"
-        app:strokeColor="#3855A9"
-        app:strokeWidth="1dp">
+        android:orientation="vertical"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="9dp"
+        android:paddingBottom="8dp"
+        android:background="@drawable/monolith_bg_toolbar">
 
         <LinearLayout
+            android:id="@+id/messageComposer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:minHeight="@dimen/monolith_input_height"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:padding="7dp">
+            android:paddingStart="5dp"
+            android:paddingEnd="5dp"
+            android:background="@drawable/monolith_bg_input">
 
             <ImageButton
                 android:id="@+id/btnAttach"
-                android:layout_width="42dp"
-                android:layout_height="48dp"
-                android:src="@drawable/ic_attach"
-                android:scaleType="centerInside"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:tint="#D9E9FF"
-                android:contentDescription="إرفاق ملف" />
+                android:layout_width="40dp"
+                android:layout_height="44dp"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/monolith_ic_attach"
+                android:contentDescription="Attach file"
+                android:padding="10dp"
+                android:tint="@color/monolith_text_secondary"/>
 
             <EditText
                 android:id="@+id/etMessage"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:minHeight="48dp"
-                android:hint="@string/chat_hint"
-                android:textColor="#F2F6FF"
-                android:textColorHint="#7888AE"
-                android:textSize="15sp"
+                android:minHeight="44dp"
+                android:maxHeight="120dp"
                 android:background="@android:color/transparent"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
+                android:gravity="center_vertical"
+                android:hint="Message INTJ-S..."
+                android:inputType="textCapSentences|textMultiLine"
+                android:imeOptions="actionSend"
+                android:paddingStart="5dp"
+                android:paddingEnd="5dp"
                 android:paddingTop="10dp"
                 android:paddingBottom="10dp"
-                android:gravity="center_vertical"
-                android:imeOptions="actionSend"
-                android:inputType="textCapSentences|textMultiLine"
-                android:maxLines="4"
-                android:overScrollMode="never" />
-
-            <View
-                android:layout_width="1dp"
-                android:layout_height="30dp"
-                android:layout_marginStart="3dp"
-                android:layout_marginEnd="3dp"
-                android:background="#35466F" />
+                android:textColor="@color/monolith_text"
+                android:textColorHint="@color/monolith_text_secondary"
+                android:textSize="14sp"
+                android:fontFamily="sans"
+                android:autofillHints="none"/>
 
             <ImageButton
                 android:id="@+id/btnMic"
                 android:layout_width="42dp"
-                android:layout_height="48dp"
-                android:src="@drawable/ic_mic"
-                android:scaleType="centerInside"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:tint="#EAF4FF"
-                android:contentDescription="الإدخال الصوتي" />
+                android:layout_height="44dp"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/monolith_ic_mic"
+                android:contentDescription="Voice input"
+                android:padding="10dp"
+                android:tint="@color/monolith_accent"/>
 
             <ImageButton
                 android:id="@+id/btnSend"
-                android:layout_width="50dp"
-                android:layout_height="50dp"
-                android:src="@drawable/ic_send"
-                android:scaleType="centerInside"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:tint="#FFFFFF"
+                android:layout_width="42dp"
+                android:layout_height="42dp"
                 android:layout_marginStart="3dp"
-                android:contentDescription="إرسال الرسالة" />
+                android:background="@drawable/monolith_bg_send"
+                android:src="@drawable/monolith_ic_send"
+                android:contentDescription="Send message"
+                android:padding="10dp"
+                android:tint="#FFFFFFFF"/>
 
         </LinearLayout>
-    </com.google.android.material.card.MaterialCardView>
+
+        <!-- SYSTEM INFORMATION -->
+
+        <LinearLayout
+            android:id="@+id/composerFooter"
+            android:layout_width="match_parent"
+            android:layout_height="25dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp">
+
+            <TextView
+                android:id="@+id/tvPrivacyStatus"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="INTJ-S  •  LOCAL-FIRST"
+                android:textColor="@color/monolith_text_secondary"
+                android:textSize="9sp"
+                android:letterSpacing="0.04"/>
+
+            <TextView
+                android:id="@+id/tvComposerInfo"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="AI ENGINE"
+                android:textColor="@color/monolith_accent"
+                android:textSize="9sp"
+                android:letterSpacing="0.08"/>
+
+        </LinearLayout>
+
+    </LinearLayout>
 
 </LinearLayout>
