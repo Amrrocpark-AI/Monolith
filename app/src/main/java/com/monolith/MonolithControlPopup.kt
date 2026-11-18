@@ -160,7 +160,9 @@ object MonolithControlPopup {
         )
 
         dialog.setContentView(root)
-        showCentered(dialog, activity, 0.92f, 0.84f)
+
+        // إصلاح ترتيب الوسيطين: Activity أولاً ثم Dialog.
+        showCentered(activity, dialog, 0.92f, 0.84f)
     }
 
     private fun showDetails(activity: Activity, item: Item) {
@@ -256,7 +258,12 @@ object MonolithControlPopup {
         root.addView(footer)
 
         dialog.setContentView(root)
-        showCentered(activity = activity, dialog = dialog, widthPercent = 0.92f, heightPercent = 0.78f)
+        showCentered(
+            activity = activity,
+            dialog = dialog,
+            widthPercent = 0.92f,
+            heightPercent = 0.78f
+        )
     }
 
     // =========================================================
