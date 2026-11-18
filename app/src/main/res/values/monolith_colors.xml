@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="monolith_background">#10141F</color>
+    <color name="monolith_surface">#151C2A</color>
+    <color name="monolith_surface_light">#202838</color>
+    <color name="monolith_primary">#477BFF</color>
+    <color name="monolith_accent">#42D6C5</color>
+    <color name="monolith_text">#FFFFFF</color>
+    <color name="monolith_text_secondary">#AAB5C7</color>
+    <color name="monolith_border">#35445D</color>
+</resources>
