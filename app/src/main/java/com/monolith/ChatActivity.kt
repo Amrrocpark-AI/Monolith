@@ -563,13 +563,16 @@ class ChatActivity : AppCompatActivity() {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
-            clipChildren = false
-            try {
-                setGlowEnabled(true)
-                setAnimationEnabled(true)
-                setDirectionVisible(true)
-            } catch (_: Exception) { }
-            onConnectionSelected = { connection -> handleConnectionSelected(connection) }
+            isClickable = true
+            isFocusable = false
+
+            setGlowEnabled(true)
+            setAnimationEnabled(true)
+            setDirectionVisible(true)
+
+            onConnectionSelected = { connection ->
+                handleConnectionSelected(connection)
+            }
         }
 
         portsOverlay.addView(connectionLayerView)
@@ -719,14 +722,17 @@ class ChatActivity : AppCompatActivity() {
 
         for (i in 0 until recyclerViewChat.childCount) {
             val itemView = recyclerViewChat.getChildAt(i) ?: continue
+
             val pos = recyclerViewChat.getChildAdapterPosition(itemView)
             if (pos == RecyclerView.NO_POSITION) continue
 
             val message = chatAdapter.currentList.getOrNull(pos) ?: continue
             if (message.isThinking) continue
 
-            if (itemView.childCount < 2) continue
-            val cardView = itemView.getChildAt(1) as? CardView ?: continue
+            val itemRoot = itemView as? ViewGroup ?: continue
+            if (itemRoot.childCount < 2) continue
+
+            val cardView = itemRoot.getChildAt(1) as? CardView ?: continue
 
             val cluster = ensureClusterForMessage(message.id)
             positionCluster(cluster, cardView)
@@ -734,9 +740,13 @@ class ChatActivity : AppCompatActivity() {
         }
 
         val toRemove = portClusters.keys - visibleIds
+
         toRemove.forEach { id ->
             portClusters.remove(id)?.let { cluster ->
-                try { portsOverlay.removeView(cluster) } catch (_: Exception) { }
+                try {
+                    portsOverlay.removeView(cluster)
+                } catch (_: Exception) {
+                }
             }
         }
 
@@ -754,26 +764,15 @@ class ChatActivity : AppCompatActivity() {
 
         val listener = object : ViewTreeObserver.OnGlobalLayoutListener {
             override fun onGlobalLayout() {
-                try {
-                    if (observer.isAlive) {
-                        observer.removeOnGlobalLayoutListener(this)
-                    }
-                } catch (e: Exception) {
-                    android.util.Log.w(
-                        "Monolith",
-                        "Endpoint listener removal failed",
-                        e
-                    )
+                if (observer.isAlive) {
+                    observer.removeOnGlobalLayoutListener(this)
                 }
 
-                if (endpointLayoutGeneration != generation) return
+                endpointLayoutListener = null
+                endpointLayoutObserver = null
+                endpointLayoutListenerPending = false
 
-                if (endpointLayoutListener === this) {
-                    endpointLayoutListener = null
-                    endpointLayoutObserver = null
-                    endpointLayoutListenerPending = false
-                }
-
+                if (generation != endpointLayoutGeneration) return
                 if (!portsSystemReady || !isActivityReady ||
                     isFinishing || isDestroyed
                 ) return
@@ -784,30 +783,7 @@ class ChatActivity : AppCompatActivity() {
 
         endpointLayoutListener = listener
         endpointLayoutObserver = observer
-
-        try {
-            observer.addOnGlobalLayoutListener(listener)
-        } catch (e: Exception) {
-            try {
-                if (observer.isAlive) {
-                    observer.removeOnGlobalLayoutListener(listener)
-                }
-            } catch (_: Exception) { }
-
-            if (endpointLayoutListener === listener) {
-                endpointLayoutListener = null
-                endpointLayoutObserver = null
-                endpointLayoutListenerPending = false
-            }
-
-            android.util.Log.w(
-                "Monolith",
-                "Endpoint listener registration failed",
-                e
-            )
-
-            postEndpointRefreshFallback(generation)
-        }
+        observer.addOnGlobalLayoutListener(listener)
     }
 
     private fun ensureClusterForMessage(messageId: String): PortClusterView {
@@ -3265,20 +3241,39 @@ class ChatActivity : AppCompatActivity() {
         rootLayout.background = ColorDrawable(Color.rgb(red, green, blue))
     }
 
-    private suspend fun getMemoriesContext(): String = withContext(Dispatchers.IO) {
-        try {
-            memoryHelper.getMemoriesContext()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            android.util.Log.e("Monolith", "getMemoriesContext failed", e)
-            ""
+    private suspend fun getMemoriesContext(): String =
+        withContext(Dispatchers.IO) {
+            try {
+                memoryHelper.getRecentMemories()
+                    .asSequence()
+                    .filter { it.content.isNotBlank() }
+                    .sortedByDescending { it.timestamp }
+                    .take(20)
+                    .joinToString(separator = "\n") { memory ->
+                        "[${memory.type}] ${memory.content.trim()}"
+                    }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                android.util.Log.e(
+                    "Monolith",
+                    "getMemoriesContext failed",
+                    e
+                )
+                ""
+            }
         }
-    }
 
     private fun initTtsIfNeeded() {
-        if (ttsManager == null) {
-            ttsManager = TtsManager(this)
+        if (ttsManager != null) return
+
+        ttsManager = TtsManager(this) {
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+
+                // callback اكتمال النطق.
+                // لا تضف عناصر واجهة أو مراجع غير موجودة في الملف.
+            }
         }
     }
 
