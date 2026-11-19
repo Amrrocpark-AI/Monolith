@@ -1,11 +1,10 @@
-
-package com.monolith.graph.ports
+package com.monolith.graph.ports.views
 
 import android.content.Context
 import android.util.AttributeSet
-import android.view.Gravity
 import android.view.View
 import android.widget.FrameLayout
+import com.monolith.graph.ports.models.*
 
 class PortClusterView @JvmOverloads constructor(
     context: Context,
@@ -15,90 +14,138 @@ class PortClusterView @JvmOverloads constructor(
     var ownerId: String = ""
         set(value) {
             field = value
-            updatePortIds()
+            refreshIds()
+        }
+
+    var config = PortLayoutConfig()
+        set(value) {
+            field = value
+            requestLayout()
         }
 
     var onPortSelected: ((PortSpec) -> Unit)? = null
 
-    private val ports = LinkedHashMap<PortSide, PortView>()
+    private val ports = LinkedHashMap<String, PortView>()
+
+    private val density = resources.displayMetrics.density
+
+    private fun dp(value: Float) = (value * density).toInt()
 
     init {
         clipChildren = false
         clipToPadding = false
-
-        createPorts()
     }
 
-    private fun createPorts() {
-        PortSide.values().forEach { side ->
+    fun addPort(
+        side: PortSide,
+        kind: PortKind = PortKind.CONTEXT,
+        state: PortState = PortState.IDLE,
+        label: String = ""
+    ): PortView? {
+        val sideCount = ports.values.count { it.portSide == side }
 
-            val port = PortView(context).apply {
-                portSide = side
-                portKind = PortKind.CONTEXT
-                state = PortState.IDLE
+        if (sideCount >= config.maxPortsPerSide) return null
 
-                onPortClick = { selected ->
-                    onPortSelected?.invoke(
-                        PortSpec(
-                            id = selected.portId,
-                            ownerId = ownerId,
-                            side = side,
-                            kind = selected.portKind,
-                            state = selected.state
-                        )
+        val id = "$ownerId:${side.name.lowercase()}:$sideCount"
+
+        if (ports.containsKey(id)) return ports[id]
+
+        val port = PortView(context).apply {
+            portId = id
+            portSide = side
+            portKind = kind
+            this.state = state
+
+            onPortClick = { selected ->
+                onPortSelected?.invoke(
+                    PortSpec(
+                        id = selected.portId,
+                        ownerId = ownerId,
+                        side = side,
+                        index = sideCount,
+                        kind = selected.portKind,
+                        state = selected.state,
+                        label = label
                     )
-                }
+                )
             }
-
-            ports[side] = port
-            addView(port)
         }
 
-        updatePortIds()
+        ports[id] = port
+        addView(port)
+        requestLayout()
+
+        return port
     }
 
-    private fun updatePortIds() {
-        ports.forEach { (side, port) ->
-            port.portId = "$ownerId:${side.name.lowercase()}"
+    fun createDefaultPorts() {
+        if (ports.isNotEmpty()) return
+
+        PortSide.values().forEach { side ->
+            addPort(side)
         }
+    }
+
+    fun removePort(portId: String) {
+        val port = ports.remove(portId) ?: return
+        removeView(port)
+        requestLayout()
+    }
+
+    fun clearPorts() {
+        ports.values.forEach { it.onPortClick = null }
+        ports.clear()
+        removeAllViews()
+    }
+
+    fun getPort(portId: String): PortView? = ports[portId]
+
+    fun getPorts(side: PortSide): List<PortView> =
+        ports.values.filter { it.portSide == side }
+
+    fun getAllPorts(): List<PortView> = ports.values.toList()
+
+    fun getPortSpecs(): List<PortSpec> =
+        ports.values.mapIndexed { index, port ->
+            PortSpec(
+                id = port.portId,
+                ownerId = ownerId,
+                side = port.portSide,
+                index = index,
+                kind = port.portKind,
+                state = port.state
+            )
+        }
+
+    fun setPortState(portId: String, state: PortState) {
+        ports[portId]?.setState(state)
+    }
+
+    fun setPortKind(portId: String, kind: PortKind) {
+        ports[portId]?.portKind = kind
+    }
+
+    fun setAllPortsState(state: PortState) {
+        ports.values.forEach { it.setState(state) }
     }
 
     override fun onMeasure(
         widthMeasureSpec: Int,
         heightMeasureSpec: Int
     ) {
-        super.onMeasure(
-            widthMeasureSpec,
-            heightMeasureSpec
-        )
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
 
-        ports.forEach { (side, port) ->
-
+        ports.values.forEach { port ->
             val horizontal =
-                side == PortSide.LEFT ||
-                side == PortSide.RIGHT
+                port.portSide == PortSide.LEFT ||
+                port.portSide == PortSide.RIGHT
 
-            val childWidth = if (horizontal) {
-                dp(30)
-            } else {
-                dp(18)
-            }
-
-            val childHeight = if (horizontal) {
-                dp(18)
-            } else {
-                dp(30)
-            }
+            val w = dp(if (horizontal) 34f else 20f)
+            val h = dp(if (horizontal) 20f else 34f)
 
             port.measure(
-                MeasureSpec.makeMeasureSpec(
-                    childWidth,
-                    MeasureSpec.EXACTLY
-                ),
-                MeasureSpec.makeMeasureSpec(
-                    childHeight,
-                    MeasureSpec.EXACTLY
-                )
+                MeasureSpec.makeMeasureSpec(w, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(h, MeasureSpec.EXACTLY)
             )
         }
     }
@@ -113,98 +160,50 @@ class PortClusterView @JvmOverloads constructor(
         val w = right - left
         val h = bottom - top
 
-        ports.forEach { (side, port) ->
+        PortSide.values().forEach { side ->
+            val sidePorts = ports.values.filter { it.portSide == side }
+            val count = sidePorts.size
 
-            val childWidth = port.measuredWidth
-            val childHeight = port.measuredHeight
+            sidePorts.forEachIndexed { index, port ->
+                val cw = port.measuredWidth
+                val ch = port.measuredHeight
 
-            val x: Int
-            val y: Int
+                val fraction = (index + 1f) / (count + 1f)
 
-            when (side) {
-                PortSide.LEFT -> {
-                    x = 0
-                    y = (h - childHeight) / 2
+                val x: Int
+                val y: Int
+
+                when (side) {
+                    PortSide.LEFT -> {
+                        x = -dp(config.edgeInsetDp)
+                        y = (h * fraction - ch / 2f).toInt()
+                    }
+
+                    PortSide.RIGHT -> {
+                        x = w - cw + dp(config.edgeInsetDp)
+                        y = (h * fraction - ch / 2f).toInt()
+                    }
+
+                    PortSide.TOP -> {
+                        x = (w * fraction - cw / 2f).toInt()
+                        y = -dp(config.edgeInsetDp)
+                    }
+
+                    PortSide.BOTTOM -> {
+                        x = (w * fraction - cw / 2f).toInt()
+                        y = h - ch + dp(config.edgeInsetDp)
+                    }
                 }
 
-                PortSide.RIGHT -> {
-                    x = w - childWidth
-                    y = (h - childHeight) / 2
-                }
-
-                PortSide.TOP -> {
-                    x = (w - childWidth) / 2
-                    y = 0
-                }
-
-                PortSide.BOTTOM -> {
-                    x = (w - childWidth) / 2
-                    y = h - childHeight
-                }
-            }
-
-            port.layout(
-                x,
-                y,
-                x + childWidth,
-                y + childHeight
-            )
-        }
-    }
-
-    fun getPort(side: PortSide): PortView? {
-        return ports[side]
-    }
-
-    fun getAllPorts(): List<PortView> {
-        return ports.values.toList()
-    }
-
-    fun setPortState(
-        side: PortSide,
-        state: PortState
-    ) {
-        ports[side]?.setState(state)
-    }
-
-    fun setPortKind(
-        side: PortSide,
-        kind: PortKind
-    ) {
-        ports[side]?.portKind = kind
-    }
-
-    fun setAllPortsState(state: PortState) {
-        ports.values.forEach {
-            it.setState(state)
-        }
-    }
-
-    fun setPortsEnabled(enabled: Boolean) {
-        ports.values.forEach {
-            it.isEnabled = enabled
-
-            if (!enabled) {
-                it.setState(PortState.DISABLED)
-            } else if (it.state == PortState.DISABLED) {
-                it.setState(PortState.IDLE)
+                port.layout(x, y, x + cw, y + ch)
             }
         }
     }
 
-    fun getPortSpecs(): List<PortSpec> {
-        return ports.map { (side, port) ->
-            PortSpec(
-                id = port.portId,
-                ownerId = ownerId,
-                side = side,
-                kind = port.portKind,
-                state = port.state
-            )
+    private fun refreshIds() {
+        ports.values.forEachIndexed { index, port ->
+            port.portId =
+                "$ownerId:${port.portSide.name.lowercase()}:$index"
         }
-    }
-
-    private fun dp(value: Int): Int {
-        return (value * resources.displayMetrics.density).toInt()
     }
 }
