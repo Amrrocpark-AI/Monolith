@@ -1,11 +1,18 @@
+
 package com.monolith.graph.ports.views
 
 import android.animation.ValueAnimator
 import android.content.Context
-import android.graphics.*
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.PathMeasure
+import android.graphics.PointF
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.animation.LinearInterpolator
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -25,8 +32,9 @@ class ConnectionLayerView @JvmOverloads constructor(
     private val animators = HashMap<String, ValueAnimator>()
 
     private val density = resources.displayMetrics.density
+    private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
 
-    private fun dp(value: Float) = value * density
+    private fun dp(value: Float): Float = value * density
 
     private val wirePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
@@ -57,13 +65,17 @@ class ConnectionLayerView @JvmOverloads constructor(
     private val pathMeasure = PathMeasure()
 
     private var selectedId: String? = null
+    private var pressedConnectionId: String? = null
+
     private var wiresVisible = true
     private var glowEnabled = true
     private var animationEnabled = true
     private var directionVisible = true
     private var controlPointsVisible = false
+
     private var downX = 0f
     private var downY = 0f
+    private var touchMoved = false
 
     var onConnectionSelected: ((WireConnection) -> Unit)? = null
     var onConnectionUpdated: ((WireConnection) -> Unit)? = null
@@ -71,17 +83,31 @@ class ConnectionLayerView @JvmOverloads constructor(
     init {
         setWillNotDraw(false)
         isClickable = true
-        clipChildren = false
+
+        // clipChildren غير متاحة هنا لأن هذا الكلاس يرث من View وليس ViewGroup.
+        // يجب ضبط القص على الحاوية الأب من نوع ViewGroup عند الحاجة.
     }
 
-    fun setConnections(items: List<WireConnection>) {
-        val oldIds = connections.keys.toSet()
-        val newIds = items.map { it.id }.toSet()
+    // ---------------------------------------------------------
+    // Connections
+    // ---------------------------------------------------------
 
-        (oldIds - newIds).forEach { stopAnimation(it) }
+    fun setConnections(items: List<WireConnection>) {
+        val newIds = items.mapTo(HashSet()) { it.id }
+
+        connections.keys
+            .filter { it !in newIds }
+            .forEach { stopAnimation(it) }
 
         connections.clear()
-        items.forEach { connections[it.id] = it }
+
+        items.forEach { connection ->
+            connections[connection.id] = connection
+        }
+
+        if (selectedId !in connections.keys) {
+            selectedId = null
+        }
 
         rebuildPaths()
         updateAnimations()
@@ -90,6 +116,34 @@ class ConnectionLayerView @JvmOverloads constructor(
 
     fun getConnections(): List<WireConnection> =
         connections.values.toList()
+
+    fun removeConnection(id: String) {
+        connections.remove(id)
+        paths.remove(id)
+        stopAnimation(id)
+
+        if (selectedId == id) {
+            selectedId = null
+        }
+
+        if (pressedConnectionId == id) {
+            pressedConnectionId = null
+        }
+
+        invalidate()
+    }
+
+    fun selectConnection(id: String?) {
+        selectedId = id?.takeIf { connections.containsKey(it) }
+        invalidate()
+    }
+
+    fun getSelectedConnection(): WireConnection? =
+        selectedId?.let { connections[it] }
+
+    // ---------------------------------------------------------
+    // Endpoints
+    // ---------------------------------------------------------
 
     fun updateEndpoint(portId: String, x: Float, y: Float) {
         endpoints[portId] = PointF(x, y)
@@ -112,13 +166,19 @@ class ConnectionLayerView @JvmOverloads constructor(
         invalidate()
     }
 
+    // ---------------------------------------------------------
+    // Settings
+    // ---------------------------------------------------------
+
     fun setWiresVisible(value: Boolean) {
+        if (wiresVisible == value) return
+
         wiresVisible = value
         updateAnimations()
         invalidate()
     }
 
-    fun areWiresVisible() = wiresVisible
+    fun areWiresVisible(): Boolean = wiresVisible
 
     fun setGlowEnabled(value: Boolean) {
         glowEnabled = value
@@ -126,6 +186,8 @@ class ConnectionLayerView @JvmOverloads constructor(
     }
 
     fun setAnimationEnabled(value: Boolean) {
+        if (animationEnabled == value) return
+
         animationEnabled = value
         updateAnimations()
         invalidate()
@@ -141,14 +203,9 @@ class ConnectionLayerView @JvmOverloads constructor(
         invalidate()
     }
 
-    fun selectConnection(id: String?) {
-        selectedId =
-            if (id != null && connections.containsKey(id)) id else null
-        invalidate()
-    }
-
-    fun getSelectedConnection(): WireConnection? =
-        selectedId?.let { connections[it] }
+    // ---------------------------------------------------------
+    // Connection editing
+    // ---------------------------------------------------------
 
     fun updateControlPoints(
         id: String,
@@ -163,6 +220,7 @@ class ConnectionLayerView @JvmOverloads constructor(
         )
 
         connections[id] = updated
+
         rebuildPaths()
         onConnectionUpdated?.invoke(updated)
         invalidate()
@@ -170,63 +228,89 @@ class ConnectionLayerView @JvmOverloads constructor(
 
     fun updateConnectionColor(id: String, color: Int) {
         val old = connections[id] ?: return
+
         connections[id] = old.copy(color = color)
         invalidate()
     }
 
-    fun removeConnection(id: String) {
-        connections.remove(id)
-        paths.remove(id)
-        stopAnimation(id)
+    // ---------------------------------------------------------
+    // Path construction
+    // ---------------------------------------------------------
 
-        if (selectedId == id) selectedId = null
+    private fun getControlPoints(
+        connection: WireConnection,
+        start: PointF,
+        end: PointF
+    ): Pair<PointF, PointF> {
 
-        invalidate()
+        val dx = end.x - start.x
+        val dy = end.y - start.y
+        val distance = hypot(dx, dy)
+
+        val offset = (distance * 0.28f)
+            .coerceIn(dp(35f), dp(170f))
+
+        val first = connection.control1 ?: PointF(
+            start.x + dx * 0.32f,
+            start.y - offset
+        )
+
+        val second = connection.control2 ?: PointF(
+            start.x + dx * 0.68f,
+            end.y - offset
+        )
+
+        return Pair(first, second)
     }
 
     private fun rebuildPaths() {
         paths.clear()
 
         connections.values.forEach { connection ->
-            val start = endpoints[connection.sourcePortId] ?: return@forEach
-            val end = endpoints[connection.targetPortId] ?: return@forEach
+            val start = endpoints[connection.sourcePortId]
+                ?: return@forEach
 
-            val dx = end.x - start.x
-            val dy = end.y - start.y
-            val distance = hypot(dx, dy)
+            val end = endpoints[connection.targetPortId]
+                ?: return@forEach
 
-            val offset = (distance * 0.28f).coerceIn(dp(35f), dp(170f))
-
-            val first = connection.control1 ?: PointF(
-                start.x + dx * 0.32f,
-                start.y - offset
+            val (first, second) = getControlPoints(
+                connection,
+                start,
+                end
             )
 
-            val second = connection.control2 ?: PointF(
-                start.x + dx * 0.68f,
-                end.y - offset
-            )
-
-            paths[connection.id] = Path().apply {
+            val path = Path().apply {
                 moveTo(start.x, start.y)
+
                 cubicTo(
-                    first.x, first.y,
-                    second.x, second.y,
-                    end.x, end.y
+                    first.x,
+                    first.y,
+                    second.x,
+                    second.y,
+                    end.x,
+                    end.y
                 )
             }
+
+            paths[connection.id] = path
         }
     }
+
+    // ---------------------------------------------------------
+    // Drawing
+    // ---------------------------------------------------------
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
 
-        if (!wiresVisible) return
+        if (!wiresVisible || connections.isEmpty()) return
 
         connections.values.forEach { connection ->
             if (!connection.visible) return@forEach
 
-            val path = paths[connection.id] ?: return@forEach
+            val path = paths[connection.id]
+                ?: return@forEach
+
             drawWire(canvas, connection, path)
         }
     }
@@ -239,8 +323,11 @@ class ConnectionLayerView @JvmOverloads constructor(
         val selected = selectedId == connection.id
         val width = dp(connection.strokeWidthDp)
 
+        // Glow layers
         if (glowEnabled && connection.glowEnabled) {
+            glowPaint.style = Paint.Style.STROKE
             glowPaint.color = connection.color
+
             glowPaint.alpha = if (selected) 115 else 55
             glowPaint.strokeWidth = width * 4f
             canvas.drawPath(path, glowPaint)
@@ -250,19 +337,25 @@ class ConnectionLayerView @JvmOverloads constructor(
             canvas.drawPath(path, glowPaint)
         }
 
+        // Main wire
         wirePaint.color = connection.color
         wirePaint.alpha = 245
-        wirePaint.strokeWidth = if (selected) width * 1.5f else width
+        wirePaint.strokeWidth =
+            if (selected) width * 1.5f else width
+
         canvas.drawPath(path, wirePaint)
 
+        // Animated pulse
         if (animationEnabled && connection.animated) {
             drawPulse(canvas, path, connection)
         }
 
+        // Direction indicators
         if (directionVisible) {
             drawDirection(canvas, path, connection)
         }
 
+        // Editable control points
         if (controlPointsVisible && selected) {
             drawControls(canvas, connection)
         }
@@ -274,13 +367,21 @@ class ConnectionLayerView @JvmOverloads constructor(
         connection: WireConnection
     ) {
         pathMeasure.setPath(path, false)
+
         val length = pathMeasure.length
         if (length <= 0f) return
 
         val position = FloatArray(2)
         val fraction = progress[connection.id] ?: 0f
 
-        if (!pathMeasure.getPosTan(length * fraction, position, null)) return
+        if (!pathMeasure.getPosTan(
+                length * fraction,
+                position,
+                null
+            )
+        ) {
+            return
+        }
 
         glowPaint.style = Paint.Style.FILL
         glowPaint.color = connection.color
@@ -306,6 +407,10 @@ class ConnectionLayerView @JvmOverloads constructor(
         glowPaint.style = Paint.Style.STROKE
     }
 
+    // ---------------------------------------------------------
+    // Direction arrows
+    // ---------------------------------------------------------
+
     private fun drawDirection(
         canvas: Canvas,
         path: Path,
@@ -317,11 +422,13 @@ class ConnectionLayerView @JvmOverloads constructor(
                 drawArrow(canvas, path, 0.70f, connection.color)
             }
 
-            ConnectionDirection.OUTGOING ->
+            ConnectionDirection.OUTGOING -> {
                 drawArrow(canvas, path, 0.72f, connection.color)
+            }
 
-            ConnectionDirection.INCOMING ->
+            ConnectionDirection.INCOMING -> {
                 drawArrow(canvas, path, 0.28f, connection.color)
+            }
         }
     }
 
@@ -336,12 +443,19 @@ class ConnectionLayerView @JvmOverloads constructor(
         val length = pathMeasure.length
         if (length <= 0f) return
 
-        val pos = FloatArray(2)
-        val tan = FloatArray(2)
+        val position = FloatArray(2)
+        val tangent = FloatArray(2)
 
-        if (!pathMeasure.getPosTan(length * fraction, pos, tan)) return
+        if (!pathMeasure.getPosTan(
+                length * fraction,
+                position,
+                tangent
+            )
+        ) {
+            return
+        }
 
-        val angle = atan2(tan[1], tan[0])
+        val angle = atan2(tangent[1], tangent[0])
         val size = dp(8f)
         val spread = Math.toRadians(145.0).toFloat()
 
@@ -349,53 +463,109 @@ class ConnectionLayerView @JvmOverloads constructor(
         arrowPaint.alpha = 245
         arrowPaint.strokeWidth = dp(1.8f)
 
-        val lx = pos[0] + cos(angle + spread) * size
-        val ly = pos[1] + sin(angle + spread) * size
-        val rx = pos[0] + cos(angle - spread) * size
-        val ry = pos[1] + sin(angle - spread) * size
+        val leftX = position[0] + cos(angle + spread) * size
+        val leftY = position[1] + sin(angle + spread) * size
 
-        canvas.drawLine(pos[0], pos[1], lx, ly, arrowPaint)
-        canvas.drawLine(pos[0], pos[1], rx, ry, arrowPaint)
+        val rightX = position[0] + cos(angle - spread) * size
+        val rightY = position[1] + sin(angle - spread) * size
+
+        canvas.drawLine(
+            position[0],
+            position[1],
+            leftX,
+            leftY,
+            arrowPaint
+        )
+
+        canvas.drawLine(
+            position[0],
+            position[1],
+            rightX,
+            rightY,
+            arrowPaint
+        )
     }
+
+    // ---------------------------------------------------------
+    // Control points
+    // ---------------------------------------------------------
 
     private fun drawControls(
         canvas: Canvas,
         connection: WireConnection
     ) {
-        val start = endpoints[connection.sourcePortId] ?: return
-        val end = endpoints[connection.targetPortId] ?: return
+        val start = endpoints[connection.sourcePortId]
+            ?: return
 
-        val dx = end.x - start.x
-        val dy = end.y - start.y
+        val end = endpoints[connection.targetPortId]
+            ?: return
 
-        val first = connection.control1 ?: PointF(
-            start.x + dx * 0.32f,
-            start.y - dp(50f)
-        )
-
-        val second = connection.control2 ?: PointF(
-            start.x + dx * 0.68f,
-            end.y - dp(50f)
+        val (first, second) = getControlPoints(
+            connection,
+            start,
+            end
         )
 
         arrowPaint.color = connection.color
         arrowPaint.alpha = 120
         arrowPaint.strokeWidth = dp(1f)
 
-        canvas.drawLine(start.x, start.y, first.x, first.y, arrowPaint)
-        canvas.drawLine(end.x, end.y, second.x, second.y, arrowPaint)
+        canvas.drawLine(
+            start.x,
+            start.y,
+            first.x,
+            first.y,
+            arrowPaint
+        )
+
+        canvas.drawLine(
+            end.x,
+            end.y,
+            second.x,
+            second.y,
+            arrowPaint
+        )
 
         pointPaint.color = connection.color
-        canvas.drawCircle(first.x, first.y, dp(6f), pointPaint)
-        canvas.drawCircle(second.x, second.y, dp(6f), pointPaint)
+
+        canvas.drawCircle(
+            first.x,
+            first.y,
+            dp(6f),
+            pointPaint
+        )
+
+        canvas.drawCircle(
+            second.x,
+            second.y,
+            dp(6f),
+            pointPaint
+        )
 
         pointPaint.color = Color.WHITE
-        canvas.drawCircle(first.x, first.y, dp(2.2f), pointPaint)
-        canvas.drawCircle(second.x, second.y, dp(2.2f), pointPaint)
+
+        canvas.drawCircle(
+            first.x,
+            first.y,
+            dp(2.2f),
+            pointPaint
+        )
+
+        canvas.drawCircle(
+            second.x,
+            second.y,
+            dp(2.2f),
+            pointPaint
+        )
     }
+
+    // ---------------------------------------------------------
+    // Animation management
+    // ---------------------------------------------------------
 
     private fun updateAnimations() {
         connections.values.forEach { connection ->
+
             val shouldRun =
                 isAttachedToWindow &&
                 wiresVisible &&
@@ -412,15 +582,26 @@ class ConnectionLayerView @JvmOverloads constructor(
     }
 
     private fun startAnimation(connection: WireConnection) {
-        if (animators.containsKey(connection.id)) return
+        val existing = animators[connection.id]
+        val duration = connection.animationDuration.coerceAtLeast(100L)
+
+        if (existing != null) {
+            if (existing.duration == duration && existing.isRunning) {
+                return
+            }
+
+            stopAnimation(connection.id)
+        }
 
         val animator = ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = connection.animationDuration.coerceAtLeast(100L)
+            this.duration = duration
             repeatCount = ValueAnimator.INFINITE
             interpolator = LinearInterpolator()
 
-            addUpdateListener {
-                progress[connection.id] = it.animatedValue as Float
+            addUpdateListener { animation ->
+                progress[connection.id] =
+                    animation.animatedValue as Float
+
                 invalidate()
             }
         }
@@ -430,7 +611,10 @@ class ConnectionLayerView @JvmOverloads constructor(
     }
 
     private fun stopAnimation(id: String) {
-        animators.remove(id)?.cancel()
+        animators.remove(id)?.let { animator ->
+            animator.cancel()
+        }
+
         progress.remove(id)
     }
 
@@ -440,36 +624,104 @@ class ConnectionLayerView @JvmOverloads constructor(
     }
 
     override fun onDetachedFromWindow() {
-        animators.values.forEach { it.cancel() }
+        animators.values.forEach { animator ->
+            animator.cancel()
+        }
+
         animators.clear()
+        progress.clear()
+
+        pressedConnectionId = null
+        touchMoved = false
+
         super.onDetachedFromWindow()
     }
 
+    // ---------------------------------------------------------
+    // Touch interaction
+    // ---------------------------------------------------------
+
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.actionMasked) {
+
             MotionEvent.ACTION_DOWN -> {
                 downX = event.x
                 downY = event.y
 
-                return wiresVisible &&
-                    findConnectionAt(downX, downY) != null
+                touchMoved = false
+
+                pressedConnectionId =
+                    if (wiresVisible) {
+                        findConnectionAt(event.x, event.y)?.id
+                    } else {
+                        null
+                    }
+
+                return pressedConnectionId != null
             }
 
-            MotionEvent.ACTION_UP -> {
-                val connection = findConnectionAt(event.x, event.y)
-                    ?: return false
+            MotionEvent.ACTION_MOVE -> {
+                if (pressedConnectionId == null) {
+                    return false
+                }
 
-                selectedId = connection.id
-                onConnectionSelected?.invoke(connection)
-                invalidate()
-                performClick()
+                val dx = event.x - downX
+                val dy = event.y - downY
+
+                if (hypot(dx, dy) > touchSlop) {
+                    touchMoved = true
+                }
+
                 return true
             }
 
-            MotionEvent.ACTION_CANCEL -> return false
-        }
+            MotionEvent.ACTION_UP -> {
+                val pressedId = pressedConnectionId
+                pressedConnectionId = null
 
-        return true
+                if (pressedId == null) {
+                    return false
+                }
+
+                val dx = event.x - downX
+                val dy = event.y - downY
+
+                val movedTooFar =
+                    touchMoved || hypot(dx, dy) > touchSlop
+
+                if (movedTooFar) {
+                    return true
+                }
+
+                val connection = findConnectionAt(
+                    event.x,
+                    event.y
+                )
+
+                if (connection == null || connection.id != pressedId) {
+                    return true
+                }
+
+                selectedId = connection.id
+
+                onConnectionSelected?.invoke(connection)
+
+                invalidate()
+                performClick()
+
+                return true
+            }
+
+            MotionEvent.ACTION_CANCEL -> {
+                pressedConnectionId = null
+                touchMoved = false
+                return true
+            }
+
+            else -> {
+                return pressedConnectionId != null
+            }
+        }
     }
 
     override fun performClick(): Boolean {
@@ -477,32 +729,58 @@ class ConnectionLayerView @JvmOverloads constructor(
         return true
     }
 
-    private fun findConnectionAt(x: Float, y: Float): WireConnection? {
+    // ---------------------------------------------------------
+    // Connection hit testing
+    // ---------------------------------------------------------
+
+    private fun findConnectionAt(
+        x: Float,
+        y: Float
+    ): WireConnection? {
+
         val tolerance = dp(14f)
+        val position = FloatArray(2)
 
-        return connections.values.toList().asReversed().firstOrNull { connection ->
-            if (!connection.visible) return@firstOrNull false
+        val candidates = connections.values.toList().asReversed()
 
-            val path = paths[connection.id] ?: return@firstOrNull false
+        for (connection in candidates) {
+            if (!connection.visible) continue
+
+            val path = paths[connection.id] ?: continue
 
             pathMeasure.setPath(path, false)
+
             val length = pathMeasure.length
+            if (length <= 0f) continue
 
-            if (length <= 0f) return@firstOrNull false
+            // زيادة عدد نقاط الفحص حسب طول السلك.
+            val steps = (length / dp(8f))
+                .toInt()
+                .coerceIn(24, 240)
 
-            val position = FloatArray(2)
+            for (i in 0..steps) {
+                val distance = length * i / steps.toFloat()
 
-            for (i in 0..60) {
-                val distance = length * i / 60f
+                if (!pathMeasure.getPosTan(
+                        distance,
+                        position,
+                        null
+                    )
+                ) {
+                    continue
+                }
 
-                if (!pathMeasure.getPosTan(distance, position, null)) continue
+                val distanceToPoint = hypot(
+                    x - position[0],
+                    y - position[1]
+                )
 
-                if (hypot(x - position[0], y - position[1]) <= tolerance) {
-                    return@firstOrNull true
+                if (distanceToPoint <= tolerance) {
+                    return connection
                 }
             }
-
-            false
         }
+
+        return null
     }
 }
