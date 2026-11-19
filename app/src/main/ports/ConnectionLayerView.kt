@@ -166,6 +166,18 @@ class ConnectionLayerView @JvmOverloads constructor(
         invalidate()
     }
 
+    /**
+     * Removes all stored endpoint coordinates.
+     *
+     * Call this when switching conversations or clearing
+     * all ports, so old endpoint positions cannot remain.
+     */
+    fun clearEndpoints() {
+        endpoints.clear()
+        rebuildPaths()
+        invalidate()
+    }
+
     // ---------------------------------------------------------
     // Settings
     // ---------------------------------------------------------
