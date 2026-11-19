@@ -1,8 +1,6 @@
-
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/rootLayout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -24,14 +22,15 @@
 
         <ImageButton
             android:id="@+id/btnBack"
-            android:layout_width="42dp"
-            android:layout_height="42dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
             android:background="?android:attr/selectableItemBackgroundBorderless"
             android:src="@drawable/monolith_ic_close"
             android:rotation="45"
             android:contentDescription="Back"
-            android:padding="10dp"
-            android:tint="@color/monolith_text"/>
+            android:padding="12dp"
+            android:tint="@color/monolith_text"
+            android:scaleType="centerInside" />
 
         <LinearLayout
             android:layout_width="0dp"
@@ -39,7 +38,8 @@
             android:layout_weight="1"
             android:orientation="vertical"
             android:gravity="center_vertical"
-            android:paddingStart="10dp">
+            android:paddingStart="10dp"
+            android:paddingEnd="6dp">
 
             <TextView
                 android:id="@+id/tvAppTitle"
@@ -49,7 +49,9 @@
                 android:textColor="@color/monolith_text"
                 android:textSize="17sp"
                 android:textStyle="bold"
-                android:letterSpacing="0.12"/>
+                android:letterSpacing="0.12"
+                android:maxLines="1"
+                android:includeFontPadding="false" />
 
             <TextView
                 android:id="@+id/tvAppSubtitle"
@@ -58,29 +60,33 @@
                 android:text="INTJ-S  •  INTELLIGENCE SYSTEM"
                 android:textColor="@color/monolith_accent"
                 android:textSize="9sp"
-                android:letterSpacing="0.08"/>
+                android:letterSpacing="0.08"
+                android:maxLines="1"
+                android:includeFontPadding="false" />
 
         </LinearLayout>
 
         <ImageButton
             android:id="@+id/btnDashboard"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
             android:background="?android:attr/selectableItemBackgroundBorderless"
             android:src="@drawable/monolith_ic_more"
             android:contentDescription="Dashboard"
-            android:padding="9dp"
-            android:tint="@color/monolith_text_secondary"/>
+            android:padding="12dp"
+            android:tint="@color/monolith_text_secondary"
+            android:scaleType="centerInside" />
 
         <ImageButton
             android:id="@+id/btnSettings"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
             android:background="?android:attr/selectableItemBackgroundBorderless"
             android:src="@drawable/monolith_ic_more"
             android:contentDescription="Settings"
-            android:padding="9dp"
-            android:tint="@color/monolith_accent"/>
+            android:padding="12dp"
+            android:tint="@color/monolith_accent"
+            android:scaleType="centerInside" />
 
     </LinearLayout>
 
@@ -110,7 +116,8 @@
                 android:text="ACTIVE INTELLIGENCE"
                 android:textColor="@color/monolith_text_secondary"
                 android:textSize="9sp"
-                android:letterSpacing="0.1"/>
+                android:letterSpacing="0.1"
+                android:includeFontPadding="false" />
 
             <TextView
                 android:id="@+id/modelSelector"
@@ -120,13 +127,15 @@
                 android:textColor="@color/monolith_text"
                 android:textSize="13sp"
                 android:textStyle="bold"
-                android:layout_marginTop="3dp"/>
+                android:layout_marginTop="3dp"
+                android:maxLines="1"
+                android:ellipsize="end" />
 
         </LinearLayout>
 
         <LinearLayout
             android:layout_width="wrap_content"
-            android:layout_height="30dp"
+            android:layout_height="32dp"
             android:orientation="horizontal"
             android:gravity="center"
             android:paddingStart="11dp"
@@ -136,7 +145,7 @@
             <View
                 android:layout_width="7dp"
                 android:layout_height="7dp"
-                android:background="#42D6C5"/>
+                android:background="#42D6C5" />
 
             <TextView
                 android:id="@+id/tvEngineStatus"
@@ -145,7 +154,8 @@
                 android:text=" READY"
                 android:textColor="@color/monolith_accent"
                 android:textSize="10sp"
-                android:textStyle="bold"/>
+                android:textStyle="bold"
+                android:includeFontPadding="false" />
 
         </LinearLayout>
 
@@ -158,7 +168,8 @@
         android:layout_width="match_parent"
         android:layout_height="44dp"
         android:scrollbars="none"
-        android:fillViewport="false">
+        android:fillViewport="false"
+        android:overScrollMode="never">
 
         <LinearLayout
             android:layout_width="wrap_content"
@@ -171,25 +182,27 @@
             <TextView
                 android:id="@+id/tvCurrentConversation"
                 android:layout_width="wrap_content"
-                android:layout_height="30dp"
+                android:layout_height="32dp"
                 android:gravity="center"
                 android:paddingStart="14dp"
                 android:paddingEnd="14dp"
                 android:background="@drawable/monolith_bg_input"
                 android:text="Current Conversation"
                 android:textColor="@color/monolith_text"
-                android:textSize="11sp"/>
+                android:textSize="11sp"
+                android:maxLines="1" />
 
             <TextView
                 android:id="@+id/tvHistoryLabel"
                 android:layout_width="wrap_content"
-                android:layout_height="30dp"
+                android:layout_height="32dp"
                 android:gravity="center"
                 android:paddingStart="14dp"
                 android:paddingEnd="14dp"
                 android:text="+ History"
                 android:textColor="@color/monolith_text_secondary"
-                android:textSize="11sp"/>
+                android:textSize="11sp"
+                android:maxLines="1" />
 
         </LinearLayout>
 
@@ -213,7 +226,8 @@
             android:paddingTop="16dp"
             android:paddingBottom="18dp"
             android:overScrollMode="ifContentScrolls"
-            android:scrollbars="vertical"/>
+            android:scrollbars="vertical"
+            android:descendantFocusability="afterDescendants" />
 
     </FrameLayout>
 
@@ -224,7 +238,8 @@
         android:layout_width="match_parent"
         android:layout_height="42dp"
         android:scrollbars="none"
-        android:fillViewport="false">
+        android:fillViewport="false"
+        android:overScrollMode="never">
 
         <LinearLayout
             android:id="@+id/suggestionsContainer"
@@ -238,7 +253,7 @@
             <TextView
                 android:id="@+id/btnSuggestionAnalyze"
                 android:layout_width="wrap_content"
-                android:layout_height="30dp"
+                android:layout_height="32dp"
                 android:gravity="center"
                 android:paddingStart="12dp"
                 android:paddingEnd="12dp"
@@ -246,12 +261,13 @@
                 android:background="@drawable/monolith_bg_input"
                 android:text="Analyze"
                 android:textColor="@color/monolith_text_secondary"
-                android:textSize="11sp"/>
+                android:textSize="11sp"
+                android:maxLines="1" />
 
             <TextView
                 android:id="@+id/btnSuggestionCode"
                 android:layout_width="wrap_content"
-                android:layout_height="30dp"
+                android:layout_height="32dp"
                 android:gravity="center"
                 android:paddingStart="12dp"
                 android:paddingEnd="12dp"
@@ -259,19 +275,21 @@
                 android:background="@drawable/monolith_bg_input"
                 android:text="Programming"
                 android:textColor="@color/monolith_text_secondary"
-                android:textSize="11sp"/>
+                android:textSize="11sp"
+                android:maxLines="1" />
 
             <TextView
                 android:id="@+id/btnSuggestionVision"
                 android:layout_width="wrap_content"
-                android:layout_height="30dp"
+                android:layout_height="32dp"
                 android:gravity="center"
                 android:paddingStart="12dp"
                 android:paddingEnd="12dp"
                 android:background="@drawable/monolith_bg_input"
                 android:text="Vision"
                 android:textColor="@color/monolith_text_secondary"
-                android:textSize="11sp"/>
+                android:textSize="11sp"
+                android:maxLines="1" />
 
         </LinearLayout>
 
@@ -292,14 +310,15 @@
         <HorizontalScrollView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:scrollbars="none">
+            android:scrollbars="none"
+            android:overScrollMode="never">
 
             <LinearLayout
                 android:id="@+id/previewListContainer"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
-                android:gravity="center_vertical"/>
+                android:gravity="center_vertical" />
 
         </HorizontalScrollView>
 
@@ -331,21 +350,23 @@
 
             <ImageButton
                 android:id="@+id/btnAttach"
-                android:layout_width="40dp"
-                android:layout_height="44dp"
+                android:layout_width="44dp"
+                android:layout_height="48dp"
                 android:background="?android:attr/selectableItemBackgroundBorderless"
                 android:src="@drawable/monolith_ic_attach"
                 android:contentDescription="Attach file"
-                android:padding="10dp"
-                android:tint="@color/monolith_text_secondary"/>
+                android:padding="12dp"
+                android:tint="@color/monolith_text_secondary"
+                android:scaleType="centerInside" />
 
             <EditText
                 android:id="@+id/etMessage"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:minHeight="44dp"
+                android:minHeight="48dp"
                 android:maxHeight="120dp"
+                android:maxLines="4"
                 android:background="@android:color/transparent"
                 android:gravity="center_vertical"
                 android:hint="Message INTJ-S..."
@@ -359,28 +380,31 @@
                 android:textColorHint="@color/monolith_text_secondary"
                 android:textSize="14sp"
                 android:fontFamily="sans"
-                android:autofillHints="none"/>
+                android:autofillHints="none"
+                android:scrollbars="vertical" />
 
             <ImageButton
                 android:id="@+id/btnMic"
-                android:layout_width="42dp"
-                android:layout_height="44dp"
+                android:layout_width="44dp"
+                android:layout_height="48dp"
                 android:background="?android:attr/selectableItemBackgroundBorderless"
                 android:src="@drawable/monolith_ic_mic"
                 android:contentDescription="Voice input"
-                android:padding="10dp"
-                android:tint="@color/monolith_accent"/>
+                android:padding="12dp"
+                android:tint="@color/monolith_accent"
+                android:scaleType="centerInside" />
 
             <ImageButton
                 android:id="@+id/btnSend"
-                android:layout_width="42dp"
-                android:layout_height="42dp"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
                 android:layout_marginStart="3dp"
                 android:background="@drawable/monolith_bg_send"
                 android:src="@drawable/monolith_ic_send"
                 android:contentDescription="Send message"
-                android:padding="10dp"
-                android:tint="#FFFFFFFF"/>
+                android:padding="11dp"
+                android:tint="#FFFFFFFF"
+                android:scaleType="centerInside" />
 
         </LinearLayout>
 
@@ -403,7 +427,8 @@
                 android:text="INTJ-S  •  LOCAL-FIRST"
                 android:textColor="@color/monolith_text_secondary"
                 android:textSize="9sp"
-                android:letterSpacing="0.04"/>
+                android:letterSpacing="0.04"
+                android:maxLines="1" />
 
             <TextView
                 android:id="@+id/tvComposerInfo"
@@ -412,7 +437,8 @@
                 android:text="AI ENGINE"
                 android:textColor="@color/monolith_accent"
                 android:textSize="9sp"
-                android:letterSpacing="0.08"/>
+                android:letterSpacing="0.08"
+                android:maxLines="1" />
 
         </LinearLayout>
 
