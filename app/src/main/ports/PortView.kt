@@ -1,5 +1,4 @@
-
-package com.monolith.graph.ports
+package com.monolith.graph.ports.views
 
 import android.animation.ValueAnimator
 import android.content.Context
@@ -10,7 +9,7 @@ import android.graphics.RectF
 import android.util.AttributeSet
 import android.view.View
 import android.view.animation.LinearInterpolator
-import kotlin.math.min
+import com.monolith.graph.ports.models.*
 
 class PortView @JvmOverloads constructor(
     context: Context,
@@ -23,19 +22,25 @@ class PortView @JvmOverloads constructor(
             contentDescription = "منفذ اتصال $value"
         }
 
-    var portSide: PortSide = PortSide.RIGHT
+    var portSide = PortSide.RIGHT
         set(value) {
             field = value
             invalidate()
         }
 
-    var portKind: PortKind = PortKind.CONTEXT
+    var portKind = PortKind.CONTEXT
         set(value) {
             field = value
             invalidate()
         }
 
-    var state: PortState = PortState.IDLE
+    var shape = PortShape.USB_C
+        set(value) {
+            field = value
+            invalidate()
+        }
+
+    var state = PortState.IDLE
         set(value) {
             field = value
             updateAnimation()
@@ -46,17 +51,19 @@ class PortView @JvmOverloads constructor(
 
     private val density = resources.displayMetrics.density
 
-    private val outerPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val innerPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val bodyPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val slotPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val detailPaint = Paint(Paint.ANTI_ALIAS_FLAG)
 
-    private val bodyRect = RectF()
-    private val slotRect = RectF()
+    private val body = RectF()
+    private val slot = RectF()
 
     private var pulse = 0f
-
     private var animator: ValueAnimator? = null
+
+    private fun dp(value: Float) = value * density
 
     private val accent: Int
         get() = PortPalette.colorFor(portKind)
@@ -65,13 +72,13 @@ class PortView @JvmOverloads constructor(
         isClickable = true
         isFocusable = true
 
-        minimumWidth = dp(28)
-        minimumHeight = dp(18)
+        minimumWidth = dp(30f).toInt()
+        minimumHeight = dp(20f).toInt()
 
-        setLayerType(View.LAYER_TYPE_SOFTWARE, null)
+        setLayerType(LAYER_TYPE_SOFTWARE, null)
 
         setOnClickListener {
-            if (state != PortState.DISABLED) {
+            if (isEnabled && state != PortState.DISABLED) {
                 onPortClick?.invoke(this)
             }
         }
@@ -81,170 +88,125 @@ class PortView @JvmOverloads constructor(
         widthMeasureSpec: Int,
         heightMeasureSpec: Int
     ) {
-        val desiredWidth = dp(30)
-        val desiredHeight = dp(18)
+        val horizontal =
+            portSide == PortSide.LEFT ||
+            portSide == PortSide.RIGHT
 
-        val width = resolveSize(
-            desiredWidth,
-            widthMeasureSpec
+        val desiredWidth = dp(if (horizontal) 34f else 20f).toInt()
+        val desiredHeight = dp(if (horizontal) 20f else 34f).toInt()
+
+        setMeasuredDimension(
+            resolveSize(desiredWidth, widthMeasureSpec),
+            resolveSize(desiredHeight, heightMeasureSpec)
         )
-
-        val height = resolveSize(
-            desiredHeight,
-            heightMeasureSpec
-        )
-
-        setMeasuredDimension(width, height)
     }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
 
+        val horizontal =
+            portSide == PortSide.LEFT ||
+            portSide == PortSide.RIGHT
+
         val save = canvas.save()
 
-        if (
-            portSide == PortSide.TOP ||
-            portSide == PortSide.BOTTOM
-        ) {
-            canvas.rotate(
-                90f,
-                width / 2f,
-                height / 2f
-            )
+        if (!horizontal) {
+            canvas.rotate(90f, width / 2f, height / 2f)
         }
 
-        val centerX = width / 2f
-        val centerY = height / 2f
+        val cx = width / 2f
+        val cy = height / 2f
 
-        val bodyWidth = min(width * 0.90f, dp(27).toFloat())
-        val bodyHeight = min(height * 0.84f, dp(15).toFloat())
+        val bw = minOf(width * 0.88f, dp(29f))
+        val bh = minOf(height * 0.82f, dp(15f))
 
-        bodyRect.set(
-            centerX - bodyWidth / 2f,
-            centerY - bodyHeight / 2f,
-            centerX + bodyWidth / 2f,
-            centerY + bodyHeight / 2f
+        body.set(
+            cx - bw / 2f,
+            cy - bh / 2f,
+            cx + bw / 2f,
+            cy + bh / 2f
         )
 
-        val currentColor = when (state) {
-            PortState.IDLE -> Color.rgb(65, 82, 108)
+        val color = when (state) {
+            PortState.IDLE -> 0xFF52627A.toInt()
             PortState.AVAILABLE -> accent
             PortState.SELECTED -> Color.WHITE
             PortState.CONNECTED -> accent
             PortState.ACTIVE -> accent
-            PortState.DISABLED -> Color.rgb(65, 65, 72)
+            PortState.DISABLED -> 0xFF414751.toInt()
         }
 
-        // Outer light.
         if (
             state == PortState.ACTIVE ||
             state == PortState.SELECTED ||
             state == PortState.CONNECTED
         ) {
-            glowPaint.color = currentColor
+            glowPaint.color = color
             glowPaint.style = Paint.Style.STROKE
-            glowPaint.strokeWidth = dp(
-                3f + pulse * 2f
-            ).toFloat()
-            glowPaint.alpha = if (
-                state == PortState.ACTIVE
-            ) {
-                (70 + pulse * 75).toInt()
-            } else {
-                75
-            }
+            glowPaint.strokeWidth = dp(3f + pulse * 2f)
+            glowPaint.alpha = (65 + pulse * 100).toInt()
 
             canvas.drawRoundRect(
-                bodyRect,
-                dp(5).toFloat(),
-                dp(5).toFloat(),
+                body,
+                dp(5f),
+                dp(5f),
                 glowPaint
             )
         }
 
-        // Metallic body.
-        outerPaint.style = Paint.Style.FILL
-        outerPaint.color = when (state) {
-            PortState.DISABLED -> Color.rgb(36, 40, 49)
-            else -> Color.rgb(17, 25, 39)
-        }
+        bodyPaint.style = Paint.Style.FILL
+        bodyPaint.color =
+            if (state == PortState.DISABLED) {
+                0xFF252B35.toInt()
+            } else {
+                0xFF111927.toInt()
+            }
 
-        canvas.drawRoundRect(
-            bodyRect,
-            dp(4).toFloat(),
-            dp(4).toFloat(),
-            outerPaint
+        canvas.drawRoundRect(body, dp(4f), dp(4f), bodyPaint)
+
+        borderPaint.style = Paint.Style.STROKE
+        borderPaint.strokeWidth = dp(1.3f)
+        borderPaint.color = color
+        borderPaint.alpha = if (state == PortState.IDLE) 145 else 255
+
+        canvas.drawRoundRect(body, dp(4f), dp(4f), borderPaint)
+
+        val slotWidth = bw * if (shape == PortShape.COMPACT) 0.42f else 0.56f
+        val slotHeight = bh * 0.38f
+
+        slot.set(
+            cx - slotWidth / 2f,
+            cy - slotHeight / 2f,
+            cx + slotWidth / 2f,
+            cy + slotHeight / 2f
         )
 
-        // Outer border.
-        outerPaint.style = Paint.Style.STROKE
-        outerPaint.strokeWidth = dp(1.3f).toFloat()
-        outerPaint.color = currentColor
-        outerPaint.alpha = if (
-            state == PortState.IDLE
-        ) 130 else 255
+        slotPaint.style = Paint.Style.FILL
+        slotPaint.color = 0xFF030811.toInt()
 
-        canvas.drawRoundRect(
-            bodyRect,
-            dp(4).toFloat(),
-            dp(4).toFloat(),
-            outerPaint
-        )
+        canvas.drawRoundRect(slot, dp(2f), dp(2f), slotPaint)
 
-        // Inner USB slot.
-        val slotWidth = bodyWidth * 0.53f
-        val slotHeight = bodyHeight * 0.40f
+        detailPaint.color = color
+        detailPaint.alpha = if (state == PortState.IDLE) 105 else 240
 
-        slotRect.set(
-            centerX - slotWidth / 2f,
-            centerY - slotHeight / 2f,
-            centerX + slotWidth / 2f,
-            centerY + slotHeight / 2f
-        )
+        canvas.drawRoundRect(slot, dp(2f), dp(2f), detailPaint)
 
-        innerPaint.style = Paint.Style.FILL
-        innerPaint.color = Color.rgb(3, 8, 17)
-
-        canvas.drawRoundRect(
-            slotRect,
-            dp(2).toFloat(),
-            dp(2).toFloat(),
-            innerPaint
-        )
-
-        // Inner illuminated contact.
-        detailPaint.style = Paint.Style.FILL
-        detailPaint.color = currentColor
-        detailPaint.alpha = if (
-            state == PortState.IDLE
-        ) 90 else 230
-
-        canvas.drawRoundRect(
-            slotRect,
-            dp(2).toFloat(),
-            dp(2).toFloat(),
-            detailPaint
-        )
-
-        // Small metallic contact line.
         detailPaint.color = Color.WHITE
-        detailPaint.alpha = if (
-            state == PortState.ACTIVE
-        ) 230 else 90
+        detailPaint.alpha = if (state == PortState.ACTIVE) 240 else 110
 
         canvas.drawRect(
-            centerX - dp(3),
-            centerY - dp(0.5f),
-            centerX + dp(3),
-            centerY + dp(0.5f),
+            cx - dp(3f),
+            cy - dp(0.5f),
+            cx + dp(3f),
+            cy + dp(0.5f),
             detailPaint
         )
 
         canvas.restoreToCount(save)
     }
 
-    fun setState(newState: PortState) {
-        state = newState
+    fun setState(value: PortState) {
+        state = value
     }
 
     private fun updateAnimation() {
@@ -255,6 +217,8 @@ class PortView @JvmOverloads constructor(
             state == PortState.ACTIVE ||
             state == PortState.SELECTED
         ) {
+            if (!isAttachedToWindow) return
+
             animator = ValueAnimator.ofFloat(0f, 1f).apply {
                 duration = 950L
                 repeatCount = ValueAnimator.INFINITE
@@ -282,13 +246,5 @@ class PortView @JvmOverloads constructor(
         animator?.cancel()
         animator = null
         super.onDetachedFromWindow()
-    }
-
-    private fun dp(value: Float): Int {
-        return (value * density).toInt()
-    }
-
-    private fun dp(value: Int): Int {
-        return (value * density).toInt()
     }
 }
