@@ -1,4 +1,3 @@
-
 package com.monolith
 
 import android.content.ClipData
@@ -296,7 +295,7 @@ class ChatAdapter(
                     movementMethod =
                         android.text.method.LinkMovementMethod.getInstance()
 
-                    layoutParams = CardView.LayoutParams(
+                    layoutParams = android.widget.FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.WRAP_CONTENT,
                         ViewGroup.LayoutParams.WRAP_CONTENT
                     )
