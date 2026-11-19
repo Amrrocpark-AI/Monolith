@@ -10,10 +10,12 @@ import android.graphics.Color
 import android.graphics.PorterDuff
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.text.Editable
+import android.text.TextUtils
 import android.text.TextWatcher
 import android.util.Base64
 import android.view.Gravity
@@ -22,9 +24,11 @@ import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.*
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.AppCompatTextView
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -51,6 +55,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.concurrent.ConcurrentHashMap
 
 class ChatActivity : AppCompatActivity() {
 
@@ -63,7 +68,25 @@ class ChatActivity : AppCompatActivity() {
         private const val STATUS_CLOUD = "جاري إعداد الرد..."
         private const val MAX_IMAGE_BYTES = 8 * 1024 * 1024
         private const val MAX_IMAGE_DIMENSION = 1536
+
+        // سجل المحادثات
+        private const val DEFAULT_CONVERSATION_TITLE = "محادثة جديدة"
+        private const val MAIN_CONVERSATION_TITLE = "المحادثة الرئيسية"
+        private const val MAX_CONVERSATION_TITLE_LENGTH = 60
+        private const val AUTO_TITLE_LENGTH = 40
+        private const val HISTORY_MAX_VISIBLE_ROWS = 6
+        private const val CONVERSATION_STATE_PREFS = "ConversationState"
+        private const val KEY_LAST_CONVERSATION_ID = "last_conversation_id"
     }
+
+    /**
+     * طلب غير مكتمل (محلي أو سحابي). يحتفظ بمعرّف المحادثة التي بدأ فيها الطلب،
+     * حتى لا يُحفظ الرد المتأخر في محادثة أخرى بعد التبديل.
+     */
+    private data class PendingRequest(
+        val conversationId: String,
+        val placeholder: ChatMessage
+    )
 
     private val selectedImageUris = mutableListOf<Uri>()
 
@@ -75,6 +98,15 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var chatAdapter: ChatAdapter
     private lateinit var tvAppTitle: TextView
 
+    // عناصر سجل المحادثات (من activity_chat.xml)
+    private lateinit var conversationHistoryPopup: LinearLayout
+    private lateinit var conversationHistoryList: LinearLayout
+    private lateinit var conversationHistoryScroll: ScrollView
+    private lateinit var tvEmptyConversationHistory: TextView
+    private lateinit var btnCreateConversation: TextView
+    private lateinit var tvCurrentConversation: TextView
+    private lateinit var tvHistoryLabel: TextView
+
     private var themeColorHex = "#00D4FF"
 
     private lateinit var securePrefs: SharedPreferences
@@ -84,7 +116,9 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var memoryHelper: MemoryHelper
 
     private val messageList = mutableListOf<ChatMessage>()
-    private val currentConversationId = CONVERSATION_ID
+
+    // معرّف المحادثة الحالية: لم يعد ثابتاً، ويتبدل عبر openConversation() فقط.
+    private var currentConversationId: String = CONVERSATION_ID
 
     private var ttsManager: TtsManager? = null
     private var isModelLoaded = false
@@ -92,12 +126,25 @@ class ChatActivity : AppCompatActivity() {
     private var pendingVisionGgufPath: String? = null
     private var isActivityReady = false
     private var isLoadingMessages = false
+    private var loadGeneration = 0
 
     private val databaseMutex = Mutex()
     private val requestLock = Any()
 
     private val activeApiCalls = mutableMapOf<String, Call<ChatResponse>>()
     private val activeLocalJobs = mutableMapOf<String, Job>()
+
+    // statusMessage.id -> الطلب غير المكتمل ومعرّف محادثته
+    private val pendingRequests = mutableMapOf<String, PendingRequest>()
+
+    // محادثات حُذفت في هذه الجلسة: يمنع حفظ أي رد متأخر داخلها
+    private val deletedConversationIds: MutableSet<String> = ConcurrentHashMap.newKeySet<String>()
+
+    private val historyBackCallback = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() {
+            hideConversationHistory()
+        }
+    }
 
     private val pickImagesLauncher =
         registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
@@ -286,9 +333,10 @@ class ChatActivity : AppCompatActivity() {
             initializeAdapter()
             initializeTopBar()
             initializeListeners()
+            initializeConversationHistory()
 
             isActivityReady = true
-            loadMessagesFromDb()
+            initializeConversationSystem()
             checkAndLoadModelOnStartup()
             updateModelIndicators()
         } catch (e: Exception) {
@@ -324,6 +372,15 @@ class ChatActivity : AppCompatActivity() {
         imagePreviewContainer = findViewById(R.id.imagePreviewContainer)
         previewListContainer = findViewById(R.id.previewListContainer)
 
+        // عناصر سجل المحادثات
+        conversationHistoryPopup = findViewById(R.id.conversationHistoryPopup)
+        conversationHistoryList = findViewById(R.id.conversationHistoryList)
+        conversationHistoryScroll = findViewById(R.id.conversationHistoryScroll)
+        tvEmptyConversationHistory = findViewById(R.id.tvEmptyConversationHistory)
+        btnCreateConversation = findViewById(R.id.btnCreateConversation)
+        tvCurrentConversation = findViewById(R.id.tvCurrentConversation)
+        tvHistoryLabel = findViewById(R.id.tvHistoryLabel)
+
         // تم إزالة الأزرار الوهمية (btnLoadModel, btnLoadVisionModel, btnAgents, btnThreads) من هنا
         // لأن عناصر XML هي المصدر الوحيد للواجهة.
         
@@ -343,7 +400,7 @@ class ChatActivity : AppCompatActivity() {
                     else -> "LIKE"
                 }
                 updateMessageLocally(message.id) { it.copy(reactionType = newReaction) }
-                findMessage(message.id)?.let { saveMessageToDb(it) }
+                findMessage(message.id)?.let { saveMessageToDb(it, touchConversation = false) }
             },
             onSpeakClick = { text ->
                 initTtsIfNeeded()
@@ -352,7 +409,7 @@ class ChatActivity : AppCompatActivity() {
             onPinClick = { message ->
                 updateMessageLocally(message.id) { it.copy(isPinned = !it.isPinned) }
                 findMessage(message.id)?.let { updated ->
-                    saveMessageToDb(updated)
+                    saveMessageToDb(updated, touchConversation = false)
                     showToast(if (updated.isPinned) "تم تثبيت الرسالة" else "تم إلغاء تثبيت الرسالة")
                 }
             },
@@ -424,6 +481,463 @@ class ChatActivity : AppCompatActivity() {
         // ربط زر المايك (يحتاج لخدمة صوتية حقيقية)
         findViewById<ImageButton>(R.id.btnMic)?.setOnClickListener {
             showToast("خدمة التعرف على الصوت تحتاج إلى ربط (لم يتم اختراع API وهمي)")
+        }
+    }
+
+    // =========================================================
+    // CONVERSATION HISTORY
+    // =========================================================
+
+    private fun initializeConversationHistory() {
+        tvHistoryLabel.setOnClickListener { toggleConversationHistory() }
+        tvCurrentConversation.setOnClickListener { toggleConversationHistory() }
+        btnCreateConversation.setOnClickListener { createNewConversation() }
+        onBackPressedDispatcher.addCallback(this, historyBackCallback)
+
+        conversationHistoryPopup.visibility = View.GONE
+        tvCurrentConversation.text = MAIN_CONVERSATION_TITLE
+    }
+
+    private fun initializeConversationSystem() {
+        isLoadingMessages = true
+        updateSendButtonState()
+
+        lifecycleScope.launch {
+            try {
+                val startId = withContext(Dispatchers.IO) {
+                    databaseMutex.withLock { prepareInitialConversation() }
+                }
+                currentConversationId = startId
+                saveLastConversationId(startId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // في حال الفشل يبقى المعرّف الافتراضي main_chat دون أي حذف أو تعديل للبيانات.
+                android.util.Log.e("Monolith", "Conversation init failed", e)
+                showToast("تعذر تهيئة سجل المحادثات: ${e.message}")
+            }
+
+            refreshCurrentConversationHeader()
+            loadMessagesFromDb(currentConversationId)
+        }
+    }
+
+    /**
+     * تعمل على خيط IO داخل databaseMutex.
+     * لا تحذف أي شيء، ولا تستبدل أي محادثة موجودة، وتنشئ سجل main_chat فقط عند الحاجة:
+     *  - عند وجود رسائل قديمة لـ main_chat بلا سجل، أو
+     *  - عند عدم وجود أي محادثة إطلاقاً.
+     */
+    private fun prepareInitialConversation(): String {
+        val mainExists = appDatabase.getConversationById(CONVERSATION_ID) != null
+
+        if (!mainExists) {
+            val mainHasMessages = appDatabase.countMessagesForConversation(CONVERSATION_ID) > 0
+            val noConversationsAtAll = appDatabase.getAllConversations().isEmpty()
+
+            if (mainHasMessages || noConversationsAtAll) {
+                appDatabase.insertConversationIfAbsent(
+                    ConversationEntity(
+                        id = CONVERSATION_ID,
+                        title = MAIN_CONVERSATION_TITLE
+                    )
+                )
+            }
+        }
+
+        val savedId = loadLastConversationId()
+        if (!savedId.isNullOrBlank() && appDatabase.getConversationById(savedId) != null) {
+            return savedId
+        }
+
+        if (appDatabase.getConversationById(CONVERSATION_ID) != null) {
+            return CONVERSATION_ID
+        }
+
+        return appDatabase.getAllConversations().firstOrNull()?.id ?: CONVERSATION_ID
+    }
+
+    private fun saveLastConversationId(conversationId: String) {
+        try {
+            getSharedPreferences(CONVERSATION_STATE_PREFS, MODE_PRIVATE)
+                .edit()
+                .putString(KEY_LAST_CONVERSATION_ID, conversationId)
+                .apply()
+        } catch (e: Exception) {
+            android.util.Log.e("Monolith", "Saving last conversation id failed", e)
+        }
+    }
+
+    private fun loadLastConversationId(): String? {
+        return try {
+            getSharedPreferences(CONVERSATION_STATE_PREFS, MODE_PRIVATE)
+                .getString(KEY_LAST_CONVERSATION_ID, null)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun toggleConversationHistory() {
+        if (conversationHistoryPopup.visibility == View.VISIBLE) {
+            hideConversationHistory()
+        } else {
+            showConversationHistory()
+        }
+    }
+
+    private fun showConversationHistory() {
+        hideKeyboard()
+        conversationHistoryPopup.visibility = View.VISIBLE
+        historyBackCallback.isEnabled = true
+        tvHistoryLabel.text = "⌃"
+        refreshConversationHistory()
+    }
+
+    private fun hideConversationHistory() {
+        conversationHistoryPopup.visibility = View.GONE
+        historyBackCallback.isEnabled = false
+        tvHistoryLabel.text = "⌄"
+    }
+
+    private fun isConversationHistoryVisible(): Boolean {
+        return conversationHistoryPopup.visibility == View.VISIBLE
+    }
+
+    private fun refreshConversationHistory() {
+        lifecycleScope.launch {
+            try {
+                val conversations = withContext(Dispatchers.IO) {
+                    appDatabase.getAllConversations()
+                }
+                renderConversationHistory(conversations)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                showToast("تعذر تحميل المحادثات: ${e.message}")
+            }
+        }
+    }
+
+    private fun renderConversationHistory(conversations: List<ConversationEntity>) {
+        conversationHistoryList.removeAllViews()
+
+        if (conversations.isEmpty()) {
+            conversationHistoryScroll.visibility = View.GONE
+            tvEmptyConversationHistory.visibility = View.VISIBLE
+            return
+        }
+
+        tvEmptyConversationHistory.visibility = View.GONE
+        conversationHistoryScroll.visibility = View.VISIBLE
+
+        val scrollParams = conversationHistoryScroll.layoutParams
+        scrollParams.height = if (conversations.size > HISTORY_MAX_VISIBLE_ROWS) {
+            dpToPx(300)
+        } else {
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        }
+        conversationHistoryScroll.layoutParams = scrollParams
+
+        conversations.forEach { conversation ->
+            conversationHistoryList.addView(buildConversationRow(conversation))
+        }
+    }
+
+    private fun buildConversationRow(conversation: ConversationEntity): View {
+        val isCurrent = conversation.id == currentConversationId
+        val themeColor = Color.parseColor(themeColorHex)
+        val primaryText = ContextCompat.getColor(this, R.color.monolith_text)
+        val secondaryText = ContextCompat.getColor(this, R.color.monolith_text_secondary)
+
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dpToPx(44)
+            ).apply { setMargins(0, dpToPx(2), 0, dpToPx(2)) }
+            setPadding(dpToPx(10), 0, dpToPx(4), 0)
+            isClickable = true
+            isFocusable = true
+
+            background = if (isCurrent) {
+                GradientDrawable().apply {
+                    cornerRadius = dpToPx(10).toFloat()
+                    setColor((themeColor and 0x00FFFFFF) or 0x33000000)
+                    setStroke(dpToPx(1), themeColor)
+                }
+            } else {
+                ColorDrawable(Color.TRANSPARENT)
+            }
+
+            setOnClickListener { switchConversation(conversation.id) }
+        }
+
+        val displayTitle = conversation.title.ifBlank { DEFAULT_CONVERSATION_TITLE }
+
+        val titleView = TextView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            text = if (isCurrent) "● $displayTitle" else displayTitle
+            setTextColor(if (isCurrent) themeColor else primaryText)
+            textSize = 13f
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+        }
+
+        val renameButton = TextView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dpToPx(36), dpToPx(36))
+            gravity = Gravity.CENTER
+            text = "✎"
+            textSize = 16f
+            setTextColor(secondaryText)
+            contentDescription = "Rename conversation"
+            setOnClickListener { showRenameConversationDialog(conversation) }
+        }
+
+        val deleteButton = TextView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dpToPx(36), dpToPx(36))
+            gravity = Gravity.CENTER
+            text = "✕"
+            textSize = 15f
+            setTextColor(secondaryText)
+            contentDescription = "Delete conversation"
+            setOnClickListener { confirmDeleteConversation(conversation) }
+        }
+
+        row.addView(titleView)
+        row.addView(renameButton)
+        row.addView(deleteButton)
+        return row
+    }
+
+    private fun switchConversation(conversationId: String) {
+        hideConversationHistory()
+        if (conversationId.isBlank() || conversationId == currentConversationId) return
+        openConversation(conversationId)
+    }
+
+    /**
+     * الطريقة الوحيدة لتغيير currentConversationId.
+     * تفرّغ القائمة فوراً قبل التحميل، حتى لا تُحفظ رسائل المحادثة السابقة تحت معرّف المحادثة الجديدة.
+     */
+    private fun openConversation(conversationId: String) {
+        currentConversationId = conversationId
+        saveLastConversationId(conversationId)
+
+        messageList.clear()
+        chatAdapter.updateMessages(messageList)
+        hideKeyboard()
+
+        refreshCurrentConversationHeader()
+        loadMessagesFromDb(conversationId)
+    }
+
+    private fun refreshCurrentConversationHeader() {
+        val conversationId = currentConversationId
+        lifecycleScope.launch {
+            try {
+                val title = withContext(Dispatchers.IO) {
+                    appDatabase.getConversationById(conversationId)?.title
+                }
+                if (conversationId == currentConversationId) {
+                    tvCurrentConversation.text =
+                        if (title.isNullOrBlank()) DEFAULT_CONVERSATION_TITLE else title
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                android.util.Log.e("Monolith", "Header refresh failed", e)
+            }
+        }
+    }
+
+    private fun onConversationTitleChanged(conversationId: String) {
+        if (conversationId == currentConversationId) {
+            refreshCurrentConversationHeader()
+        }
+        if (isConversationHistoryVisible()) {
+            refreshConversationHistory()
+        }
+    }
+
+    private fun createNewConversation() {
+        lifecycleScope.launch {
+            try {
+                val conversation = ConversationEntity(title = DEFAULT_CONVERSATION_TITLE)
+
+                val created = withContext(Dispatchers.IO) {
+                    databaseMutex.withLock {
+                        appDatabase.insertConversationIfAbsent(conversation)
+                    }
+                }
+
+                if (!created) {
+                    showToast("تعذر إنشاء المحادثة: المعرّف مستخدم مسبقاً")
+                    return@launch
+                }
+
+                hideConversationHistory()
+                openConversation(conversation.id)
+                showToast("تم إنشاء محادثة جديدة")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                showToast("تعذر إنشاء المحادثة: ${e.message}")
+            }
+        }
+    }
+
+    private fun showRenameConversationDialog(conversation: ConversationEntity) {
+        val input = EditText(this).apply {
+            setText(conversation.title)
+            setSelection(text.length)
+            hint = "اسم المحادثة"
+            setSingleLine(true)
+        }
+
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dpToPx(16), dpToPx(12), dpToPx(16), dpToPx(4))
+            addView(
+                input,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            )
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("إعادة تسمية المحادثة")
+            .setView(container)
+            .setPositiveButton("حفظ") { _, _ ->
+                val newTitle = input.text.toString().trim().take(MAX_CONVERSATION_TITLE_LENGTH)
+                if (newTitle.isBlank()) {
+                    showToast("اسم المحادثة فارغ")
+                    return@setPositiveButton
+                }
+                renameConversation(conversation.id, newTitle)
+            }
+            .setNegativeButton("إلغاء", null)
+            .show()
+    }
+
+    private fun renameConversation(conversationId: String, newTitle: String) {
+        lifecycleScope.launch {
+            try {
+                val updated = withContext(Dispatchers.IO) {
+                    databaseMutex.withLock {
+                        appDatabase.updateConversationTitle(conversationId, newTitle)
+                    }
+                }
+
+                if (!updated) {
+                    showToast("تعذر العثور على المحادثة")
+                    return@launch
+                }
+
+                if (conversationId == currentConversationId) {
+                    tvCurrentConversation.text = newTitle
+                }
+                if (isConversationHistoryVisible()) {
+                    refreshConversationHistory()
+                }
+                showToast("تمت إعادة تسمية المحادثة")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                showToast("تعذرت إعادة التسمية: ${e.message}")
+            }
+        }
+    }
+
+    private fun confirmDeleteConversation(conversation: ConversationEntity) {
+        val displayTitle = conversation.title.ifBlank { DEFAULT_CONVERSATION_TITLE }
+
+        AlertDialog.Builder(this)
+            .setTitle("حذف المحادثة")
+            .setMessage("سيتم حذف المحادثة «$displayTitle» وجميع رسائلها وبياناتها التابعة نهائياً. لن تتأثر المحادثات الأخرى.")
+            .setPositiveButton("حذف") { _, _ -> deleteConversation(conversation.id) }
+            .setNegativeButton("إلغاء", null)
+            .show()
+    }
+
+    private fun deleteConversation(conversationId: String) {
+        if (conversationId.isBlank()) return
+
+        val wasCurrent = conversationId == currentConversationId
+
+        // أوقف الطلبات المعلقة لهذه المحادثة فقط، وامنع حفظ أي رد متأخر داخلها.
+        cancelPendingRequestsFor(conversationId)
+        deletedConversationIds.add(conversationId)
+
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    databaseMutex.withLock {
+                        appDatabase.deleteConversation(conversationId)
+                    }
+                }
+
+                if (wasCurrent && conversationId == currentConversationId) {
+                    val remaining = withContext(Dispatchers.IO) {
+                        appDatabase.getAllConversations()
+                    }
+
+                    if (remaining.isNotEmpty()) {
+                        openConversation(remaining.first().id)
+                    } else {
+                        // لا تبقى أي محادثة: ننشئ واحدة جديدة حتى لا تُحفظ الرسائل بمعرّف محذوف.
+                        val fresh = ConversationEntity(title = DEFAULT_CONVERSATION_TITLE)
+                        withContext(Dispatchers.IO) {
+                            databaseMutex.withLock {
+                                appDatabase.insertConversationIfAbsent(fresh)
+                            }
+                        }
+                        openConversation(fresh.id)
+                    }
+                }
+
+                if (isConversationHistoryVisible()) {
+                    refreshConversationHistory()
+                }
+                showToast("تم حذف المحادثة")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                deletedConversationIds.remove(conversationId)
+                showToast("تعذر حذف المحادثة: ${e.message}")
+            }
+        }
+    }
+
+    private fun cancelPendingRequestsFor(conversationId: String) {
+        synchronized(requestLock) {
+            val requestIds = pendingRequests
+                .filterValues { it.conversationId == conversationId }
+                .keys
+                .toList()
+
+            requestIds.forEach { requestId ->
+                activeApiCalls.remove(requestId)?.let { call ->
+                    try { call.cancel() } catch (_: Exception) { }
+                }
+                activeLocalJobs.remove(requestId)?.cancel()
+                pendingRequests.remove(requestId)
+            }
+        }
+    }
+
+    private fun buildAutoTitle(content: String): String {
+        val firstLine = content.lineSequence()
+            .map { it.trim() }
+            .firstOrNull { it.isNotEmpty() }
+            ?: return DEFAULT_CONVERSATION_TITLE
+
+        return if (firstLine.length > AUTO_TITLE_LENGTH) {
+            firstLine.take(AUTO_TITLE_LENGTH).trimEnd() + "…"
+        } else {
+            firstLine
         }
     }
 
@@ -541,36 +1055,99 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    private fun loadMessagesFromDb() {
-        if (isLoadingMessages) return
+    /**
+     * تحمّل رسائل المحادثة المحددة فقط.
+     * generation يلغي أثر أي تحميل أقدم إذا تبدلت المحادثة أثناء التحميل.
+     */
+    private fun loadMessagesFromDb(conversationId: String = currentConversationId) {
+        val generation = ++loadGeneration
         isLoadingMessages = true
         updateSendButtonState()
 
         lifecycleScope.launch {
             try {
                 val loadedMessages = withContext(Dispatchers.IO) {
-                    appDatabase.getMessagesForConversation(currentConversationId).map { it.toChatMessage() }
+                    databaseMutex.withLock {
+                        appDatabase.getMessagesForConversation(conversationId).map { it.toChatMessage() }
+                    }
                 }
+
+                if (generation != loadGeneration || conversationId != currentConversationId) {
+                    return@launch
+                }
+
                 messageList.clear()
                 messageList.addAll(loadedMessages)
+
+                // أعد عرض الطلبات المعلقة التابعة لهذه المحادثة فقط (إن عدنا إليها قبل اكتمال الرد)
+                val placeholders = synchronized(requestLock) {
+                    pendingRequests.values
+                        .filter { it.conversationId == conversationId }
+                        .map { it.placeholder }
+                }
+                var addedPlaceholder = false
+                placeholders.forEach { placeholder ->
+                    if (messageList.none { it.id == placeholder.id }) {
+                        messageList.add(placeholder)
+                        addedPlaceholder = true
+                    }
+                }
+                if (addedPlaceholder) messageList.sortBy { it.timestamp }
+
                 chatAdapter.updateMessages(messageList)
                 if (messageList.isNotEmpty()) scrollToBottom()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                showToast("تعذر تحميل سجل المحادثة: ${e.message}")
+                if (generation == loadGeneration) {
+                    showToast("تعذر تحميل سجل المحادثة: ${e.message}")
+                }
             } finally {
-                isLoadingMessages = false
-                updateSendButtonState()
+                if (generation == loadGeneration) {
+                    isLoadingMessages = false
+                    updateSendButtonState()
+                }
             }
         }
     }
 
-    private fun saveMessageToDb(message: ChatMessage) {
+    /**
+     * يحفظ الرسالة تحت conversationId المحدد صراحةً (وليس تحت المحادثة الحالية وقت التنفيذ).
+     */
+    private fun saveMessageToDb(
+        message: ChatMessage,
+        conversationId: String = currentConversationId,
+        touchConversation: Boolean = true
+    ) {
+        if (deletedConversationIds.contains(conversationId)) return
+
         lifecycleScope.launch(Dispatchers.IO) {
             try {
+                var titleChanged = false
+
                 databaseMutex.withLock {
-                    appDatabase.insertMessage(message.toMessageEntity(currentConversationId))
+                    if (deletedConversationIds.contains(conversationId)) return@withLock
+
+                    appDatabase.insertMessage(message.toMessageEntity(conversationId))
+
+                    if (touchConversation) {
+                        appDatabase.updateConversationLastModified(conversationId)
+
+                        if (message.role == MessageRole.USER) {
+                            val conversation = appDatabase.getConversationById(conversationId)
+                            if (conversation != null && conversation.title == DEFAULT_CONVERSATION_TITLE) {
+                                appDatabase.updateConversationTitle(
+                                    conversationId,
+                                    buildAutoTitle(message.content)
+                                )
+                                titleChanged = true
+                            }
+                        }
+                    }
+                }
+
+                if (titleChanged) {
+                    withContext(Dispatchers.Main) { onConversationTitleChanged(conversationId) }
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -677,6 +1254,9 @@ class ChatActivity : AppCompatActivity() {
             return
         }
 
+        // معرّف المحادثة الذي يبدأ معه هذا الطلب. يُحمل مع الطلب حتى نهايته.
+        val conversationId = currentConversationId
+
         val userMessage = ChatMessage(
             role = MessageRole.USER,
             content = text.ifBlank { "أرسل المستخدم صوراً مرفقة." },
@@ -686,7 +1266,7 @@ class ChatActivity : AppCompatActivity() {
 
         messageList.add(userMessage)
         chatAdapter.updateMessages(messageList)
-        saveMessageToDb(userMessage)
+        saveMessageToDb(userMessage, conversationId)
 
         selectedImageUris.clear()
         updatePreviewUi()
@@ -695,19 +1275,23 @@ class ChatActivity : AppCompatActivity() {
         scrollToBottom()
 
         if (isModelLoaded) {
-            sendToLocalModel(userMessage)
+            sendToLocalModel(userMessage, conversationId)
         } else {
-            sendToCloudModel(userMessage, selectedModel!!, apiKey!!)
+            sendToCloudModel(userMessage, conversationId, selectedModel!!, apiKey!!)
         }
     }
 
-    private fun sendToLocalModel(userMessage: ChatMessage) {
+    private fun sendToLocalModel(userMessage: ChatMessage, conversationId: String) {
         val statusMessage = ChatMessage(
             role = MessageRole.AI,
             content = STATUS_LOCAL,
             colorHex = "#1A1A1A",
             isThinking = true
         )
+
+        synchronized(requestLock) {
+            pendingRequests[statusMessage.id] = PendingRequest(conversationId, statusMessage)
+        }
 
         messageList.add(statusMessage)
         chatAdapter.updateMessages(messageList)
@@ -738,7 +1322,8 @@ class ChatActivity : AppCompatActivity() {
                 val result = agentBrain.executeTask(userGoal = enrichedPrompt, agentId = activeAgentId)
 
                 updateRequestMessage(
-                    messageId = statusMessage.id,
+                    conversationId = conversationId,
+                    requestMessage = statusMessage,
                     content = result,
                     isThinking = false
                 )
@@ -746,7 +1331,8 @@ class ChatActivity : AppCompatActivity() {
                 throw e
             } catch (e: Exception) {
                 updateRequestMessage(
-                    messageId = statusMessage.id,
+                    conversationId = conversationId,
+                    requestMessage = statusMessage,
                     content = "تعذر تنفيذ الطلب: ${e.message}",
                     isThinking = false
                 )
@@ -845,7 +1431,12 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    private fun sendToCloudModel(userMessage: ChatMessage, selectedModel: String, apiKey: String) {
+    private fun sendToCloudModel(
+        userMessage: ChatMessage,
+        conversationId: String,
+        selectedModel: String,
+        apiKey: String
+    ) {
         val statusMessage = ChatMessage(
             role = MessageRole.AI,
             content = STATUS_CLOUD,
@@ -854,9 +1445,19 @@ class ChatActivity : AppCompatActivity() {
             modelName = selectedModel
         )
 
+        synchronized(requestLock) {
+            pendingRequests[statusMessage.id] = PendingRequest(conversationId, statusMessage)
+        }
+
         messageList.add(statusMessage)
         chatAdapter.updateMessages(messageList)
         scrollToBottom()
+
+        // لقطة من سجل المحادثة الحالية تؤخذ الآن، قبل أي تبديل محتمل للمحادثة.
+        val historySnapshot = messageList
+            .filter { !it.isThinking && it.id != userMessage.id }
+            .takeLast(15)
+            .toList()
 
         lifecycleScope.launch {
             try {
@@ -879,15 +1480,10 @@ class ChatActivity : AppCompatActivity() {
                     }
                 }
 
-                val history = messageList
-                    .filter { !it.isThinking && it.id != userMessage.id }
-                    .takeLast(15)
-                    .toList()
-
                 val apiMessages = mutableListOf<Message>()
                 apiMessages.add(Message(role = "system", content = completeSystemPrompt))
 
-                history.forEach { message ->
+                historySnapshot.forEach { message ->
                     apiMessages.add(Message(
                         role = if (message.role == MessageRole.USER) "user" else "assistant",
                         content = message.content
@@ -930,6 +1526,10 @@ class ChatActivity : AppCompatActivity() {
                     maxTokens = 2048
                 )
 
+                // إذا حُذفت المحادثة أثناء تجهيز الطلب فلا نرسله أصلاً.
+                val stillPending = synchronized(requestLock) { pendingRequests.containsKey(statusMessage.id) }
+                if (!stillPending) return@launch
+
                 val headers = mapOf("Authorization" to "Bearer $apiKey")
                 val call = ApiClient.service.sendMessage(url = "v1/chat/completions", headers = headers, request = request)
 
@@ -950,7 +1550,8 @@ class ChatActivity : AppCompatActivity() {
                                 }
 
                             updateRequestMessage(
-                                messageId = statusMessage.id,
+                                conversationId = conversationId,
+                                requestMessage = statusMessage,
                                 content = reply,
                                 isThinking = false,
                                 modelName = selectedModel
@@ -961,7 +1562,8 @@ class ChatActivity : AppCompatActivity() {
                             } catch (_: Exception) { null }
 
                             updateRequestMessage(
-                                messageId = statusMessage.id,
+                                conversationId = conversationId,
+                                requestMessage = statusMessage,
                                 content = buildString {
                                     append("فشل الطلب. رمز الاستجابة: ")
                                     append(response.code())
@@ -980,7 +1582,8 @@ class ChatActivity : AppCompatActivity() {
                         if (isFinishing || isDestroyed || call.isCanceled) return
 
                         updateRequestMessage(
-                            messageId = statusMessage.id,
+                            conversationId = conversationId,
+                            requestMessage = statusMessage,
                             content = "تعذر الاتصال بالخادم: " + (t.message ?: "خطأ غير معروف"),
                             isThinking = false
                         )
@@ -990,7 +1593,8 @@ class ChatActivity : AppCompatActivity() {
                 throw e
             } catch (e: Exception) {
                 updateRequestMessage(
-                    messageId = statusMessage.id,
+                    conversationId = conversationId,
+                    requestMessage = statusMessage,
                     content = "تعذر إعداد الطلب السحابي: ${e.message}",
                     isThinking = false
                 )
@@ -1022,25 +1626,56 @@ class ChatActivity : AppCompatActivity() {
         "data:$mimeType;base64,$encoded"
     }
 
-    private fun updateRequestMessage(messageId: String, content: String, isThinking: Boolean, modelName: String? = null) {
+    /**
+     * تحديث نتيجة طلب. conversationId هو معرّف المحادثة التي بدأ فيها الطلب (وليس الحالية).
+     *  - إن كانت المحادثة ما زالت مفتوحة: تُحدَّث الواجهة وتُحفظ الرسالة.
+     *  - إن تبدلت المحادثة: لا تلمس الواجهة، وتُحفظ الرسالة في محادثتها الأصلية فقط.
+     *  - إن حُذفت المحادثة: لا يُحفظ شيء.
+     */
+    private fun updateRequestMessage(
+        conversationId: String,
+        requestMessage: ChatMessage,
+        content: String,
+        isThinking: Boolean,
+        modelName: String? = null
+    ) {
         if (isFinishing || isDestroyed) return
 
-        val index = messageList.indexOfFirst { it.id == messageId }
-        if (index == -1) return
+        if (!isThinking) {
+            synchronized(requestLock) { pendingRequests.remove(requestMessage.id) }
+        }
 
-        val oldMessage = messageList[index]
-        val updated = oldMessage.copy(
+        if (deletedConversationIds.contains(conversationId)) return
+
+        val isCurrentConversation = conversationId == currentConversationId
+        val index = if (isCurrentConversation) {
+            messageList.indexOfFirst { it.id == requestMessage.id }
+        } else {
+            -1
+        }
+
+        val baseMessage = if (index >= 0) messageList[index] else requestMessage
+        val updated = baseMessage.copy(
             content = content,
             isThinking = isThinking,
-            modelName = modelName ?: oldMessage.modelName
+            modelName = modelName ?: baseMessage.modelName
         )
 
-        messageList[index] = updated
-        chatAdapter.updateMessages(messageList)
+        if (isCurrentConversation) {
+            if (index >= 0) {
+                messageList[index] = updated
+                chatAdapter.updateMessages(messageList)
+            } else if (!isThinking && !isLoadingMessages) {
+                // عدنا إلى المحادثة بعد تحميلها، فلا تحتوي القائمة على مؤشر الانتظار: أضف الرد في موضعه الزمني.
+                messageList.add(updated)
+                messageList.sortBy { it.timestamp }
+                chatAdapter.updateMessages(messageList)
+            }
+        }
 
         if (!isThinking) {
-            saveMessageToDb(updated)
-            scrollToBottom()
+            saveMessageToDb(updated, conversationId)
+            if (isCurrentConversation) scrollToBottom()
         }
     }
 
@@ -1550,10 +2185,11 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun showPinnedMessagesBottomSheet() {
+        val conversationId = currentConversationId
         lifecycleScope.launch {
             try {
                 val pinnedMessages = withContext(Dispatchers.IO) {
-                    appDatabase.getPinnedMessages(currentConversationId)
+                    appDatabase.getPinnedMessages(conversationId)
                 }
                 if (pinnedMessages.isEmpty()) {
                     showToast("لا توجد رسائل مثبتة")
@@ -1809,6 +2445,7 @@ class ChatActivity : AppCompatActivity() {
             activeApiCalls.clear()
             activeLocalJobs.values.forEach { job -> job.cancel() }
             activeLocalJobs.clear()
+            pendingRequests.clear()
         }
         try { ttsManager?.shutdown() } catch (_: Exception) { }
         ttsManager = null
