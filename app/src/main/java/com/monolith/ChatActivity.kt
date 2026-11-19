@@ -1015,7 +1015,10 @@ class ChatActivity : AppCompatActivity() {
         try { portEndpointRegistry.clear() } catch (_: Exception) { }
         previousEndpointIds.clear()
 
-        try { connectionLayerView.setConnections(emptyList()) } catch (_: Exception) { }
+        try {
+            connectionLayerView.setConnections(emptyList())
+            connectionLayerView.clearEndpoints()
+        } catch (_: Exception) { }
 
         loadedConnections = emptyList()
         connectionNodeInfo.clear()
