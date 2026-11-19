@@ -2506,4 +2506,225 @@ class ChatActivity : AppCompatActivity() {
 
         tvAppTitle.setTextColor(themeColor)
         btnSend.setColorFilter(themeColor, PorterDuff.Mode.SRC_IN)
-        findViewById<ImageButton>(R.id.btnAttach)?.setColorFilter(themeColor, Porte
+        findViewById<ImageButton>(R.id.btnAttach)?.setColorFilter(themeColor, PorterDuff.Mode.SRC_IN)
+        findViewById<ImageButton>(R.id.btnDashboard)?.setColorFilter(themeColor, PorterDuff.Mode.SRC_IN)
+        findViewById<ImageButton>(R.id.btnSettings)?.setColorFilter(themeColor, PorterDuff.Mode.SRC_IN)
+        findViewById<ImageButton>(R.id.btnBack)?.setColorFilter(themeColor, PorterDuff.Mode.SRC_IN)
+        findViewById<ImageButton>(R.id.btnMic)?.setColorFilter(themeColor, PorterDuff.Mode.SRC_IN)
+        findViewById<TextView>(R.id.modelSelector)?.setTextColor(themeColor)
+
+        if (::tvCurrentConversation.isInitialized) tvCurrentConversation.setTextColor(themeColor)
+        if (::tvHistoryLabel.isInitialized) tvHistoryLabel.setTextColor(themeColor)
+
+        // عند تغيّر اللون: يُعاد إنشاء الـ Adapter ليطبّق اللون الجديد على الرسائل المخزّنة.
+        if (previousTheme != themeColorHex && ::chatAdapter.isInitialized) {
+            initializeAdapter()
+            if (isConversationHistoryVisible()) refreshConversationHistory()
+        }
+
+        // صورة خلفية مخصّصة لها أولوية على لون الخلفية المشتق من الثيم.
+        val bgImagePath = settings.getString("AppBackgroundImage", null)
+        if (!bgImagePath.isNullOrBlank()) {
+            val file = File(bgImagePath)
+            if (file.exists() && file.isFile && file.length() > 0L) {
+                lifecycleScope.launch {
+                    val bitmap = withContext(Dispatchers.IO) {
+                        try {
+                            BitmapFactory.decodeFile(file.absolutePath)
+                        } catch (_: Exception) {
+                            null
+                        }
+                    }
+                    if (isFinishing || isDestroyed) {
+                        bitmap?.recycle()
+                        return@launch
+                    }
+                    if (bitmap != null && rootLayout != null) {
+                        rootLayout.background = BitmapDrawable(resources, bitmap)
+                    } else if (rootLayout != null) {
+                        applyColorBackground(rootLayout, themeColor)
+                    }
+                }
+            } else if (rootLayout != null) {
+                // مسار محفوظ لكن الملف مفقود: نتراجع بهدوء إلى لون الخلفية.
+                applyColorBackground(rootLayout, themeColor)
+            }
+        } else if (rootLayout != null) {
+            applyColorBackground(rootLayout, themeColor)
+        }
+    }
+
+    private fun applyColorBackground(rootLayout: LinearLayout, themeColor: Int) {
+        val darkBase = Color.parseColor("#0E0E10")
+        val red = (Color.red(darkBase) + Color.red(themeColor)) / 6
+        val green = (Color.green(darkBase) + Color.green(themeColor)) / 6
+        val blue = (Color.blue(darkBase) + Color.blue(themeColor)) / 6
+        rootLayout.background = ColorDrawable(Color.rgb(red, green, blue))
+    }
+
+    private suspend fun getMemoriesContext(): String = withContext(Dispatchers.IO) {
+        try {
+            memoryHelper.getMemoriesContext()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            android.util.Log.e("Monolith", "getMemoriesContext failed", e)
+            ""
+        }
+    }
+
+    private fun initTtsIfNeeded() {
+        if (ttsManager == null) {
+            ttsManager = TtsManager(this)
+        }
+    }
+
+    private fun dpToPx(dp: Int): Int {
+        return (dp * resources.displayMetrics.density).toInt()
+    }
+
+    private fun showToast(message: String) {
+        if (isFinishing || isDestroyed) return
+        runOnUiThread {
+            try {
+                Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+            } catch (_: Exception) { }
+        }
+    }
+
+    override fun onDestroy() {
+        isActivityReady = false
+
+        try {
+            synchronized(requestLock) {
+                activeApiCalls.values.forEach { call ->
+                    try { call.cancel() } catch (_: Exception) { }
+                }
+                activeApiCalls.clear()
+
+                activeLocalJobs.values.forEach { job ->
+                    try { job.cancel() } catch (_: Exception) { }
+                }
+                activeLocalJobs.clear()
+
+                pendingRequests.clear()
+            }
+        } catch (_: Exception) { }
+
+        try {
+            ttsManager?.shutdown()
+        } catch (_: Exception) { }
+        ttsManager = null
+
+        super.onDestroy()
+    }
+}
+
+// =========================================================
+// DIALOG INITIATIVES PROTOCOL
+// تعريفات على مستوى الملف (خارج ChatActivity) لتفادي إنشاء ملفات جديدة.
+// =========================================================
+
+enum class DialogInitiativeKind {
+    PERMISSION,
+    MISSING_INFO,
+    FOLLOW_UP,
+    NEXT_STEP,
+    CONTINUE_TASK
+}
+
+data class DialogInitiative(
+    val kind: DialogInitiativeKind,
+    val label: String,
+    val text: String
+)
+
+data class DialogInitiativeParseResult(
+    val content: String,
+    val initiatives: List<DialogInitiative>
+)
+
+/**
+ * بروتوكول المبادرات الحوارية. مسؤوليته فقط:
+ *  1) تعليم النموذج الصيغة الدقيقة لكتلة المبادرات (INSTRUCTION).
+ *  2) استخراج كتلة المبادرات من ردّه (parse) وإعادتها منفصلة عن نص الرد.
+ *
+ * ضمانات:
+ *  - الردود التي لا تحتوي الكتلة تمرّ كما هي دون أي تعديل.
+ *  - المبادرات غير الصالحة أو الناقصة تُتجاهل فردياً دون إسقاط النص.
+ *  - المحتوى العادي للنموذج لا يُفسَّر كأوامر تنفيذ تلقائية؛ استخراج المبادرات
+ *    محصور حرفياً بين علامتي START/END.
+ */
+object DialogInitiativeProtocol {
+
+    private const val START_MARKER = "<<INITIATIVES>>"
+    private const val END_MARKER = "<<END_INITIATIVES>>"
+    private const val MAX_INITIATIVES = 5
+
+    const val INSTRUCTION: String =
+        "قواعد المبادرات الحوارية (اتبعها حرفياً):\n" +
+        "1) إذا كانت هناك خطوة تالية واضحة، أو معلومة ناقصة تحتاجها لإكمال المهمة، أو إذن صريح قبل فعل مؤثر، فأضف في نهاية ردّك كتلة واحدة فقط بالشكل التالي بالضبط، دون أي تعديل على العلامات:\n" +
+        "$START_MARKER\n" +
+        "[{\"kind\":\"FOLLOW_UP\",\"label\":\"عنوان زر قصير\",\"text\":\"النص الكامل الذي سيُرسل عند الضغط\"}]\n" +
+        "$END_MARKER\n" +
+        "2) الأنواع المسموحة فقط: PERMISSION, MISSING_INFO, FOLLOW_UP, NEXT_STEP, CONTINUE_TASK.\n" +
+        "3) لا تضع أكثر من $MAX_INITIATIVES مبادرة، ولا تكرر المبادرة نفسها، ولا تضع الكتلة إذا لم تكن هناك حاجة حقيقية.\n" +
+        "4) لا تكتب أي نص بعد $END_MARKER، ولا تُعِد كتابة الكتلة مرتين.\n" +
+        "5) هذه المبادرات اقتراحات للمستخدم فقط، وليست أوامر تنفيذ تلقائية؛ لا تفترض أن الضغط عليها سيحدث تلقائياً.\n" +
+        "6) عند عدم الحاجة لمبادرات، لا تُضمِّن الكتلة إطلاقاً، واكتب ردّك العادي كما هو."
+
+    /**
+     * يستخرج كتلة المبادرات من ردّ النموذج (إن وُجدت) ويعيد:
+     *  - content: بقية الرد بدون الكتلة، مع الحفاظ على النص الأصلي كما هو تقريباً.
+     *  - initiatives: قائمة المبادرات الصالحة (قد تكون فارغة حتى لو وُجدت الكتلة).
+     */
+    fun parse(content: String): DialogInitiativeParseResult {
+        val openIndex = content.indexOf(START_MARKER)
+        if (openIndex < 0) {
+            return DialogInitiativeParseResult(content, emptyList())
+        }
+        val closeIndex = content.indexOf(END_MARKER, openIndex + START_MARKER.length)
+        if (closeIndex < 0) {
+            // كتلة غير مغلقة: نترك النص كما هو ولا نحاول التخمين.
+            return DialogInitiativeParseResult(content, emptyList())
+        }
+
+        val jsonText = content
+            .substring(openIndex + START_MARKER.length, closeIndex)
+            .trim()
+
+        val cleanedContent = buildString {
+            append(content.substring(0, openIndex))
+            append(content.substring(closeIndex + END_MARKER.length))
+        }.trim()
+
+        val initiatives = try {
+            val array = JSONArray(jsonText)
+            val out = ArrayList<DialogInitiative>()
+            var index = 0
+            while (index < array.length() && out.size < MAX_INITIATIVES) {
+                val obj = array.optJSONObject(index)
+                index++
+                if (obj == null) continue
+                val kindStr = obj.optString("kind", "").trim().uppercase()
+                val label = obj.optString("label", "").trim()
+                val text = obj.optString("text", "").trim()
+                if (label.isBlank() || text.isBlank()) continue
+                val kind = when (kindStr) {
+                    "PERMISSION" -> DialogInitiativeKind.PERMISSION
+                    "MISSING_INFO" -> DialogInitiativeKind.MISSING_INFO
+                    "FOLLOW_UP" -> DialogInitiativeKind.FOLLOW_UP
+                    "NEXT_STEP" -> DialogInitiativeKind.NEXT_STEP
+                    "CONTINUE_TASK" -> DialogInitiativeKind.CONTINUE_TASK
+                    else -> continue
+                }
+                out.add(DialogInitiative(kind = kind, label = label, text = text))
+            }
+            out
+        } catch (_: Exception) {
+            emptyList()
+        }
+
+        return DialogInitiativeParseResult(cleanedContent, initiatives)
+    }
+}
