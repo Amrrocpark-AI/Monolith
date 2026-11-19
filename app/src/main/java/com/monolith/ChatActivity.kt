@@ -1177,7 +1177,7 @@ class ChatActivity : AppCompatActivity() {
     private fun saveUserPreference(type: String, content: String) {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                memoryHelper.savePreference(type, content)
+                memoryHelper.savePreference(content)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
