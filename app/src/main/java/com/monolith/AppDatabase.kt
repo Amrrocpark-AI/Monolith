@@ -7,6 +7,13 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import java.util.UUID
 
+/**
+ * يُرمى عند محاولة حذف المحادثة الرئيسية عبر deleteConversation().
+ * يُرمى قبل فتح أي Transaction أو لمس أي بيانات.
+ */
+class ProtectedConversationException(val conversationId: String) :
+    IllegalStateException("المحادثة الرئيسية محمية من الحذف")
+
 class AppDatabase(context: Context) : SQLiteOpenHelper(
     context,
     "monolith_database",
@@ -16,6 +23,9 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
 
     companion object {
         private const val DB_VERSION = 7
+
+        /** معرّف المحادثة الرئيسية المحمية من الحذف الاعتيادي. */
+        const val MAIN_CONVERSATION_ID = "main_chat"
 
         private fun createCoreTables(db: SQLiteDatabase) {
 
@@ -1266,10 +1276,18 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
      * كل عمليات الحذف تعتمد على المعرّف المحدد بشرط مطابقة دقيقة (parameterized)،
      * ولا تمس أي محادثة أخرى. العقد اللونية (chromatic_nodes) عامة ولا تُحذف.
      *
-     * يعيد true إذا كان سجل المحادثة موجوداً وحُذف.
+     * حماية: المحادثة الرئيسية (MAIN_CONVERSATION_ID) لا تُحذف عبر هذه الدالة إطلاقاً.
+     * يُرمى ProtectedConversationException قبل فتح أي Transaction، فلا يتغير شيء في البيانات.
+     *
+     * يعيد true إذا كان سجل المحادثة موجوداً وحُذف، و false إذا لم يكن له سجل أصلاً.
+     * أي خطأ أثناء الحذف يُرمى كاستثناء وتُلغى الـ Transaction كاملة (لا حذف جزئي).
      */
     fun deleteConversation(conversationId: String): Boolean {
         if (conversationId.isBlank()) return false
+
+        if (conversationId == MAIN_CONVERSATION_ID) {
+            throw ProtectedConversationException(conversationId)
+        }
 
         val db = writableDatabase
         db.beginTransaction()
