@@ -3,7 +3,6 @@ package com.monolith.graph.ports.views
 
 import android.content.Context
 import android.util.AttributeSet
-import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import com.monolith.graph.ports.models.*
@@ -41,10 +40,24 @@ class PortClusterView @JvmOverloads constructor(
     private fun dp(value: Float): Int =
         (value * density).toInt()
 
+    /**
+     * Space reserved around the card so ports can extend
+     * beyond its edges while remaining inside this ViewGroup.
+     */
+    private val portOutset: Int
+        get() = dp(17f)
+
     init {
         clipChildren = false
         clipToPadding = false
         isChildrenDrawingOrderEnabled = false
+
+        setPadding(
+            portOutset,
+            portOutset,
+            portOutset,
+            portOutset
+        )
     }
 
     /**
@@ -427,23 +440,23 @@ class PortClusterView @JvmOverloads constructor(
 
             when (side) {
                 PortSide.LEFT -> {
-                    x = offsetX - inset
+                    x = offsetX - portWidth / 2 - inset
                     y = offsetY + center - portHeight / 2
                 }
 
                 PortSide.RIGHT -> {
-                    x = offsetX + width - portWidth + inset
+                    x = offsetX + width - portWidth / 2 + inset
                     y = offsetY + center - portHeight / 2
                 }
 
                 PortSide.TOP -> {
                     x = offsetX + center - portWidth / 2
-                    y = offsetY - inset
+                    y = offsetY - portHeight / 2 - inset
                 }
 
                 PortSide.BOTTOM -> {
                     x = offsetX + center - portWidth / 2
-                    y = offsetY + height - portHeight + inset
+                    y = offsetY + height - portHeight / 2 + inset
                 }
             }
 
