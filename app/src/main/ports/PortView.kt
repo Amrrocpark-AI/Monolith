@@ -1,3 +1,4 @@
+
 package com.monolith.graph.ports.views
 
 import android.animation.ValueAnimator
@@ -42,6 +43,7 @@ class PortView @JvmOverloads constructor(
 
     var state = PortState.IDLE
         set(value) {
+            if (field == value) return
             field = value
             updateAnimation()
             invalidate()
@@ -63,7 +65,7 @@ class PortView @JvmOverloads constructor(
     private var pulse = 0f
     private var animator: ValueAnimator? = null
 
-    private fun dp(value: Float) = value * density
+    private fun dp(value: Float): Float = value * density
 
     private val accent: Int
         get() = PortPalette.colorFor(portKind)
@@ -171,7 +173,8 @@ class PortView @JvmOverloads constructor(
 
         canvas.drawRoundRect(body, dp(4f), dp(4f), borderPaint)
 
-        val slotWidth = bw * if (shape == PortShape.COMPACT) 0.42f else 0.56f
+        val slotWidth =
+            bw * if (shape == PortShape.COMPACT) 0.42f else 0.56f
         val slotHeight = bh * 0.38f
 
         slot.set(
@@ -203,10 +206,6 @@ class PortView @JvmOverloads constructor(
         )
 
         canvas.restoreToCount(save)
-    }
-
-    fun setState(value: PortState) {
-        state = value
     }
 
     private fun updateAnimation() {
