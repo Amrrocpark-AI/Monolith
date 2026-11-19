@@ -1,4 +1,3 @@
-
 package com.monolith
 
 import android.content.ContentValues
@@ -572,6 +571,21 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
         return list
     }
 
+    fun countMessagesForConversation(
+        conversationId: String
+    ): Int {
+        readableDatabase.rawQuery(
+            "SELECT COUNT(*) FROM messages WHERE conversationId = ?",
+            arrayOf(conversationId)
+        ).use { cursor ->
+            if (cursor.moveToFirst()) {
+                return cursor.getInt(0)
+            }
+        }
+
+        return 0
+    }
+
     fun getPinnedMessages(
         conversationId: String
     ): List<MessageEntity> {
@@ -1129,6 +1143,10 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
     // CONVERSATIONS
     // =========================================================
 
+    /**
+     * الدالة الأصلية. تستخدم CONFLICT_REPLACE وبالتالي قد تستبدل محادثة موجودة بنفس المعرّف.
+     * للإنشاء الآمن من واجهة سجل المحادثات استخدم insertConversationIfAbsent().
+     */
     fun insertConversation(conversation: ConversationEntity) {
         val values = ContentValues().apply {
             put("id", conversation.id)
@@ -1138,6 +1156,170 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
         }
 
         insertReplace("conversations", values)
+    }
+
+    /**
+     * إدراج آمن: لا يستبدل أي محادثة موجودة (CONFLICT_IGNORE).
+     * يعيد true فقط إذا أُنشئت المحادثة فعلاً، و false إذا كان المعرّف موجوداً مسبقاً.
+     */
+    fun insertConversationIfAbsent(conversation: ConversationEntity): Boolean {
+        val values = ContentValues().apply {
+            put("id", conversation.id)
+            put("title", conversation.title)
+            put("createdAt", conversation.createdAt)
+            put("lastModified", conversation.lastModified)
+        }
+
+        val rowId = writableDatabase.insertWithOnConflict(
+            "conversations",
+            null,
+            values,
+            SQLiteDatabase.CONFLICT_IGNORE
+        )
+
+        return rowId != -1L
+    }
+
+    private fun readConversation(cursor: Cursor): ConversationEntity {
+        return ConversationEntity(
+            id = cursor.getString(cursor.getColumnIndexOrThrow("id")),
+            title = cursorString(cursor, "title") ?: "",
+            createdAt = cursor.getLong(cursor.getColumnIndexOrThrow("createdAt")),
+            lastModified = cursor.getLong(cursor.getColumnIndexOrThrow("lastModified"))
+        )
+    }
+
+    fun getAllConversations(): List<ConversationEntity> {
+        val list = mutableListOf<ConversationEntity>()
+
+        readableDatabase.rawQuery(
+            "SELECT * FROM conversations ORDER BY lastModified DESC, createdAt DESC",
+            null
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                list.add(readConversation(cursor))
+            }
+        }
+
+        return list
+    }
+
+    fun getConversationById(id: String): ConversationEntity? {
+        if (id.isBlank()) return null
+
+        readableDatabase.rawQuery(
+            "SELECT * FROM conversations WHERE id = ? LIMIT 1",
+            arrayOf(id)
+        ).use { cursor ->
+            if (cursor.moveToFirst()) {
+                return readConversation(cursor)
+            }
+        }
+
+        return null
+    }
+
+    /**
+     * يغيّر العنوان فقط، ولا يغيّر ترتيب المحادثة في القائمة.
+     * يعيد true إذا وُجدت المحادثة وتم تحديثها.
+     */
+    fun updateConversationTitle(id: String, title: String): Boolean {
+        if (id.isBlank()) return false
+
+        val values = ContentValues().apply {
+            put("title", title)
+        }
+
+        return writableDatabase.update(
+            "conversations",
+            values,
+            "id = ?",
+            arrayOf(id)
+        ) > 0
+    }
+
+    fun updateConversationLastModified(
+        id: String,
+        timestamp: Long = System.currentTimeMillis()
+    ): Boolean {
+        if (id.isBlank()) return false
+
+        val values = ContentValues().apply {
+            put("lastModified", timestamp)
+        }
+
+        return writableDatabase.update(
+            "conversations",
+            values,
+            "id = ?",
+            arrayOf(id)
+        ) > 0
+    }
+
+    /**
+     * حذف كامل داخل Transaction واحدة:
+     *  1) ملاحظات وروابط الخيوط (message_threads / thread_annotations) المرتبطة برسائل هذه المحادثة فقط
+     *  2) الرسائل وجداولها التابعة عبر deleteConversationMessages() الموجودة (بدون تكرار منطقها)
+     *  3) فروع المحادثة (message_branches)
+     *  4) سجل المحادثة نفسه
+     *
+     * كل عمليات الحذف تعتمد على المعرّف المحدد بشرط مطابقة دقيقة (parameterized)،
+     * ولا تمس أي محادثة أخرى. العقد اللونية (chromatic_nodes) عامة ولا تُحذف.
+     *
+     * يعيد true إذا كان سجل المحادثة موجوداً وحُذف.
+     */
+    fun deleteConversation(conversationId: String): Boolean {
+        if (conversationId.isBlank()) return false
+
+        val db = writableDatabase
+        db.beginTransaction()
+
+        try {
+            val messageIds = mutableListOf<String>()
+
+            db.rawQuery(
+                "SELECT id FROM messages WHERE conversationId = ?",
+                arrayOf(conversationId)
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    messageIds.add(cursor.getString(0))
+                }
+            }
+
+            for (messageId in messageIds) {
+                db.delete(
+                    "thread_annotations",
+                    "thread_id IN (SELECT id FROM message_threads WHERE source_msg_id = ? OR target_msg_id = ?)",
+                    arrayOf(messageId, messageId)
+                )
+
+                db.delete(
+                    "message_threads",
+                    "source_msg_id = ? OR target_msg_id = ?",
+                    arrayOf(messageId, messageId)
+                )
+            }
+
+            // Transaction متداخلة مدعومة في Android، وستُثبّت مع الخارجية.
+            deleteConversationMessages(conversationId)
+
+            db.delete(
+                "message_branches",
+                "conversation_id = ?",
+                arrayOf(conversationId)
+            )
+
+            val removedRows = db.delete(
+                "conversations",
+                "id = ?",
+                arrayOf(conversationId)
+            )
+
+            db.setTransactionSuccessful()
+            return removedRows > 0
+        } finally {
+            db.endTransaction()
+        }
     }
 
     // =========================================================
