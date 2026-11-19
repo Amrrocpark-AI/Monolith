@@ -1786,6 +1786,11 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
     }
 
     fun deleteConversationMessages(conversationId: String) {
+        // حماية: لا تُمسح رسائل المحادثة الرئيسية بهذه الدالة. تُرمى قبل فتح القاعدة أو أي Transaction.
+        if (conversationId == MAIN_CONVERSATION_ID) {
+            throw ProtectedConversationException(conversationId)
+        }
+
         val db = writableDatabase
 
         db.beginTransaction()
