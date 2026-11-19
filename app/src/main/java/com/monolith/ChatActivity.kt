@@ -60,7 +60,7 @@ import java.util.concurrent.ConcurrentHashMap
 class ChatActivity : AppCompatActivity() {
 
     companion object {
-        private const val CONVERSATION_ID = "main_chat"
+        private const val CONVERSATION_ID = AppDatabase.MAIN_CONVERSATION_ID
         private const val MODEL_FILE_NAME = "model.gguf"
         private const val VISION_MODEL_FILE_NAME = "vision_model.gguf"
         private const val VISION_PROJECT_FILE_NAME = "vision_mmproj.gguf"
@@ -529,20 +529,14 @@ class ChatActivity : AppCompatActivity() {
      *  - عند عدم وجود أي محادثة إطلاقاً.
      */
     private fun prepareInitialConversation(): String {
-        val mainExists = appDatabase.getConversationById(CONVERSATION_ID) != null
-
-        if (!mainExists) {
-            val mainHasMessages = appDatabase.countMessagesForConversation(CONVERSATION_ID) > 0
-            val noConversationsAtAll = appDatabase.getAllConversations().isEmpty()
-
-            if (mainHasMessages || noConversationsAtAll) {
-                appDatabase.insertConversationIfAbsent(
-                    ConversationEntity(
-                        id = CONVERSATION_ID,
-                        title = MAIN_CONVERSATION_TITLE
-                    )
+        // المحادثة الرئيسية محمية من الحذف، فيجب أن يكون لها سجل دائماً (إدراج آمن بلا استبدال).
+        if (appDatabase.getConversationById(CONVERSATION_ID) == null) {
+            appDatabase.insertConversationIfAbsent(
+                ConversationEntity(
+                    id = CONVERSATION_ID,
+                    title = MAIN_CONVERSATION_TITLE
                 )
-            }
+            )
         }
 
         val savedId = loadLastConversationId()
@@ -706,7 +700,10 @@ class ChatActivity : AppCompatActivity() {
 
         row.addView(titleView)
         row.addView(renameButton)
-        row.addView(deleteButton)
+        // المحادثة الرئيسية: لا يظهر لها خيار الحذف الاعتيادي (والحماية الفعلية في AppDatabase).
+        if (conversation.id != CONVERSATION_ID) {
+            row.addView(deleteButton)
+        }
         return row
     }
 
@@ -852,6 +849,11 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun confirmDeleteConversation(conversation: ConversationEntity) {
+        if (conversation.id == CONVERSATION_ID) {
+            showToast("لا يمكن حذف المحادثة الرئيسية")
+            return
+        }
+
         val displayTitle = conversation.title.ifBlank { DEFAULT_CONVERSATION_TITLE }
 
         AlertDialog.Builder(this)
@@ -865,6 +867,12 @@ class ChatActivity : AppCompatActivity() {
     private fun deleteConversation(conversationId: String) {
         if (conversationId.isBlank()) return
 
+        // حاجز قبل أي أثر جانبي (إلغاء طلبات أو علامة حذف): المحادثة الرئيسية لا تُحذف.
+        if (conversationId == CONVERSATION_ID) {
+            showToast("لا يمكن حذف المحادثة الرئيسية")
+            return
+        }
+
         val wasCurrent = conversationId == currentConversationId
 
         // أوقف الطلبات المعلقة لهذه المحادثة فقط، وامنع حفظ أي رد متأخر داخلها.
@@ -873,7 +881,7 @@ class ChatActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             try {
-                withContext(Dispatchers.IO) {
+                val removed = withContext(Dispatchers.IO) {
                     databaseMutex.withLock {
                         appDatabase.deleteConversation(conversationId)
                     }
@@ -887,21 +895,30 @@ class ChatActivity : AppCompatActivity() {
                     if (remaining.isNotEmpty()) {
                         openConversation(remaining.first().id)
                     } else {
-                        // لا تبقى أي محادثة: ننشئ واحدة جديدة حتى لا تُحفظ الرسائل بمعرّف محذوف.
-                        val fresh = ConversationEntity(title = DEFAULT_CONVERSATION_TITLE)
+                        // احتياط: لا تبقى أي محادثة (لا يُتوقع). نضمن سجل main_chat ونفتحه.
                         withContext(Dispatchers.IO) {
                             databaseMutex.withLock {
-                                appDatabase.insertConversationIfAbsent(fresh)
+                                appDatabase.insertConversationIfAbsent(
+                                    ConversationEntity(
+                                        id = CONVERSATION_ID,
+                                        title = MAIN_CONVERSATION_TITLE
+                                    )
+                                )
                             }
                         }
-                        openConversation(fresh.id)
+                        openConversation(CONVERSATION_ID)
                     }
                 }
 
                 if (isConversationHistoryVisible()) {
                     refreshConversationHistory()
                 }
-                showToast("تم حذف المحادثة")
+
+                if (removed) {
+                    showToast("تم حذف المحادثة")
+                } else {
+                    showToast("المحادثة غير موجودة في السجل")
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
