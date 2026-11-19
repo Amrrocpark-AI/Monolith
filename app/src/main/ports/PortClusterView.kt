@@ -216,7 +216,7 @@ class PortClusterView @JvmOverloads constructor(
         portId: String,
         state: PortState
     ) {
-        ports[portId]?.view?.setState(state)
+        ports[portId]?.view?.state = state
     }
 
     fun setPortKind(
@@ -241,8 +241,8 @@ class PortClusterView @JvmOverloads constructor(
     }
 
     fun setAllPortsState(state: PortState) {
-        ports.values.forEach {
-            it.view.setState(state)
+        ports.values.forEach { entry ->
+            entry.view.state = state
         }
     }
 
