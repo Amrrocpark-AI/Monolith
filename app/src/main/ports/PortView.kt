@@ -266,8 +266,11 @@ class PortView @JvmOverloads constructor(
             PortSide.BOTTOM -> canvas.rotate(90f)
         }
 
-        val halfW = baseW / 2f
-        val halfH = baseH / 2f
+        // Canonical socket dimensions before rotation.
+        val canonicalW = dp(socketBaseWidthDp())
+        val canonicalH = dp(socketBaseHeightDp())
+        val halfW = canonicalW / 2f
+        val halfH = canonicalH / 2f
 
         val activeColor = when (state) {
             PortState.SELECTED -> Color.WHITE
