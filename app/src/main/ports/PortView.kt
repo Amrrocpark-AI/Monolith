@@ -266,12 +266,8 @@ class PortView @JvmOverloads constructor(
             PortSide.BOTTOM -> canvas.rotate(90f)
         }
 
-        // Canonical local dimensions before rotation/mirroring:
-        // +X extends outward from card edge; Y spans across the 3 slots.
-        val canonicalW = dp(socketBaseWidthDp())
-        val canonicalH = dp(socketBaseHeightDp())
-        val halfW = canonicalW / 2f
-        val halfH = canonicalH / 2f
+        val halfW = baseW / 2f
+        val halfH = baseH / 2f
 
         val activeColor = when (state) {
             PortState.SELECTED -> Color.WHITE
@@ -430,7 +426,7 @@ class PortView @JvmOverloads constructor(
 
         // 5. Optional Port ID badge outside the socket with strict clipping and ellipsis
         if (hasBadge) {
-            drawOptionalIdBadge(canvas, label, horizontal, badgeSize, badgeGap, badgeH, baseW, baseH)
+            drawOptionalIdBadge(canvas, label, horizontal, badgeSize, badgeGap, badgeH)
         }
     }
 
@@ -440,10 +436,10 @@ class PortView @JvmOverloads constructor(
         horizontal: Boolean,
         badgeSize: Float,
         badgeGap: Float,
-        badgeH: Float,
-        baseW: Float,
-        baseH: Float
+        badgeH: Float
     ) {
+        val (baseW, baseH) = measuredSocketSize()
+
         badgeTextPaint.textSize = sp(8.5f)
         badgeTextPaint.color = if (isLit) accent else 0xFFC5D2DE.toInt()
 
