@@ -92,7 +92,6 @@ class PortView @JvmOverloads constructor(
     private val recessPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val slotPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val slotInnerPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val dividerPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val ledPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val badgeBgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val badgeBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -146,6 +145,16 @@ class PortView @JvmOverloads constructor(
         PortShape.USB_C -> 36f
     }
 
+    private fun measuredSocketSize(): Pair<Float, Float> {
+        val horizontal =
+            portSide == PortSide.LEFT ||
+                portSide == PortSide.RIGHT
+
+        val w = dp(if (horizontal) socketBaseWidthDp() else socketBaseHeightDp())
+        val h = dp(if (horizontal) socketBaseHeightDp() else socketBaseWidthDp())
+        return Pair(w, h)
+    }
+
     init {
         isClickable = true
         isFocusable = true
@@ -177,8 +186,7 @@ class PortView @JvmOverloads constructor(
             portSide == PortSide.LEFT ||
                 portSide == PortSide.RIGHT
 
-        val baseW = dp(if (horizontal) socketBaseWidthDp() else socketBaseHeightDp())
-        val baseH = dp(if (horizontal) socketBaseHeightDp() else socketBaseWidthDp())
+        val (baseW, baseH) = measuredSocketSize()
 
         val label = effectiveBadgeLabel
         val badgeW = measureBadgeWidth(label)
@@ -219,8 +227,7 @@ class PortView @JvmOverloads constructor(
         val badgeSize = if (hasBadge) measureBadgeWidth(label) else 0f
         val badgeGap = if (hasBadge) dp(3f) else 0f
 
-        val baseW = dp(if (horizontal) socketBaseWidthDp() else socketBaseHeightDp())
-        val baseH = dp(if (horizontal) socketBaseHeightDp() else socketBaseWidthDp())
+        val (baseW, baseH) = measuredSocketSize()
 
         val socketLeft: Float
         val socketTop: Float
@@ -257,9 +264,9 @@ class PortView @JvmOverloads constructor(
             PortSide.BOTTOM -> canvas.rotate(90f)
         }
 
-        // Canonical local coordinate system around (0, 0) where +X points outward from the card edge
-        val localW = dp(socketBaseWidthDp())
-        val localH = dp(socketBaseHeightDp())
+        // Canonical local dimensions matching measuredSocketSize() across all sides
+        val localW = if (horizontal) baseW else baseH
+        val localH = if (horizontal) baseH else baseW
         val halfW = localW / 2f
         val halfH = localH / 2f
 
@@ -391,27 +398,7 @@ class PortView @JvmOverloads constructor(
             canvas.drawRoundRect(slots[i], slotCorner, slotCorner, slotInnerPaint)
         }
 
-        // Structural partition between slots for USB vs USB_C vs COMPACT
-        if (shape == PortShape.USB) {
-            dividerPaint.apply {
-                style = Paint.Style.STROKE
-                strokeWidth = dp(0.85f)
-                color = 0xFF334155.toInt()
-                alpha = if (state == PortState.DISABLED) 90 else 185
-            }
-            for (i in 0 until 2) {
-                val sepY = (slotOffsets[i] + slotOffsets[i + 1]) / 2f
-                canvas.drawLine(
-                    recessRect.left + dp(1.2f),
-                    sepY,
-                    recessRect.right - dp(1.2f),
-                    sepY,
-                    dividerPaint
-                )
-            }
-        }
-
-        // 4. Side LED indicator along the socket
+        // 4. Side LED indicator aligned along the socket
         val ledW = when (shape) {
             PortShape.COMPACT -> dp(1.8f)
             PortShape.USB -> dp(2.4f)
@@ -440,7 +427,7 @@ class PortView @JvmOverloads constructor(
 
         // 5. Optional Port ID badge with strict clipping and ellipsis
         if (hasBadge) {
-            drawOptionalIdBadge(canvas, label, horizontal, badgeSize, badgeGap, baseW)
+            drawOptionalIdBadge(canvas, label, horizontal, badgeSize, badgeGap, baseW, baseH)
         }
     }
 
@@ -450,7 +437,8 @@ class PortView @JvmOverloads constructor(
         horizontal: Boolean,
         badgeSize: Float,
         badgeGap: Float,
-        baseSocketWidth: Float
+        baseW: Float,
+        baseH: Float
     ) {
         badgeTextPaint.textSize = sp(8.5f)
         badgeTextPaint.color = if (isLit) accent else 0xFFC5D2DE.toInt()
@@ -464,7 +452,7 @@ class PortView @JvmOverloads constructor(
 
         if (horizontal) {
             left = if (portSide == PortSide.RIGHT) {
-                (baseSocketWidth + badgeGap).coerceAtMost((width - badgeW).coerceAtLeast(0f))
+                (baseW + badgeGap).coerceAtMost((width - badgeW).coerceAtLeast(0f))
             } else {
                 0f
             }
@@ -472,7 +460,7 @@ class PortView @JvmOverloads constructor(
         } else {
             left = (width - badgeW) / 2f
             top = if (portSide == PortSide.BOTTOM) {
-                (baseSocketWidth + badgeGap).coerceAtMost((height - badgeH).coerceAtLeast(0f))
+                (baseH + badgeGap).coerceAtMost((height - badgeH).coerceAtLeast(0f))
             } else {
                 0f
             }
