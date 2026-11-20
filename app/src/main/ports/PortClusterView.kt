@@ -27,6 +27,7 @@ class PortClusterView @JvmOverloads constructor(
     var config: PortLayoutConfig = PortLayoutConfig()
         set(value) {
             field = value
+            updateReservedSpace()
             requestLayout()
             invalidate()
         }
@@ -40,31 +41,41 @@ class PortClusterView @JvmOverloads constructor(
     private fun dp(value: Float): Int =
         (value * density).toInt()
 
-    /**
-     * Space reserved around the card so ports can extend
-     * beyond its edges while remaining inside this ViewGroup.
+    /*
+     * PortView horizontal size: 54 x 30 dp
+     * PortView vertical size:   30 x 54 dp
+     *
+     * Reserve half of the largest dimension so
+     * ports remain inside this ViewGroup.
      */
     private val portOutset: Int
-        get() = dp(17f)
+        get() = dp(27f)
 
     init {
         clipChildren = false
         clipToPadding = false
         isChildrenDrawingOrderEnabled = false
 
+        updateReservedSpace()
+    }
+
+    private fun updateReservedSpace() {
+        val inset = dp(
+            config.edgeInsetDp.coerceAtLeast(0f)
+        )
+
+        val reserved = portOutset + inset
+
         setPadding(
-            portOutset,
-            portOutset,
-            portOutset,
-            portOutset
+            reserved,
+            reserved,
+            reserved,
+            reserved
         )
     }
 
     /**
      * Adds a port to the requested edge.
-     *
-     * Existing parameters remain in the same order for compatibility.
-     * Shape and enabled are optional extensions.
      */
     fun addPort(
         side: PortSide,
@@ -79,7 +90,8 @@ class PortClusterView @JvmOverloads constructor(
             it.view.portSide == side
         }
 
-        val maxPorts = config.maxPortsPerSide.coerceAtLeast(0)
+        val maxPorts =
+            config.maxPortsPerSide.coerceAtLeast(0)
 
         if (sideCount >= maxPorts) return null
 
@@ -162,7 +174,7 @@ class PortClusterView @JvmOverloads constructor(
     }
 
     /**
-     * Removes every port and releases its click callback.
+     * Removes every port and releases callbacks.
      */
     fun clearPorts() {
         ports.values.forEach { entry ->
@@ -247,14 +259,13 @@ class PortClusterView @JvmOverloads constructor(
     }
 
     fun setAllPortsEnabled(enabled: Boolean) {
-        ports.values.forEach {
-            it.view.isEnabled = enabled
+        ports.values.forEach { entry ->
+            entry.view.isEnabled = enabled
         }
     }
 
     /**
      * Rebuilds map keys whenever ownerId changes.
-     * This prevents stale IDs from remaining in the map.
      */
     private fun refreshIds() {
         if (ports.isEmpty()) return
@@ -270,7 +281,10 @@ class PortClusterView @JvmOverloads constructor(
             val index = indexes[port.portSide] ?: 0
             indexes[port.portSide] = index + 1
 
-            val newId = createPortId(port.portSide, index)
+            val newId = createPortId(
+                port.portSide,
+                index
+            )
 
             port.portId = newId
             rebuilt[newId] = entry
@@ -296,7 +310,9 @@ class PortClusterView @JvmOverloads constructor(
         for (entry in ports.values) {
             val current = entry.view
 
-            if (current.portSide != port.portSide) continue
+            if (current.portSide != port.portSide) {
+                continue
+            }
 
             if (current === port) return index
 
@@ -306,6 +322,15 @@ class PortClusterView @JvmOverloads constructor(
         return -1
     }
 
+    /*
+     * Do not manually measure ports here.
+     *
+     * FrameLayout measures WRAP_CONTENT children using
+     * each PortView's own onMeasure implementation.
+     *
+     * This preserves the new dimensions instead of
+     * forcing the previous 34 x 20 dp dimensions.
+     */
     override fun onMeasure(
         widthMeasureSpec: Int,
         heightMeasureSpec: Int
@@ -314,33 +339,6 @@ class PortClusterView @JvmOverloads constructor(
             widthMeasureSpec,
             heightMeasureSpec
         )
-
-        ports.values.forEach { entry ->
-            val port = entry.view
-
-            val horizontal =
-                port.portSide == PortSide.LEFT ||
-                port.portSide == PortSide.RIGHT
-
-            val width = dp(
-                if (horizontal) 34f else 20f
-            )
-
-            val height = dp(
-                if (horizontal) 20f else 34f
-            )
-
-            port.measure(
-                MeasureSpec.makeMeasureSpec(
-                    width,
-                    MeasureSpec.EXACTLY
-                ),
-                MeasureSpec.makeMeasureSpec(
-                    height,
-                    MeasureSpec.EXACTLY
-                )
-            )
-        }
     }
 
     override fun onLayout(
@@ -353,13 +351,17 @@ class PortClusterView @JvmOverloads constructor(
         val contentLeft = paddingLeft
         val contentTop = paddingTop
 
-        val contentWidth =
-            (right - left - paddingLeft - paddingRight)
-                .coerceAtLeast(0)
+        val contentWidth = (
+            right - left -
+                paddingLeft -
+                paddingRight
+            ).coerceAtLeast(0)
 
-        val contentHeight =
-            (bottom - top - paddingTop - paddingBottom)
-                .coerceAtLeast(0)
+        val contentHeight = (
+            bottom - top -
+                paddingTop -
+                paddingBottom
+            ).coerceAtLeast(0)
 
         layoutSide(
             side = PortSide.LEFT,
@@ -427,7 +429,9 @@ class PortClusterView @JvmOverloads constructor(
             spacing = dp(spacingDp.coerceAtLeast(0f))
         )
 
-        val inset = dp(config.edgeInsetDp)
+        val inset = dp(
+            config.edgeInsetDp.coerceAtLeast(0f)
+        )
 
         sidePorts.forEachIndexed { index, port ->
             val portWidth = port.measuredWidth
@@ -440,23 +444,45 @@ class PortClusterView @JvmOverloads constructor(
 
             when (side) {
                 PortSide.LEFT -> {
-                    x = offsetX - portWidth / 2 - inset
-                    y = offsetY + center - portHeight / 2
+                    x = offsetX -
+                        portWidth / 2 -
+                        inset
+
+                    y = offsetY +
+                        center -
+                        portHeight / 2
                 }
 
                 PortSide.RIGHT -> {
-                    x = offsetX + width - portWidth / 2 + inset
-                    y = offsetY + center - portHeight / 2
+                    x = offsetX +
+                        width -
+                        portWidth / 2 +
+                        inset
+
+                    y = offsetY +
+                        center -
+                        portHeight / 2
                 }
 
                 PortSide.TOP -> {
-                    x = offsetX + center - portWidth / 2
-                    y = offsetY - portHeight / 2 - inset
+                    x = offsetX +
+                        center -
+                        portWidth / 2
+
+                    y = offsetY -
+                        portHeight / 2 -
+                        inset
                 }
 
                 PortSide.BOTTOM -> {
-                    x = offsetX + center - portWidth / 2
-                    y = offsetY + height - portHeight / 2 + inset
+                    x = offsetX +
+                        center -
+                        portWidth / 2
+
+                    y = offsetY +
+                        height -
+                        portHeight / 2 +
+                        inset
                 }
             }
 
@@ -470,7 +496,7 @@ class PortClusterView @JvmOverloads constructor(
     }
 
     /**
-     * Distributes ports evenly when the requested spacing
+     * Distributes ports evenly when requested spacing
      * cannot fit inside the available edge.
      */
     private fun calculateCenters(
@@ -478,6 +504,7 @@ class PortClusterView @JvmOverloads constructor(
         availableSpace: Int,
         spacing: Int
     ): List<Int> {
+
         if (count <= 0) return emptyList()
 
         if (count == 1) {
@@ -486,8 +513,12 @@ class PortClusterView @JvmOverloads constructor(
 
         val requiredSpace = spacing * (count - 1)
 
-        if (spacing > 0 && requiredSpace <= availableSpace) {
-            val start = (availableSpace - requiredSpace) / 2
+        if (
+            spacing > 0 &&
+            requiredSpace <= availableSpace
+        ) {
+            val start =
+                (availableSpace - requiredSpace) / 2
 
             return List(count) { index ->
                 start + index * spacing
@@ -501,9 +532,5 @@ class PortClusterView @JvmOverloads constructor(
                     availableSpace
                 ).toInt()
         }
-    }
-
-    override fun onDetachedFromWindow() {
-        super.onDetachedFromWindow()
     }
 }
