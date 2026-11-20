@@ -11,18 +11,18 @@ class PortEndpointRegistry {
     private val endpoints =
         LinkedHashMap<String, PortEndpoint>()
 
+    private val plugEndpoints =
+        LinkedHashMap<String, PortEndpoint>()
+
     private fun dp(view: View, value: Float): Float =
         value * view.resources.displayMetrics.density
 
     /**
-     * Updates all endpoints belonging to a cluster.
+     * Updates all fixed socket endpoints belonging to a cluster.
      *
      * Coordinates are converted into the overlay's
      * coordinate system, which is the coordinate system
      * used by ConnectionLayerView.
-     *
-     * The endpoint is placed at the OUTER connector tip,
-     * not at the center of the PortView.
      */
     fun update(
         cluster: PortClusterView,
@@ -52,27 +52,20 @@ class PortEndpointRegistry {
             val portLocation = IntArray(2)
             port.getLocationOnScreen(portLocation)
 
-            /*
-             * PortView draws its connector nose with
-             * a 1dp inset from the outer view boundary.
-             *
-             * The endpoint must meet that nose at its
-             * centerline, avoiding a visible wire gap.
-             */
-            val tipInset = dp(port, 1f)
+            val edgeInset = dp(port, 3f)
 
             val localPoint = when (port.portSide) {
 
                 PortSide.RIGHT -> {
                     PointF(
-                        port.width.toFloat() - tipInset,
+                        port.width.toFloat() - edgeInset,
                         port.height / 2f
                     )
                 }
 
                 PortSide.LEFT -> {
                     PointF(
-                        tipInset,
+                        edgeInset,
                         port.height / 2f
                     )
                 }
@@ -80,14 +73,14 @@ class PortEndpointRegistry {
                 PortSide.TOP -> {
                     PointF(
                         port.width / 2f,
-                        tipInset
+                        edgeInset
                     )
                 }
 
                 PortSide.BOTTOM -> {
                     PointF(
                         port.width / 2f,
-                        port.height.toFloat() - tipInset
+                        port.height.toFloat() - edgeInset
                     )
                 }
             }
@@ -111,7 +104,7 @@ class PortEndpointRegistry {
     }
 
     /**
-     * Allows manually supplied endpoint coordinates.
+     * Allows manually supplied socket endpoint coordinates.
      * Coordinates must already be in overlay space.
      */
     fun update(
@@ -123,6 +116,32 @@ class PortEndpointRegistry {
             position.x,
             position.y
         )
+    }
+
+    /**
+     * Updates an independent plug (neck/anchor) endpoint in overlay space.
+     */
+    fun updatePlug(
+        plugId: String,
+        position: PointF
+    ) {
+        plugEndpoints[plugId] = PortEndpoint(
+            plugId,
+            position.x,
+            position.y
+        )
+    }
+
+    fun getPlug(plugId: String): PortEndpoint? =
+        plugEndpoints[plugId]
+
+    fun getPlugPoints(): Map<String, PointF> =
+        plugEndpoints.mapValues { (_, endpoint) ->
+            endpoint.toPointF()
+        }
+
+    fun removePlug(plugId: String) {
+        plugEndpoints.remove(plugId)
     }
 
     fun remove(portId: String) {
@@ -142,5 +161,6 @@ class PortEndpointRegistry {
 
     fun clear() {
         endpoints.clear()
+        plugEndpoints.clear()
     }
 }
