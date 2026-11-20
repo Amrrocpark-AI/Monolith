@@ -43,16 +43,15 @@ class PortClusterView @JvmOverloads constructor(
         (value * density).toInt()
 
     /*
-     * PortView dimensions:
-     * Horizontal: 54 x 30 dp
-     * Vertical:   30 x 54 dp
+     * ChatActivity positions the cluster 17dp
+     * outside the card on every side.
      *
-     * Reserve enough room for half of the port body.
-     * The remaining half visually extends beyond the
-     * card edge, producing the mounted connector effect.
+     * The reserved space must match that offset.
+     * PortView is centered on the card boundary;
+     * its outer portion extends beyond that boundary.
      */
     private val portOutset: Int
-        get() = dp(27f)
+        get() = dp(17f)
 
     init {
         clipChildren = false
@@ -426,7 +425,7 @@ class PortClusterView @JvmOverloads constructor(
 
         val horizontalEdge =
             side == PortSide.LEFT ||
-            side == PortSide.RIGHT
+                side == PortSide.RIGHT
 
         val availableSpace =
             if (horizontalEdge) height else width
@@ -448,13 +447,6 @@ class PortClusterView @JvmOverloads constructor(
             ).coerceAtLeast(0f)
         )
 
-        /*
-         * The spacing must account for the actual
-         * footprint of each connector along its edge.
-         *
-         * This prevents adjacent connectors from
-         * overlapping when several ports share a side.
-         */
         val portExtents = sidePorts.map { port ->
             if (horizontalEdge) {
                 port.measuredHeight
