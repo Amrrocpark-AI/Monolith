@@ -5,6 +5,7 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.PointF
 import android.graphics.RectF
 import android.text.TextUtils
 import android.util.AttributeSet
@@ -126,6 +127,15 @@ class PortView @JvmOverloads constructor(
     private val effectiveBadgeLabel: String
         get() = (portIdBadgeText ?: portId).trim()
 
+    private val badgeH: Float
+        get() = dp(13f)
+
+    private val badgeGap: Float
+        get() = dp(3f)
+
+    private val hasActiveBadge: Boolean
+        get() = showPortIdBadge && effectiveBadgeLabel.isNotEmpty()
+
     private fun measureBadgeWidth(label: String): Float {
         if (!showPortIdBadge || label.isEmpty()) return 0f
         badgeTextPaint.textSize = sp(8.5f)
@@ -153,6 +163,32 @@ class PortView @JvmOverloads constructor(
         val w = dp(if (horizontal) socketBaseWidthDp() else socketBaseHeightDp())
         val h = dp(if (horizontal) socketBaseHeightDp() else socketBaseWidthDp())
         return Pair(w, h)
+    }
+
+    private fun computeSocketBounds(): RectF {
+        val (baseW, baseH) = measuredSocketSize()
+        val hasBadge = hasActiveBadge
+
+        val socketLeft = when (portSide) {
+            PortSide.RIGHT -> 0f
+            PortSide.LEFT -> (width - baseW).coerceAtLeast(0f)
+            PortSide.TOP,
+            PortSide.BOTTOM -> (width - baseW) / 2f
+        }
+
+        val socketTop = when (portSide) {
+            PortSide.RIGHT,
+            PortSide.LEFT -> (height - baseH) / 2f
+            PortSide.TOP -> 0f
+            PortSide.BOTTOM -> if (hasBadge) badgeH + badgeGap else 0f
+        }
+
+        return RectF(socketLeft, socketTop, socketLeft + baseW, socketTop + baseH)
+    }
+
+    fun getSocketCenter(): PointF {
+        val bounds = computeSocketBounds()
+        return PointF(bounds.centerX(), bounds.centerY())
     }
 
     init {
@@ -191,8 +227,8 @@ class PortView @JvmOverloads constructor(
         val label = effectiveBadgeLabel
         val hasBadge = showPortIdBadge && label.isNotEmpty()
         val badgeW = if (hasBadge) measureBadgeWidth(label) else 0f
-        val badgeH = if (hasBadge) dp(13f) else 0f
-        val gap = if (hasBadge) dp(3f) else 0f
+        val extraBadgeH = if (hasBadge) badgeH else 0f
+        val gap = if (hasBadge) badgeGap else 0f
 
         val desiredWidth = if (horizontal) {
             baseW + badgeW + gap
@@ -201,9 +237,9 @@ class PortView @JvmOverloads constructor(
         }
 
         val desiredHeight = if (horizontal) {
-            maxOf(baseH, badgeH)
+            maxOf(baseH, extraBadgeH)
         } else {
-            baseH + badgeH + gap
+            baseH + extraBadgeH + gap
         }
 
         setMeasuredDimension(
@@ -224,37 +260,14 @@ class PortView @JvmOverloads constructor(
                 portSide == PortSide.RIGHT
 
         val label = effectiveBadgeLabel
-        val hasBadge = showPortIdBadge && label.isNotEmpty()
+        val hasBadge = hasActiveBadge
         val badgeSize = if (hasBadge) measureBadgeWidth(label) else 0f
-        val badgeGap = if (hasBadge) dp(3f) else 0f
-        val badgeH = if (hasBadge) dp(13f) else 0f
 
-        val (baseW, baseH) = measuredSocketSize()
-
-        val socketLeft: Float
-        val socketTop: Float
-
-        when (portSide) {
-            PortSide.RIGHT -> {
-                socketLeft = 0f
-                socketTop = (height - baseH) / 2f
-            }
-            PortSide.LEFT -> {
-                socketLeft = (width - baseW).coerceAtLeast(0f)
-                socketTop = (height - baseH) / 2f
-            }
-            PortSide.TOP -> {
-                socketLeft = (width - baseW) / 2f
-                socketTop = 0f
-            }
-            PortSide.BOTTOM -> {
-                socketLeft = (width - baseW) / 2f
-                socketTop = if (hasBadge) badgeH + badgeGap else 0f
-            }
-        }
-
-        val centerX = socketLeft + baseW / 2f
-        val centerY = socketTop + baseH / 2f
+        val socketBounds = computeSocketBounds()
+        val baseW = socketBounds.width()
+        val baseH = socketBounds.height()
+        val centerX = socketBounds.centerX()
+        val centerY = socketBounds.centerY()
 
         val save = canvas.save()
 
@@ -429,7 +442,7 @@ class PortView @JvmOverloads constructor(
 
         // 5. Optional Port ID badge outside the socket with strict clipping and ellipsis
         if (hasBadge) {
-            drawOptionalIdBadge(canvas, label, horizontal, badgeSize, badgeGap, badgeH)
+            drawOptionalIdBadge(canvas, label, horizontal, badgeSize, badgeGap, badgeH, baseW, baseH)
         }
     }
 
@@ -439,10 +452,10 @@ class PortView @JvmOverloads constructor(
         horizontal: Boolean,
         badgeSize: Float,
         badgeGap: Float,
-        badgeH: Float
+        badgeH: Float,
+        baseW: Float,
+        baseH: Float
     ) {
-        val (baseW, baseH) = measuredSocketSize()
-
         badgeTextPaint.textSize = sp(8.5f)
         badgeTextPaint.color = if (isLit) accent else 0xFFC5D2DE.toInt()
 
