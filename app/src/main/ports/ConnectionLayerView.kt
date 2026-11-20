@@ -1,4 +1,3 @@
-
 package com.monolith.graph.ports.views
 
 import android.animation.ValueAnimator
@@ -26,6 +25,8 @@ class ConnectionLayerView @JvmOverloads constructor(
 ) : View(context, attrs) {
 
     private val connections = LinkedHashMap<String, WireConnection>()
+    private val plugs = LinkedHashMap<String, PlugSpec>()
+    private val cables = LinkedHashMap<String, CableSpec>()
     private val endpoints = HashMap<String, PointF>()
     private val paths = HashMap<String, Path>()
     private val progress = HashMap<String, Float>()
@@ -62,6 +63,21 @@ class ConnectionLayerView @JvmOverloads constructor(
         style = Paint.Style.FILL
     }
 
+    private val plugBodyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+    }
+
+    private val plugRimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+    }
+
+    private val plugPinPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.SQUARE
+    }
+
+    private val plugPath = Path()
+    private val neckPath = Path()
     private val pathMeasure = PathMeasure()
 
     private var selectedId: String? = null
@@ -86,6 +102,55 @@ class ConnectionLayerView @JvmOverloads constructor(
 
         // clipChildren غير متاحة هنا لأن هذا الكلاس يرث من View وليس ViewGroup.
         // يجب ضبط القص على الحاوية الأب من نوع ViewGroup عند الحاجة.
+    }
+
+    // ---------------------------------------------------------
+    // Plugs & Cables (Independent Plug & Unconnected End Support)
+    // ---------------------------------------------------------
+
+    fun setPlugs(items: List<PlugSpec>) {
+        plugs.clear()
+        items.forEach { plug ->
+            plugs[plug.id] = plug
+        }
+        rebuildPaths()
+        invalidate()
+    }
+
+    fun updatePlug(plug: PlugSpec) {
+        plugs[plug.id] = plug
+        rebuildPaths()
+        invalidate()
+    }
+
+    fun removePlug(plugId: String) {
+        plugs.remove(plugId)
+        rebuildPaths()
+        invalidate()
+    }
+
+    fun clearPlugs() {
+        plugs.clear()
+        rebuildPaths()
+        invalidate()
+    }
+
+    fun setCables(items: List<CableSpec>) {
+        cables.clear()
+        items.forEach { cable ->
+            cables[cable.id] = cable
+        }
+        rebuildPaths()
+        invalidate()
+    }
+
+    fun getCables(): List<CableSpec> =
+        cables.values.toList()
+
+    fun clearCables() {
+        cables.clear()
+        rebuildPaths()
+        invalidate()
     }
 
     // ---------------------------------------------------------
@@ -249,6 +314,13 @@ class ConnectionLayerView @JvmOverloads constructor(
     // Path construction
     // ---------------------------------------------------------
 
+    private fun resolveEndpointAnchor(id: String): PointF? {
+        plugs[id]?.let { plug ->
+            return PointF(plug.x, plug.y)
+        }
+        return endpoints[id]
+    }
+
     private fun getControlPoints(
         connection: WireConnection,
         start: PointF,
@@ -275,14 +347,39 @@ class ConnectionLayerView @JvmOverloads constructor(
         return Pair(first, second)
     }
 
+    private fun getCableControlPoints(
+        cable: CableSpec,
+        start: PointF,
+        end: PointF
+    ): Pair<PointF, PointF> {
+        val dx = end.x - start.x
+        val dy = end.y - start.y
+        val distance = hypot(dx, dy)
+
+        val offset = (distance * 0.28f)
+            .coerceIn(dp(24f), dp(150f))
+
+        val first = cable.control1 ?: PointF(
+            start.x + dx * 0.32f,
+            start.y - offset
+        )
+
+        val second = cable.control2 ?: PointF(
+            start.x + dx * 0.68f,
+            end.y + offset * 0.4f
+        )
+
+        return Pair(first, second)
+    }
+
     private fun rebuildPaths() {
         paths.clear()
 
         connections.values.forEach { connection ->
-            val start = endpoints[connection.sourcePortId]
+            val start = resolveEndpointAnchor(connection.sourcePortId)
                 ?: return@forEach
 
-            val end = endpoints[connection.targetPortId]
+            val end = resolveEndpointAnchor(connection.targetPortId)
                 ?: return@forEach
 
             val (first, second) = getControlPoints(
@@ -306,6 +403,34 @@ class ConnectionLayerView @JvmOverloads constructor(
 
             paths[connection.id] = path
         }
+
+        cables.values.forEach { cable ->
+            val start = resolveEndpointAnchor(cable.sourcePlugId)
+                ?: return@forEach
+
+            val end = cable.targetPlugId?.let { resolveEndpointAnchor(it) }
+                ?: PointF(start.x + dp(46f), start.y + dp(28f))
+
+            val (first, second) = getCableControlPoints(
+                cable,
+                start,
+                end
+            )
+
+            val path = Path().apply {
+                moveTo(start.x, start.y)
+                cubicTo(
+                    first.x,
+                    first.y,
+                    second.x,
+                    second.y,
+                    end.x,
+                    end.y
+                )
+            }
+
+            paths["cable:${cable.id}"] = path
+        }
     }
 
     // ---------------------------------------------------------
@@ -315,7 +440,7 @@ class ConnectionLayerView @JvmOverloads constructor(
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
 
-        if (!wiresVisible || connections.isEmpty()) return
+        if (!wiresVisible) return
 
         connections.values.forEach { connection ->
             if (!connection.visible) return@forEach
@@ -325,6 +450,86 @@ class ConnectionLayerView @JvmOverloads constructor(
 
             drawWire(canvas, connection, path)
         }
+
+        cables.values.forEach { cable ->
+            if (!cable.visible) return@forEach
+
+            val path = paths["cable:${cable.id}"]
+                ?: return@forEach
+
+            drawCableSpec(canvas, cable, path)
+        }
+
+        plugs.values.forEach { plug ->
+            drawPlugHead(canvas, plug)
+        }
+    }
+
+    private fun drawCableSpec(
+        canvas: Canvas,
+        cable: CableSpec,
+        path: Path
+    ) {
+        val width = dp(cable.strokeWidthDp)
+
+        if (glowEnabled && cable.glowEnabled) {
+            glowPaint.style = Paint.Style.STROKE
+            glowPaint.color = cable.color
+            glowPaint.alpha = 55
+            glowPaint.strokeWidth = width * 3.5f
+            canvas.drawPath(path, glowPaint)
+        }
+
+        wirePaint.color = cable.color
+        wirePaint.alpha = 240
+        wirePaint.strokeWidth = width
+        canvas.drawPath(path, wirePaint)
+    }
+
+    private fun drawPlugHead(
+        canvas: Canvas,
+        plug: PlugSpec
+    ) {
+        val save = canvas.save()
+        canvas.translate(plug.x, plug.y)
+        canvas.rotate(plug.angleDeg)
+
+        val pinLen = dp(6f)
+        val pinOffsets = floatArrayOf(-dp(6f), 0f, dp(6f))
+
+        plugPinPaint.color = 0xFFC5D2DE.toInt()
+        plugPinPaint.strokeWidth = dp(1.7f)
+        pinOffsets.forEach { y ->
+            canvas.drawLine(-dp(15f), y, -dp(15f) + pinLen, y, plugPinPaint)
+        }
+
+        plugPath.reset()
+        plugPath.moveTo(-dp(9f), -dp(10f))
+        plugPath.lineTo(dp(6f), -dp(10f))
+        plugPath.lineTo(dp(6f), dp(10f))
+        plugPath.lineTo(-dp(9f), dp(10f))
+        plugPath.close()
+
+        plugBodyPaint.color = plug.color
+        plugBodyPaint.alpha = 245
+        canvas.drawPath(plugPath, plugBodyPaint)
+
+        plugRimPaint.color = Color.WHITE
+        plugRimPaint.strokeWidth = dp(0.9f)
+        plugRimPaint.alpha = 110
+        canvas.drawPath(plugPath, plugRimPaint)
+
+        neckPath.reset()
+        neckPath.moveTo(dp(6f), -dp(3.5f))
+        neckPath.lineTo(dp(12f), -dp(3.5f))
+        neckPath.lineTo(dp(12f), dp(3.5f))
+        neckPath.lineTo(dp(6f), dp(3.5f))
+        neckPath.close()
+
+        canvas.drawPath(neckPath, plugBodyPaint)
+        canvas.drawPath(neckPath, plugRimPaint)
+
+        canvas.restoreToCount(save)
     }
 
     private fun drawWire(
