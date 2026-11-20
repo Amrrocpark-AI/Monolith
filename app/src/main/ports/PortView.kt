@@ -6,6 +6,7 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.RectF
 import android.util.AttributeSet
 import android.view.View
@@ -61,21 +62,18 @@ class PortView @JvmOverloads constructor(
         value * density
 
     private val bodyPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val shellPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val detailPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val edgePaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val highlightPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val contactPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val slotPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG)
 
-    private val mountRect = RectF()
-    private val mountInnerRect = RectF()
-    private val housingRect = RectF()
+    private val bodyPath = Path()
+    private val neckPath = Path()
+
+    private val bodyRect = RectF()
     private val neckRect = RectF()
-    private val noseRect = RectF()
-    private val seamRect = RectF()
-    private val slotRect = RectF()
-    private val ledRect = RectF()
+    private val glowRect = RectF()
 
     private var pulse = 0f
     private var animator: ValueAnimator? = null
@@ -88,6 +86,11 @@ class PortView @JvmOverloads constructor(
             state == PortState.ACTIVE ||
             state == PortState.SELECTED ||
             state == PortState.CONNECTED
+
+    private val isMuted: Boolean
+        get() =
+            state == PortState.IDLE ||
+            state == PortState.DISABLED
 
     init {
         isClickable = true
@@ -148,13 +151,15 @@ class PortView @JvmOverloads constructor(
         val save = canvas.save()
 
         /*
-         * Logical connector direction is always RIGHT.
+         * The connector is authored in one logical
+         * direction: from the card edge outward.
          *
-         * LEFT   = mirrored
          * RIGHT  = normal
+         * LEFT   = mirrored
          * TOP    = rotated upward
          * BOTTOM = rotated downward
          */
+
         when (portSide) {
             PortSide.LEFT -> {
                 canvas.scale(
@@ -184,71 +189,61 @@ class PortView @JvmOverloads constructor(
             }
         }
 
-        val logicalWidth =
-            if (horizontal) width.toFloat()
-            else height.toFloat()
+        val w = if (horizontal) {
+            width.toFloat()
+        } else {
+            height.toFloat()
+        }
 
-        val logicalHeight =
-            if (horizontal) height.toFloat()
-            else width.toFloat()
-
-        val w = logicalWidth
-        val h = logicalHeight
+        val h = if (horizontal) {
+            height.toFloat()
+        } else {
+            width.toFloat()
+        }
 
         val cy = h / 2f
-
-        /*
-         * The cluster places the center of this view
-         * on the card boundary.
-         *
-         * Therefore:
-         * - x < w/2 is the mounted inner portion.
-         * - x > w/2 is the outward connector portion.
-         *
-         * The connector is deliberately asymmetric.
-         */
 
         val color = when (state) {
             PortState.IDLE ->
                 0xFF8296AA.toInt()
 
-            PortState.AVAILABLE ->
+            PortState.AVAILABLE,
+            PortState.CONNECTED,
+            PortState.ACTIVE ->
                 accent
 
             PortState.SELECTED ->
                 Color.WHITE
 
-            PortState.CONNECTED ->
-                accent
-
-            PortState.ACTIVE ->
-                accent
-
             PortState.DISABLED ->
                 0xFF485363.toInt()
         }
 
-        val muted =
-            state == PortState.IDLE ||
-            state == PortState.DISABLED
+        /*
+         * The cluster currently centers the PortView
+         * on the card boundary.
+         *
+         * The visible connector is therefore drawn
+         * from the boundary region toward the outside.
+         */
 
         // -----------------------------------------------------
-        // 1. Outer connection glow
+        // 1. Connector glow
         // -----------------------------------------------------
 
         if (isActive) {
             glowPaint.apply {
                 style = Paint.Style.STROKE
                 color = color
-                strokeWidth = dp(2f + pulse * 1.5f)
-                alpha = (45 + pulse * 85f).toInt()
+                strokeWidth = dp(1.8f + pulse * 1.2f)
+                alpha = (55 + pulse * 75f).toInt()
             }
 
-            val glowRect = RectF(
-                dp(25f),
-                dp(4f),
+            glowRect.set(
+                dp(31f),
+                dp(2f),
                 w - dp(1f),
-                h - dp(4f)
+                h - dp(2f)
             )
 
             canvas.drawRoundRect(
@@ -260,407 +255,275 @@ class PortView @JvmOverloads constructor(
         }
 
         // -----------------------------------------------------
-        // 2. Mounting base attached to the card edge
+        // 2. Three contact pins at the card side
         // -----------------------------------------------------
 
-        mountRect.set(
-            dp(15f),
-            dp(3f),
-            dp(33f),
-            h - dp(3f)
+        val pinStart = dp(26.5f)
+        val pinEnd = dp(33.5f)
+
+        val pinPositions = floatArrayOf(
+            cy - dp(6.5f),
+            cy,
+            cy + dp(6.5f)
         )
+
+        contactPaint.apply {
+            style = Paint.Style.STROKE
+            strokeWidth = dp(1.8f)
+            strokeCap = Paint.Cap.SQUARE
+            color = when (state) {
+                PortState.DISABLED -> 0xFF56616D.toInt()
+                else -> 0xFFB8C6D1.toInt()
+            }
+            alpha = if (isMuted) 155 else 235
+        }
+
+        pinPositions.forEach { y ->
+            canvas.drawLine(
+                pinStart,
+                y,
+                pinEnd,
+                y,
+                contactPaint
+            )
+        }
+
+        // -----------------------------------------------------
+        // 3. Main colored connector body
+        // -----------------------------------------------------
+
+        val bodyLeft = dp(33f)
+        val bodyRight = dp(48f)
+
+        val bodyTop = cy - dp(11f)
+        val bodyBottom = cy + dp(11f)
+
+        bodyPath.reset()
+
+        /*
+         * Wide plug body:
+         * broad main housing with shaped shoulders.
+         * The silhouette is not a simple rectangle.
+         */
+
+        bodyPath.moveTo(
+            bodyLeft + dp(2f),
+            bodyTop
+        )
+
+        bodyPath.lineTo(
+            bodyRight - dp(4f),
+            bodyTop
+        )
+
+        bodyPath.quadTo(
+            bodyRight,
+            bodyTop,
+            bodyRight,
+            bodyTop + dp(4f)
+        )
+
+        bodyPath.lineTo(
+            bodyRight,
+            bodyBottom - dp(4f)
+        )
+
+        bodyPath.quadTo(
+            bodyRight,
+            bodyBottom,
+            bodyRight - dp(4f),
+            bodyBottom
+        )
+
+        bodyPath.lineTo(
+            bodyLeft + dp(2f),
+            bodyBottom
+        )
+
+        bodyPath.quadTo(
+            bodyLeft,
+            bodyBottom,
+            bodyLeft,
+            bodyBottom - dp(3f)
+        )
+
+        bodyPath.lineTo(
+            bodyLeft,
+            bodyTop + dp(3f)
+        )
+
+        bodyPath.quadTo(
+            bodyLeft,
+            bodyTop,
+            bodyLeft + dp(2f),
+            bodyTop
+        )
+
+        bodyPath.close()
 
         bodyPaint.apply {
             style = Paint.Style.FILL
-            color = if (state == PortState.DISABLED) {
-                0xFF202936.toInt()
-            } else {
-                0xFF101A29.toInt()
+            color = when (state) {
+                PortState.DISABLED -> 0xFF35414D.toInt()
+                else -> color
             }
-            alpha = 255
-        }
-
-        canvas.drawRoundRect(
-            mountRect,
-            dp(4f),
-            dp(4f),
-            bodyPaint
-        )
-
-        // Metallic outer mounting rim
-        shellPaint.apply {
-            style = Paint.Style.STROKE
-            strokeWidth = dp(1.15f)
-            color = if (muted) {
-                0xFF657487.toInt()
-            } else {
-                0xFFB0C4D6.toInt()
-            }
-            alpha = if (muted) 145 else 225
-        }
-
-        canvas.drawRoundRect(
-            mountRect,
-            dp(4f),
-            dp(4f),
-            shellPaint
-        )
-
-        // Inner mounting plate
-        mountInnerRect.set(
-            mountRect.left + dp(2f),
-            mountRect.top + dp(2f),
-            mountRect.right - dp(2f),
-            mountRect.bottom - dp(2f)
-        )
-
-        bodyPaint.color = 0xFF18283A.toInt()
-
-        canvas.drawRoundRect(
-            mountInnerRect,
-            dp(2.5f),
-            dp(2.5f),
-            bodyPaint
-        )
-
-        // -----------------------------------------------------
-        // 3. Connector housing
-        // -----------------------------------------------------
-
-        housingRect.set(
-            dp(25f),
-            dp(6f),
-            w - dp(1.5f),
-            h - dp(6f)
-        )
-
-        bodyPaint.color = when (state) {
-            PortState.DISABLED -> 0xFF27313F.toInt()
-            else -> 0xFF142437.toInt()
-        }
-
-        canvas.drawRoundRect(
-            housingRect,
-            dp(4f),
-            dp(4f),
-            bodyPaint
-        )
-
-        // Colored metallic housing outline
-        borderPaint.apply {
-            style = Paint.Style.STROKE
-            strokeWidth = dp(1.15f)
-            color = color
-            alpha = if (muted) 125 else 230
-        }
-
-        canvas.drawRoundRect(
-            housingRect,
-            dp(4f),
-            dp(4f),
-            borderPaint
-        )
-
-        // -----------------------------------------------------
-        // 4. Connector neck
-        // -----------------------------------------------------
-
-        neckRect.set(
-            dp(29f),
-            dp(8f),
-            w - dp(5f),
-            h - dp(8f)
-        )
-
-        bodyPaint.color = 0xFF1C3045.toInt()
-
-        canvas.drawRoundRect(
-            neckRect,
-            dp(2.5f),
-            dp(2.5f),
-            bodyPaint
-        )
-
-        // Upper metallic reflection
-        detailPaint.apply {
-            style = Paint.Style.FILL
-            color = 0xFFB8D2E5.toInt()
-            alpha = if (muted) 45 else 115
-        }
-
-        canvas.drawRoundRect(
-            RectF(
-                neckRect.left + dp(2f),
-                neckRect.top + dp(1f),
-                neckRect.right - dp(3f),
-                neckRect.top + dp(2f)
-            ),
-            dp(0.7f),
-            dp(0.7f),
-            detailPaint
-        )
-
-        // -----------------------------------------------------
-        // 5. Outer connector nose
-        // -----------------------------------------------------
-
-        noseRect.set(
-            w - dp(13f),
-            dp(8f),
-            w,
-            h - dp(8f)
-        )
-
-        bodyPaint.color = when (state) {
-            PortState.DISABLED -> 0xFF344252.toInt()
-            else -> 0xFF263C52.toInt()
-        }
-
-        canvas.drawRoundRect(
-            noseRect,
-            dp(2.5f),
-            dp(2.5f),
-            bodyPaint
-        )
-
-        shellPaint.apply {
-            style = Paint.Style.STROKE
-            strokeWidth = dp(0.9f)
-            color = color
-            alpha = if (muted) 120 else 235
-        }
-
-        canvas.drawRoundRect(
-            noseRect,
-            dp(2.5f),
-            dp(2.5f),
-            shellPaint
-        )
-
-        // Colored nose face
-        detailPaint.apply {
-            style = Paint.Style.FILL
-            color = color
             alpha = when (state) {
-                PortState.IDLE -> 155
-                PortState.DISABLED -> 65
-                else -> 245
-            }
-        }
-
-        val noseFace = RectF(
-            w - dp(5f),
-            dp(10f),
-            w - dp(1f),
-            h - dp(10f)
-        )
-
-        canvas.drawRoundRect(
-            noseFace,
-            dp(1.5f),
-            dp(1.5f),
-            detailPaint
-        )
-
-        // -----------------------------------------------------
-        // 6. Shape-specific connector opening
-        // -----------------------------------------------------
-
-        val openingWidth = when (shape) {
-            PortShape.USB -> dp(5.2f)
-            PortShape.USB_C -> dp(5.5f)
-            PortShape.COMPACT -> dp(3.5f)
-        }
-
-        val openingHeight = when (shape) {
-            PortShape.USB -> dp(8f)
-            PortShape.USB_C -> dp(6f)
-            PortShape.COMPACT -> dp(4.5f)
-        }
-
-        slotRect.set(
-            w - openingWidth - dp(2f),
-            cy - openingHeight / 2f,
-            w - dp(1.5f),
-            cy + openingHeight / 2f
-        )
-
-        slotPaint.apply {
-            style = Paint.Style.FILL
-            color = 0xFF03080F.toInt()
-            alpha = 255
-        }
-
-        val openingRadius = when (shape) {
-            PortShape.USB -> dp(0.8f)
-            PortShape.USB_C -> dp(2.2f)
-            PortShape.COMPACT -> dp(1.4f)
-        }
-
-        canvas.drawRoundRect(
-            slotRect,
-            openingRadius,
-            openingRadius,
-            slotPaint
-        )
-
-        // Inner colored contact surface
-        val insertRect = RectF(
-            slotRect.left + dp(1f),
-            cy - openingHeight * 0.17f,
-            slotRect.right - dp(1f),
-            cy + openingHeight * 0.17f
-        )
-
-        detailPaint.apply {
-            style = Paint.Style.FILL
-            color = color
-            alpha = if (muted) 105 else 235
-        }
-
-        canvas.drawRoundRect(
-            insertRect,
-            dp(0.7f),
-            dp(0.7f),
-            detailPaint
-        )
-
-        // -----------------------------------------------------
-        // 7. Mounting seam
-        // -----------------------------------------------------
-
-        seamRect.set(
-            dp(29f),
-            dp(5f),
-            dp(31f),
-            h - dp(5f)
-        )
-
-        detailPaint.apply {
-            style = Paint.Style.FILL
-            color = 0xFF050B13.toInt()
-            alpha = 210
-        }
-
-        canvas.drawRoundRect(
-            seamRect,
-            dp(0.8f),
-            dp(0.8f),
-            detailPaint
-        )
-
-        // Metallic seam highlight
-        detailPaint.color = 0xFF9EB4C8.toInt()
-        detailPaint.alpha = if (muted) 45 else 125
-
-        canvas.drawRect(
-            dp(31f),
-            dp(7f),
-            dp(31.7f),
-            h - dp(7f),
-            detailPaint
-        )
-
-        // -----------------------------------------------------
-        // 8. Contact details
-        // -----------------------------------------------------
-
-        contactPaint.apply {
-            style = Paint.Style.FILL
-            color = 0xFFD8E7F3.toInt()
-            alpha = if (state == PortState.DISABLED) 65 else 210
-        }
-
-        val contactRadius = dp(0.7f)
-
-        if (shape == PortShape.USB) {
-            canvas.drawCircle(
-                slotRect.left + dp(1.5f),
-                slotRect.top + dp(1.5f),
-                contactRadius,
-                contactPaint
-            )
-
-            canvas.drawCircle(
-                slotRect.left + dp(1.5f),
-                slotRect.bottom - dp(1.5f),
-                contactRadius,
-                contactPaint
-            )
-        } else if (shape == PortShape.USB_C) {
-            canvas.drawCircle(
-                slotRect.left + dp(1.1f),
-                cy,
-                contactRadius,
-                contactPaint
-            )
-
-            canvas.drawCircle(
-                slotRect.right - dp(1.1f),
-                cy,
-                contactRadius,
-                contactPaint
-            )
-        }
-
-        // -----------------------------------------------------
-        // 9. Status indicator
-        // -----------------------------------------------------
-
-        ledRect.set(
-            dp(34f),
-            dp(8f),
-            dp(37f),
-            dp(11f)
-        )
-
-        detailPaint.apply {
-            style = Paint.Style.FILL
-            color = color
-            alpha = when (state) {
-                PortState.IDLE -> 115
-                PortState.DISABLED -> 35
+                PortState.IDLE -> 185
+                PortState.DISABLED -> 145
                 else -> 255
             }
         }
 
-        canvas.drawRoundRect(
-            ledRect,
-            dp(1.2f),
-            dp(1.2f),
-            detailPaint
-        )
-
-        // Small upper edge highlight
-        detailPaint.color = Color.WHITE
-        detailPaint.alpha = if (muted) 30 else 100
-
-        canvas.drawRect(
-            dp(17f),
-            dp(4f),
-            dp(28f),
-            dp(4.7f),
-            detailPaint
+        canvas.drawPath(
+            bodyPath,
+            bodyPaint
         )
 
         // -----------------------------------------------------
-        // 10. Active connection indicator
+        // 4. Body edge
         // -----------------------------------------------------
 
-        if (isActive) {
-            detailPaint.apply {
-                style = Paint.Style.FILL
-                color = Color.WHITE
-                alpha = (115 + pulse * 120f).toInt()
+        edgePaint.apply {
+            style = Paint.Style.STROKE
+            strokeWidth = dp(0.8f)
+            color = if (isMuted) {
+                0xFF9BAAB6.toInt()
+            } else {
+                Color.WHITE
             }
-
-            canvas.drawCircle(
-                w - dp(3f),
-                cy,
-                dp(1.05f + pulse * 0.35f),
-                detailPaint
-            )
+            alpha = if (isMuted) 95 else 115
         }
+
+        canvas.drawPath(
+            bodyPath,
+            edgePaint
+        )
+
+        // -----------------------------------------------------
+        // 5. Upper body highlight
+        // -----------------------------------------------------
+
+        highlightPaint.apply {
+            style = Paint.Style.STROKE
+            strokeWidth = dp(0.8f)
+            strokeCap = Paint.Cap.ROUND
+            color = Color.WHITE
+            alpha = if (isMuted) 35 else 90
+        }
+
+        canvas.drawLine(
+            bodyLeft + dp(3f),
+            bodyTop + dp(1.2f),
+            bodyRight - dp(5f),
+            bodyTop + dp(1.2f),
+            highlightPaint
+        )
+
+        // -----------------------------------------------------
+        // 6. Narrow stepped connector neck
+        // -----------------------------------------------------
+
+        val neckLeft = dp(47f)
+        val neckRight = dp(54f)
+
+        val neckTop = cy - dp(4f)
+        val neckBottom = cy + dp(4f)
+
+        neckPath.reset()
+
+        neckPath.moveTo(
+            neckLeft,
+            neckTop
+        )
+
+        neckPath.lineTo(
+            neckRight - dp(1f),
+            neckTop
+        )
+
+        neckPath.quadTo(
+            neckRight,
+            neckTop,
+            neckRight,
+            cy - dp(2.5f)
+        )
+
+        neckPath.lineTo(
+            neckRight,
+            cy + dp(2.5f)
+        )
+
+        neckPath.quadTo(
+            neckRight,
+            neckBottom,
+            neckRight - dp(1f),
+            neckBottom
+        )
+
+        neckPath.lineTo(
+            neckLeft,
+            neckBottom
+        )
+
+        neckPath.close()
+
+        bodyPaint.apply {
+            style = Paint.Style.FILL
+            color = when (state) {
+                PortState.DISABLED -> 0xFF35414D.toInt()
+                else -> color
+            }
+            alpha = when (state) {
+                PortState.IDLE -> 190
+                PortState.DISABLED -> 145
+                else -> 255
+            }
+        }
+
+        canvas.drawPath(
+            neckPath,
+            bodyPaint
+        )
+
+        // Neck edge
+        edgePaint.alpha = if (isMuted) 85 else 110
+
+        canvas.drawPath(
+            neckPath,
+            edgePaint
+        )
+
+        // -----------------------------------------------------
+        // 7. Neck transition highlight
+        // -----------------------------------------------------
+
+        highlightPaint.apply {
+            style = Paint.Style.STROKE
+            strokeWidth = dp(0.65f)
+            color = Color.WHITE
+            alpha = if (isMuted) 30 else 75
+        }
+
+        canvas.drawLine(
+            neckLeft + dp(1f),
+            cy - dp(2.5f),
+            neckRight - dp(1.5f),
+            cy - dp(2.5f),
+            highlightPaint
+        )
+
+        // -----------------------------------------------------
+        // 8. Cable exit point
+        // -----------------------------------------------------
+
+        /*
+         * The cable itself is not drawn here.
+         *
+         * Its geometric exit point is the outer end
+         * of the neck: x = view width, y = center.
+         *
+         * EndpointRegistry must use this same point.
+         */
 
         canvas.restoreToCount(save)
     }
@@ -679,7 +542,10 @@ class PortView @JvmOverloads constructor(
         ) {
             if (!isAttachedToWindow) return
 
-            animator = ValueAnimator.ofFloat(0f, 1f).apply {
+            animator = ValueAnimator.ofFloat(
+                0f,
+                1f
+            ).apply {
                 duration = 950L
                 repeatCount = ValueAnimator.INFINITE
                 repeatMode = ValueAnimator.REVERSE
