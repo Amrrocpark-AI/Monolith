@@ -3,37 +3,126 @@ package com.monolith.graph.ports.layout
 import android.graphics.PointF
 import android.view.View
 import com.monolith.graph.ports.models.PortEndpoint
+import com.monolith.graph.ports.models.PortSide
 import com.monolith.graph.ports.views.PortClusterView
 
 class PortEndpointRegistry {
 
-    private val endpoints = LinkedHashMap<String, PortEndpoint>()
+    private val endpoints =
+        LinkedHashMap<String, PortEndpoint>()
 
+    private fun dp(view: View, value: Float): Float =
+        value * view.resources.displayMetrics.density
+
+    /**
+     * Updates all endpoints belonging to a cluster.
+     *
+     * Coordinates are converted into the overlay's
+     * coordinate system, which is the coordinate system
+     * used by ConnectionLayerView.
+     *
+     * The endpoint is placed at the OUTER connector tip,
+     * not at the center of the PortView.
+     */
     fun update(
         cluster: PortClusterView,
         overlay: View
     ) {
+        if (
+            cluster.width <= 0 ||
+            cluster.height <= 0 ||
+            overlay.width <= 0 ||
+            overlay.height <= 0
+        ) {
+            return
+        }
+
         val overlayLocation = IntArray(2)
         overlay.getLocationOnScreen(overlayLocation)
 
         cluster.getAllPorts().forEach { port ->
-            val location = IntArray(2)
-            port.getLocationOnScreen(location)
 
-            val x = location[0] - overlayLocation[0] + port.width / 2f
-            val y = location[1] - overlayLocation[1] + port.height / 2f
+            if (
+                port.width <= 0 ||
+                port.height <= 0
+            ) {
+                return@forEach
+            }
 
-            endpoints[port.portId] =
-                PortEndpoint(port.portId, x, y)
+            val portLocation = IntArray(2)
+            port.getLocationOnScreen(portLocation)
+
+            /*
+             * PortView draws its connector nose with
+             * a 1dp inset from the outer view boundary.
+             *
+             * The endpoint must meet that nose at its
+             * centerline, avoiding a visible wire gap.
+             */
+            val tipInset = dp(port, 1f)
+
+            val localPoint = when (port.portSide) {
+
+                PortSide.RIGHT -> {
+                    PointF(
+                        port.width.toFloat() - tipInset,
+                        port.height / 2f
+                    )
+                }
+
+                PortSide.LEFT -> {
+                    PointF(
+                        tipInset,
+                        port.height / 2f
+                    )
+                }
+
+                PortSide.TOP -> {
+                    PointF(
+                        port.width / 2f,
+                        tipInset
+                    )
+                }
+
+                PortSide.BOTTOM -> {
+                    PointF(
+                        port.width / 2f,
+                        port.height.toFloat() - tipInset
+                    )
+                }
+            }
+
+            val x =
+                portLocation[0] -
+                    overlayLocation[0] +
+                    localPoint.x
+
+            val y =
+                portLocation[1] -
+                    overlayLocation[1] +
+                    localPoint.y
+
+            endpoints[port.portId] = PortEndpoint(
+                port.portId,
+                x,
+                y
+            )
         }
     }
 
+    /**
+     * Allows manually supplied endpoint coordinates.
+     * Coordinates must already be in overlay space.
+     */
     fun update(
         portId: String,
         position: PointF
     ) {
-        endpoints[portId] =
-            PortEndpoint(portId, position.x, position.y)
+        endpoints[portId] = PortEndpoint(
+            portId,
+            position.x,
+            position.y
+        )
     }
 
     fun remove(portId: String) {
@@ -47,7 +136,9 @@ class PortEndpointRegistry {
         endpoints.toMap()
 
     fun getPoints(): Map<String, PointF> =
-        endpoints.mapValues { it.value.toPointF() }
+        endpoints.mapValues { (_, endpoint) ->
+            endpoint.toPointF()
+        }
 
     fun clear() {
         endpoints.clear()
