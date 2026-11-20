@@ -189,9 +189,10 @@ class PortView @JvmOverloads constructor(
         val (baseW, baseH) = measuredSocketSize()
 
         val label = effectiveBadgeLabel
-        val badgeW = measureBadgeWidth(label)
-        val badgeH = if (showPortIdBadge && label.isNotEmpty()) dp(13f) else 0f
-        val gap = if (showPortIdBadge && label.isNotEmpty()) dp(3f) else 0f
+        val hasBadge = showPortIdBadge && label.isNotEmpty()
+        val badgeW = if (hasBadge) measureBadgeWidth(label) else 0f
+        val badgeH = if (hasBadge) dp(13f) else 0f
+        val gap = if (hasBadge) dp(3f) else 0f
 
         val desiredWidth = if (horizontal) {
             baseW + badgeW + gap
@@ -226,6 +227,7 @@ class PortView @JvmOverloads constructor(
         val hasBadge = showPortIdBadge && label.isNotEmpty()
         val badgeSize = if (hasBadge) measureBadgeWidth(label) else 0f
         val badgeGap = if (hasBadge) dp(3f) else 0f
+        val badgeH = if (hasBadge) dp(13f) else 0f
 
         val (baseW, baseH) = measuredSocketSize()
 
@@ -241,13 +243,13 @@ class PortView @JvmOverloads constructor(
                 socketLeft = (width - baseW).coerceAtLeast(0f)
                 socketTop = (height - baseH) / 2f
             }
-            PortSide.BOTTOM -> {
+            PortSide.TOP -> {
                 socketLeft = (width - baseW) / 2f
                 socketTop = 0f
             }
-            PortSide.TOP -> {
+            PortSide.BOTTOM -> {
                 socketLeft = (width - baseW) / 2f
-                socketTop = (height - baseH).coerceAtLeast(0f)
+                socketTop = if (hasBadge) badgeH + badgeGap else 0f
             }
         }
 
@@ -264,11 +266,12 @@ class PortView @JvmOverloads constructor(
             PortSide.BOTTOM -> canvas.rotate(90f)
         }
 
-        // Canonical local dimensions matching measuredSocketSize() across all sides
-        val localW = if (horizontal) baseW else baseH
-        val localH = if (horizontal) baseH else baseW
-        val halfW = localW / 2f
-        val halfH = localH / 2f
+        // Canonical local dimensions before rotation/mirroring:
+        // +X extends outward from card edge; Y spans across the 3 slots.
+        val canonicalW = dp(socketBaseWidthDp())
+        val canonicalH = dp(socketBaseHeightDp())
+        val halfW = canonicalW / 2f
+        val halfH = canonicalH / 2f
 
         val activeColor = when (state) {
             PortState.SELECTED -> Color.WHITE
@@ -425,9 +428,9 @@ class PortView @JvmOverloads constructor(
 
         canvas.restoreToCount(save)
 
-        // 5. Optional Port ID badge with strict clipping and ellipsis
+        // 5. Optional Port ID badge outside the socket with strict clipping and ellipsis
         if (hasBadge) {
-            drawOptionalIdBadge(canvas, label, horizontal, badgeSize, badgeGap, baseW, baseH)
+            drawOptionalIdBadge(canvas, label, horizontal, badgeSize, badgeGap, badgeH, baseW, baseH)
         }
     }
 
@@ -437,15 +440,15 @@ class PortView @JvmOverloads constructor(
         horizontal: Boolean,
         badgeSize: Float,
         badgeGap: Float,
+        badgeH: Float,
         baseW: Float,
         baseH: Float
     ) {
         badgeTextPaint.textSize = sp(8.5f)
         badgeTextPaint.color = if (isLit) accent else 0xFFC5D2DE.toInt()
 
-        val badgeH = dp(13f)
         val badgeW = badgeSize.coerceAtMost(width.toFloat())
-        if (badgeW <= dp(2f)) return
+        if (badgeW <= dp(2f) || badgeH <= dp(2f)) return
 
         val left: Float
         val top: Float
@@ -459,7 +462,7 @@ class PortView @JvmOverloads constructor(
             top = (height - badgeH) / 2f
         } else {
             left = (width - badgeW) / 2f
-            top = if (portSide == PortSide.BOTTOM) {
+            top = if (portSide == PortSide.TOP) {
                 (baseH + badgeGap).coerceAtMost((height - badgeH).coerceAtLeast(0f))
             } else {
                 0f
