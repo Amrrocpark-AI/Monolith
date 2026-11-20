@@ -6,6 +6,7 @@ import android.util.AttributeSet
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import com.monolith.graph.ports.models.*
+import kotlin.math.max
 
 class PortClusterView @JvmOverloads constructor(
     context: Context,
@@ -42,11 +43,13 @@ class PortClusterView @JvmOverloads constructor(
         (value * density).toInt()
 
     /*
-     * PortView horizontal size: 54 x 30 dp
-     * PortView vertical size:   30 x 54 dp
+     * PortView dimensions:
+     * Horizontal: 54 x 30 dp
+     * Vertical:   30 x 54 dp
      *
-     * Reserve half of the largest dimension so
-     * ports remain inside this ViewGroup.
+     * Reserve enough room for half of the port body.
+     * The remaining half visually extends beyond the
+     * card edge, producing the mounted connector effect.
      */
     private val portOutset: Int
         get() = dp(27f)
@@ -54,11 +57,18 @@ class PortClusterView @JvmOverloads constructor(
     init {
         clipChildren = false
         clipToPadding = false
-        isChildrenDrawingOrderEnabled = false
 
         updateReservedSpace()
     }
 
+    /*
+     * The padding defines the actual card rectangle
+     * inside this cluster.
+     *
+     * edgeInset is included in the reserved area so
+     * the connector center remains symmetric on all
+     * four sides.
+     */
     private fun updateReservedSpace() {
         val inset = dp(
             config.edgeInsetDp.coerceAtLeast(0f)
@@ -74,9 +84,10 @@ class PortClusterView @JvmOverloads constructor(
         )
     }
 
-    /**
-     * Adds a port to the requested edge.
-     */
+    // ---------------------------------------------------------
+    // Port creation
+    // ---------------------------------------------------------
+
     fun addPort(
         side: PortSide,
         kind: PortKind = PortKind.CONTEXT,
@@ -120,14 +131,12 @@ class PortClusterView @JvmOverloads constructor(
                 selected.isEnabled &&
                 selected.state != PortState.DISABLED
             ) {
-                val index = getSideIndex(selected)
-
                 onPortSelected?.invoke(
                     PortSpec(
                         id = selected.portId,
                         ownerId = ownerId,
                         side = selected.portSide,
-                        index = index,
+                        index = getSideIndex(selected),
                         kind = selected.portKind,
                         state = selected.state,
                         shape = selected.shape,
@@ -145,13 +154,11 @@ class PortClusterView @JvmOverloads constructor(
 
         addView(port)
         requestLayout()
+        invalidate()
 
         return port
     }
 
-    /**
-     * Creates one default port on every edge.
-     */
     fun createDefaultPorts() {
         if (ports.isNotEmpty()) return
 
@@ -160,9 +167,10 @@ class PortClusterView @JvmOverloads constructor(
         }
     }
 
-    /**
-     * Removes a port using its current ID.
-     */
+    // ---------------------------------------------------------
+    // Port removal
+    // ---------------------------------------------------------
+
     fun removePort(portId: String) {
         val entry = ports.remove(portId) ?: return
 
@@ -170,12 +178,11 @@ class PortClusterView @JvmOverloads constructor(
         removeView(entry.view)
 
         refreshIds()
+
         requestLayout()
+        invalidate()
     }
 
-    /**
-     * Removes every port and releases callbacks.
-     */
     fun clearPorts() {
         ports.values.forEach { entry ->
             entry.view.onPortClick = null
@@ -185,7 +192,12 @@ class PortClusterView @JvmOverloads constructor(
         removeAllViews()
 
         requestLayout()
+        invalidate()
     }
+
+    // ---------------------------------------------------------
+    // Port access
+    // ---------------------------------------------------------
 
     fun getPort(portId: String): PortView? =
         ports[portId]?.view
@@ -198,9 +210,6 @@ class PortClusterView @JvmOverloads constructor(
     fun getAllPorts(): List<PortView> =
         ports.values.map { it.view }
 
-    /**
-     * Returns specifications with indexes calculated per edge.
-     */
     fun getPortSpecs(): List<PortSpec> {
         val indexes = mutableMapOf<PortSide, Int>()
 
@@ -224,6 +233,10 @@ class PortClusterView @JvmOverloads constructor(
         }
     }
 
+    // ---------------------------------------------------------
+    // Port state and appearance
+    // ---------------------------------------------------------
+
     fun setPortState(
         portId: String,
         state: PortState
@@ -243,6 +256,8 @@ class PortClusterView @JvmOverloads constructor(
         shape: PortShape
     ) {
         ports[portId]?.view?.shape = shape
+        requestLayout()
+        invalidate()
     }
 
     fun setPortEnabled(
@@ -253,20 +268,21 @@ class PortClusterView @JvmOverloads constructor(
     }
 
     fun setAllPortsState(state: PortState) {
-        ports.values.forEach { entry ->
-            entry.view.state = state
+        ports.values.forEach {
+            it.view.state = state
         }
     }
 
     fun setAllPortsEnabled(enabled: Boolean) {
-        ports.values.forEach { entry ->
-            entry.view.isEnabled = enabled
+        ports.values.forEach {
+            it.view.isEnabled = enabled
         }
     }
 
-    /**
-     * Rebuilds map keys whenever ownerId changes.
-     */
+    // ---------------------------------------------------------
+    // Port IDs
+    // ---------------------------------------------------------
+
     private fun refreshIds() {
         if (ports.isEmpty()) return
 
@@ -322,15 +338,10 @@ class PortClusterView @JvmOverloads constructor(
         return -1
     }
 
-    /*
-     * Do not manually measure ports here.
-     *
-     * FrameLayout measures WRAP_CONTENT children using
-     * each PortView's own onMeasure implementation.
-     *
-     * This preserves the new dimensions instead of
-     * forcing the previous 34 x 20 dp dimensions.
-     */
+    // ---------------------------------------------------------
+    // Measurement
+    // ---------------------------------------------------------
+
     override fun onMeasure(
         widthMeasureSpec: Int,
         heightMeasureSpec: Int
@@ -340,6 +351,10 @@ class PortClusterView @JvmOverloads constructor(
             heightMeasureSpec
         )
     }
+
+    // ---------------------------------------------------------
+    // Layout
+    // ---------------------------------------------------------
 
     override fun onLayout(
         changed: Boolean,
@@ -416,17 +431,53 @@ class PortClusterView @JvmOverloads constructor(
         val availableSpace =
             if (horizontalEdge) height else width
 
-        val spacingDp =
-            if (horizontalEdge) {
-                config.verticalSpacingDp
-            } else {
-                config.horizontalSpacingDp
+        if (availableSpace <= 0) {
+            sidePorts.forEach {
+                it.layout(0, 0, 0, 0)
             }
+            return
+        }
+
+        val requestedSpacing = dp(
+            (
+                if (horizontalEdge) {
+                    config.verticalSpacingDp
+                } else {
+                    config.horizontalSpacingDp
+                }
+            ).coerceAtLeast(0f)
+        )
+
+        /*
+         * The spacing must account for the actual
+         * footprint of each connector along its edge.
+         *
+         * This prevents adjacent connectors from
+         * overlapping when several ports share a side.
+         */
+        val portExtents = sidePorts.map { port ->
+            if (horizontalEdge) {
+                port.measuredHeight
+            } else {
+                port.measuredWidth
+            }
+        }
+
+        val largestExtent =
+            portExtents.maxOrNull() ?: 0
+
+        val minimumSpacing =
+            largestExtent + dp(8f)
+
+        val effectiveSpacing = max(
+            requestedSpacing,
+            minimumSpacing
+        )
 
         val centers = calculateCenters(
-            count = sidePorts.size,
+            extents = portExtents,
             availableSpace = availableSpace,
-            spacing = dp(spacingDp.coerceAtLeast(0f))
+            requestedSpacing = effectiveSpacing
         )
 
         val inset = dp(
@@ -495,42 +546,70 @@ class PortClusterView @JvmOverloads constructor(
         }
     }
 
-    /**
-     * Distributes ports evenly when requested spacing
-     * cannot fit inside the available edge.
+    /*
+     * Calculates evenly distributed connector centers.
+     *
+     * Each connector keeps its own measured footprint.
+     * When the requested spacing fits, it is preserved.
+     * Otherwise the ports are distributed across the
+     * available edge without arbitrary one-sided offsets.
      */
     private fun calculateCenters(
-        count: Int,
+        extents: List<Int>,
         availableSpace: Int,
-        spacing: Int
+        requestedSpacing: Int
     ): List<Int> {
 
-        if (count <= 0) return emptyList()
+        val count = extents.size
+
+        if (count == 0) return emptyList()
 
         if (count == 1) {
             return listOf(availableSpace / 2)
         }
 
-        val requiredSpace = spacing * (count - 1)
+        val totalExtent = extents.sum()
 
-        if (
-            spacing > 0 &&
-            requiredSpace <= availableSpace
-        ) {
-            val start =
-                (availableSpace - requiredSpace) / 2
+        val minimumRequired =
+            totalExtent +
+                requestedSpacing * (count - 1)
 
-            return List(count) { index ->
-                start + index * spacing
+        if (minimumRequired <= availableSpace) {
+            val totalSpacing =
+                requestedSpacing * (count - 1)
+
+            val totalLength =
+                totalExtent + totalSpacing
+
+            var cursor =
+                (availableSpace - totalLength) / 2f
+
+            return extents.map { extent ->
+                val center = cursor + extent / 2f
+                cursor += extent + requestedSpacing
+                center.toInt()
             }
         }
 
+        /*
+         * When the edge is too short, distribute
+         * centers proportionally while keeping the
+         * first and last connectors inside the edge.
+         */
+        val halfFirst = extents.first() / 2f
+        val halfLast = extents.last() / 2f
+
+        val usableSpace = (
+            availableSpace - halfFirst - halfLast
+        ).coerceAtLeast(0f)
+
         return List(count) { index ->
+            val fraction =
+                index.toFloat() / (count - 1).toFloat()
+
             (
-                (index + 1f) /
-                    (count + 1f) *
-                    availableSpace
-                ).toInt()
+                halfFirst + usableSpace * fraction
+            ).toInt()
         }
     }
 }
