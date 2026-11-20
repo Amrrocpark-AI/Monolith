@@ -6,9 +6,11 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
+import android.text.TextUtils
 import android.util.AttributeSet
 import android.view.View
 import android.view.animation.LinearInterpolator
+import androidx.core.graphics.withClip
 import com.monolith.graph.ports.models.*
 
 class PortView @JvmOverloads constructor(
@@ -90,6 +92,7 @@ class PortView @JvmOverloads constructor(
     private val recessPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val slotPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val slotInnerPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val dividerPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val ledPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val badgeBgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val badgeBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -127,7 +130,8 @@ class PortView @JvmOverloads constructor(
     private fun measureBadgeWidth(label: String): Float {
         if (!showPortIdBadge || label.isEmpty()) return 0f
         badgeTextPaint.textSize = sp(8.5f)
-        return (badgeTextPaint.measureText(label) + dp(8f)).coerceAtLeast(dp(18f))
+        val rawWidth = badgeTextPaint.measureText(label) + dp(8f)
+        return rawWidth.coerceIn(dp(18f), dp(54f))
     }
 
     private fun socketBaseWidthDp(): Float = when (shape) {
@@ -215,7 +219,6 @@ class PortView @JvmOverloads constructor(
         val badgeSize = if (hasBadge) measureBadgeWidth(label) else 0f
         val badgeGap = if (hasBadge) dp(3f) else 0f
 
-        // Compute fixed socket region independent of badge width/text
         val baseW = dp(if (horizontal) socketBaseWidthDp() else socketBaseHeightDp())
         val baseH = dp(if (horizontal) socketBaseHeightDp() else socketBaseWidthDp())
 
@@ -241,39 +244,24 @@ class PortView @JvmOverloads constructor(
             }
         }
 
+        val centerX = socketLeft + baseW / 2f
+        val centerY = socketTop + baseH / 2f
+
         val save = canvas.save()
 
+        canvas.translate(centerX, centerY)
         when (portSide) {
-            PortSide.LEFT -> {
-                canvas.scale(
-                    -1f,
-                    1f,
-                    socketLeft + baseW / 2f,
-                    socketTop + baseH / 2f
-                )
-            }
+            PortSide.LEFT -> canvas.scale(-1f, 1f)
             PortSide.RIGHT -> Unit
-            PortSide.TOP -> {
-                canvas.rotate(
-                    -90f,
-                    socketLeft + baseW / 2f,
-                    socketTop + baseH / 2f
-                )
-            }
-            PortSide.BOTTOM -> {
-                canvas.rotate(
-                    90f,
-                    socketLeft + baseW / 2f,
-                    socketTop + baseH / 2f
-                )
-            }
+            PortSide.TOP -> canvas.rotate(-90f)
+            PortSide.BOTTOM -> canvas.rotate(90f)
         }
 
-        val localW = if (horizontal) baseW else baseH
-        val localH = if (horizontal) baseH else baseW
-        val originX = if (horizontal) socketLeft else socketTop
-        val originY = if (horizontal) socketTop else socketLeft
-        val cy = originY + localH / 2f
+        // Canonical local coordinate system around (0, 0) where +X points outward from the card edge
+        val localW = dp(socketBaseWidthDp())
+        val localH = dp(socketBaseHeightDp())
+        val halfW = localW / 2f
+        val halfH = localH / 2f
 
         val activeColor = when (state) {
             PortState.SELECTED -> Color.WHITE
@@ -284,36 +272,42 @@ class PortView @JvmOverloads constructor(
             PortState.DISABLED -> 0xFF485363.toInt()
         }
 
-        val cornerRadius = when (shape) {
+        val halfSpan = when (shape) {
+            PortShape.COMPACT -> halfH * 0.78f
+            PortShape.USB -> halfH * 0.88f
+            PortShape.USB_C -> halfH * 0.84f
+        }
+
+        val bodyCorner = when (shape) {
             PortShape.COMPACT -> dp(2f)
             PortShape.USB -> dp(1.5f)
-            PortShape.USB_C -> dp(6f)
+            PortShape.USB_C -> dp(6.5f)
         }
 
         val slotCorner = when (shape) {
-            PortShape.COMPACT -> dp(0.6f)
+            PortShape.COMPACT -> dp(0.7f)
             PortShape.USB -> dp(0.5f)
-            PortShape.USB_C -> dp(1.6f)
+            PortShape.USB_C -> dp(1.7f)
         }
 
         val slotHeight = when (shape) {
-            PortShape.COMPACT -> dp(2.4f)
+            PortShape.COMPACT -> dp(2.3f)
             PortShape.USB -> dp(2.8f)
-            PortShape.USB_C -> dp(3.4f)
+            PortShape.USB_C -> dp(3.3f)
         }
 
         val slotSpacing = when (shape) {
-            PortShape.COMPACT -> dp(5.2f)
-            PortShape.USB -> dp(7.4f)
+            PortShape.COMPACT -> dp(5.0f)
+            PortShape.USB -> dp(7.6f)
             PortShape.USB_C -> dp(6.6f)
         }
 
-        // 1. Fixed socket body on the card edge
+        // 1. Fixed socket body
         socketRect.set(
-            originX + dp(2f),
-            originY + dp(2f),
-            originX + localW - dp(2f),
-            originY + localH - dp(2f)
+            -halfW + dp(2f),
+            -halfSpan,
+            halfW - dp(2f),
+            halfSpan
         )
 
         bodyPaint.apply {
@@ -321,26 +315,26 @@ class PortView @JvmOverloads constructor(
             color = if (state == PortState.DISABLED) 0xFF1A202A.toInt() else 0xFF121A26.toInt()
             alpha = if (state == PortState.DISABLED) 160 else 255
         }
-        canvas.drawRoundRect(socketRect, cornerRadius, cornerRadius, bodyPaint)
+        canvas.drawRoundRect(socketRect, bodyCorner, bodyCorner, bodyPaint)
 
         borderPaint.apply {
             style = Paint.Style.STROKE
-            strokeWidth = if (shape == PortShape.USB) dp(1.2f) else dp(0.95f)
+            strokeWidth = if (shape == PortShape.USB) dp(1.25f) else dp(0.95f)
             color = if (isLit) activeColor else 0xFF4A5B6E.toInt()
             alpha = if (isMuted && !isLit) 140 else 220
         }
-        canvas.drawRoundRect(socketRect, cornerRadius, cornerRadius, borderPaint)
+        canvas.drawRoundRect(socketRect, bodyCorner, bodyCorner, borderPaint)
 
         // 2. Recessed cavity inside socket
         val insetX = when (shape) {
-            PortShape.COMPACT -> dp(2.5f)
-            PortShape.USB -> dp(3.8f)
+            PortShape.COMPACT -> dp(2.4f)
+            PortShape.USB -> dp(3.6f)
             PortShape.USB_C -> dp(3.2f)
         }
         val insetY = when (shape) {
-            PortShape.COMPACT -> dp(2.8f)
-            PortShape.USB -> dp(4.0f)
-            PortShape.USB_C -> dp(3.4f)
+            PortShape.COMPACT -> dp(2.4f)
+            PortShape.USB -> dp(3.6f)
+            PortShape.USB_C -> dp(3.2f)
         }
 
         recessRect.set(
@@ -350,27 +344,28 @@ class PortView @JvmOverloads constructor(
             (socketRect.bottom - insetY).coerceAtLeast(socketRect.top + dp(2f))
         )
 
+        val recessRadius = when (shape) {
+            PortShape.COMPACT -> dp(1.2f)
+            PortShape.USB -> dp(0.8f)
+            PortShape.USB_C -> (bodyCorner - dp(1.4f)).coerceAtLeast(dp(2f))
+        }
+
         recessPaint.apply {
             style = Paint.Style.FILL
             color = 0xFF050911.toInt()
             alpha = if (state == PortState.DISABLED) 140 else 255
         }
-        canvas.drawRoundRect(
-            recessRect,
-            (cornerRadius - dp(1.2f)).coerceAtLeast(dp(0.8f)),
-            (cornerRadius - dp(1.2f)).coerceAtLeast(dp(0.8f)),
-            recessPaint
-        )
+        canvas.drawRoundRect(recessRect, recessRadius, recessRadius, recessPaint)
 
         // 3. Three recessed reception slots inside the cavity
         val slotOffsets = floatArrayOf(
-            cy - slotSpacing,
-            cy,
-            cy + slotSpacing
+            -slotSpacing,
+            0f,
+            slotSpacing
         )
         val slotWidth = when (shape) {
-            PortShape.COMPACT -> (recessRect.width() - dp(2.4f)).coerceAtLeast(dp(3.5f))
-            PortShape.USB -> (recessRect.width() - dp(3.6f)).coerceAtLeast(dp(4.0f))
+            PortShape.COMPACT -> (recessRect.width() - dp(2.2f)).coerceAtLeast(dp(3.5f))
+            PortShape.USB -> (recessRect.width() - dp(3.4f)).coerceAtLeast(dp(4.0f))
             PortShape.USB_C -> (recessRect.width() - dp(2.8f)).coerceAtLeast(dp(4.0f))
         }
         val slotLeft = recessRect.centerX() - slotWidth / 2f
@@ -396,11 +391,35 @@ class PortView @JvmOverloads constructor(
             canvas.drawRoundRect(slots[i], slotCorner, slotCorner, slotInnerPaint)
         }
 
-        // 4. Side LED indicator aligned along the socket
-        val ledW = dp(2.2f)
+        // Structural partition between slots for USB vs USB_C vs COMPACT
+        if (shape == PortShape.USB) {
+            dividerPaint.apply {
+                style = Paint.Style.STROKE
+                strokeWidth = dp(0.85f)
+                color = 0xFF334155.toInt()
+                alpha = if (state == PortState.DISABLED) 90 else 185
+            }
+            for (i in 0 until 2) {
+                val sepY = (slotOffsets[i] + slotOffsets[i + 1]) / 2f
+                canvas.drawLine(
+                    recessRect.left + dp(1.2f),
+                    sepY,
+                    recessRect.right - dp(1.2f),
+                    sepY,
+                    dividerPaint
+                )
+            }
+        }
+
+        // 4. Side LED indicator along the socket
+        val ledW = when (shape) {
+            PortShape.COMPACT -> dp(1.8f)
+            PortShape.USB -> dp(2.4f)
+            PortShape.USB_C -> dp(2.2f)
+        }
         val ledH = (recessRect.height() * 0.78f).coerceAtLeast(dp(8f))
-        val ledX = (socketRect.left - ledW - dp(1.2f)).coerceAtLeast(originX + dp(0.4f))
-        ledRect.set(ledX, cy - ledH / 2f, ledX + ledW, cy + ledH / 2f)
+        val ledX = (socketRect.left - ledW - dp(1.2f)).coerceAtLeast(-halfW + dp(0.4f))
+        ledRect.set(ledX, -ledH / 2f, ledX + ledW, ledH / 2f)
 
         ledPaint.apply {
             style = Paint.Style.FILL
@@ -419,9 +438,9 @@ class PortView @JvmOverloads constructor(
 
         canvas.restoreToCount(save)
 
-        // 5. Optional Port ID badge in its own separate region
+        // 5. Optional Port ID badge with strict clipping and ellipsis
         if (hasBadge) {
-            drawOptionalIdBadge(canvas, label, horizontal, badgeSize, badgeGap)
+            drawOptionalIdBadge(canvas, label, horizontal, badgeSize, badgeGap, baseW)
         }
     }
 
@@ -430,20 +449,22 @@ class PortView @JvmOverloads constructor(
         label: String,
         horizontal: Boolean,
         badgeSize: Float,
-        badgeGap: Float
+        badgeGap: Float,
+        baseSocketWidth: Float
     ) {
         badgeTextPaint.textSize = sp(8.5f)
         badgeTextPaint.color = if (isLit) accent else 0xFFC5D2DE.toInt()
 
         val badgeH = dp(13f)
         val badgeW = badgeSize.coerceAtMost(width.toFloat())
+        if (badgeW <= dp(2f)) return
 
         val left: Float
         val top: Float
 
         if (horizontal) {
             left = if (portSide == PortSide.RIGHT) {
-                (dp(socketBaseWidthDp()) + badgeGap).coerceAtMost((width - badgeW).coerceAtLeast(0f))
+                (baseSocketWidth + badgeGap).coerceAtMost((width - badgeW).coerceAtLeast(0f))
             } else {
                 0f
             }
@@ -451,7 +472,7 @@ class PortView @JvmOverloads constructor(
         } else {
             left = (width - badgeW) / 2f
             top = if (portSide == PortSide.BOTTOM) {
-                (dp(socketBaseWidthDp()) + badgeGap).coerceAtMost((height - badgeH).coerceAtLeast(0f))
+                (baseSocketWidth + badgeGap).coerceAtMost((height - badgeH).coerceAtLeast(0f))
             } else {
                 0f
             }
@@ -468,9 +489,20 @@ class PortView @JvmOverloads constructor(
         badgeBorderPaint.strokeWidth = dp(0.8f)
         canvas.drawRoundRect(badgeRect, dp(2.5f), dp(2.5f), badgeBorderPaint)
 
-        val fm = badgeTextPaint.fontMetrics
-        val baselineY = badgeRect.centerY() - (fm.ascent + fm.descent) / 2f
-        canvas.drawText(label, badgeRect.centerX(), baselineY, badgeTextPaint)
+        val innerPad = dp(3f)
+        val maxTextWidth = (badgeRect.width() - innerPad * 2f).coerceAtLeast(dp(1f))
+        val clippedText = TextUtils.ellipsize(
+            label,
+            badgeTextPaint,
+            maxTextWidth,
+            TextUtils.TruncateAt.END
+        ).toString()
+
+        canvas.withClip(badgeRect) {
+            val fm = badgeTextPaint.fontMetrics
+            val baselineY = badgeRect.centerY() - (fm.ascent + fm.descent) / 2f
+            drawText(clippedText, badgeRect.centerX(), baselineY, badgeTextPaint)
+        }
     }
 
     // ---------------------------------------------------------
