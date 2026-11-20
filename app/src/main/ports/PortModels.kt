@@ -36,6 +36,45 @@ data class PortSpec(
     val enabled: Boolean = true
 )
 
+/**
+ * رأس قابس مستقل عن المأخذ الثابت (Socket):
+ * يحتوي على 3 نقاط تماس معدنية، جسم، وعنق اتصال بالكابل،
+ * ويمكن أن يكون متصلاً بمنفذ (attachedPortId != null) أو حراً/غير متصل (attachedPortId == null).
+ */
+data class PlugSpec(
+    val id: String,
+    val x: Float,
+    val y: Float,
+    val angleDeg: Float = 0f,
+    val color: Int = PortPalette.CYAN,
+    val attachedPortId: String? = null,
+    val isDragging: Boolean = false
+) {
+    fun positionPointF(): PointF = PointF(x, y)
+}
+
+/**
+ * تمثيل جسم الكابل المرن بين نقطتي نهاية/قابس،
+ * مع دعم تمثيل طرف غير متصل (targetPlugId == null أو disconnected = true).
+ */
+data class CableSpec(
+    val id: String,
+    val sourcePlugId: String,
+    val targetPlugId: String? = null,
+    val color: Int = PortPalette.CYAN,
+    val control1: PointF? = null,
+    val control2: PointF? = null,
+    val visible: Boolean = true,
+    val animated: Boolean = true,
+    val glowEnabled: Boolean = true,
+    val strokeWidthDp: Float = 2.5f,
+    val label: String = "",
+    val animationDuration: Long = 1700L
+) {
+    val isUnconnectedEnd: Boolean
+        get() = targetPlugId == null
+}
+
 data class WireConnection(
     val id: String,
     val sourcePortId: String,
