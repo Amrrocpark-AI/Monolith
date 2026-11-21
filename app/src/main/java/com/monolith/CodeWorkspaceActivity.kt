@@ -993,7 +993,7 @@ class CodeWorkspaceActivity : AppCompatActivity() {
             workspaceBrowserContainer.addView(folderScroll)
         }
 
-        val items: List> = if (
+        val items: List<Map<String, String>> = if (
             activeSection == AppDatabase.WORKSPACE_STATE_ACTIVE && selectedTagId != null
         ) {
             db.getWorkspaceItemsByTag(
