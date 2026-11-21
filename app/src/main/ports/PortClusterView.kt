@@ -161,6 +161,21 @@ class PortClusterView @JvmOverloads constructor(
         )
     }
 
+    private fun edgeInsetPx(): Float =
+        dpF(config.edgeInsetDp.coerceAtLeast(0f))
+
+    private fun leftEdgeX(content: ContentBounds): Float =
+        content.left - edgeInsetPx()
+
+    private fun rightEdgeX(content: ContentBounds): Float =
+        content.right + edgeInsetPx()
+
+    private fun topEdgeY(content: ContentBounds): Float =
+        content.top - edgeInsetPx()
+
+    private fun bottomEdgeY(content: ContentBounds): Float =
+        content.bottom + edgeInsetPx()
+
     // ---------------------------------------------------------
     // Mechanical edge chassis drawing
     // ---------------------------------------------------------
@@ -195,7 +210,7 @@ class PortClusterView @JvmOverloads constructor(
         if (hasPorts(PortSide.LEFT)) {
             drawVerticalRail(
                 canvas = canvas,
-                centerX = content.left.toFloat(),
+                centerX = leftEdgeX(content),
                 top = content.top + cornerClearance,
                 bottom = content.bottom - cornerClearance,
                 outerDirection = -1f
@@ -205,7 +220,7 @@ class PortClusterView @JvmOverloads constructor(
         if (hasPorts(PortSide.RIGHT)) {
             drawVerticalRail(
                 canvas = canvas,
-                centerX = content.right.toFloat(),
+                centerX = rightEdgeX(content),
                 top = content.top + cornerClearance,
                 bottom = content.bottom - cornerClearance,
                 outerDirection = 1f
@@ -215,7 +230,7 @@ class PortClusterView @JvmOverloads constructor(
         if (hasPorts(PortSide.TOP)) {
             drawHorizontalRail(
                 canvas = canvas,
-                centerY = content.top.toFloat(),
+                centerY = topEdgeY(content),
                 left = content.left + cornerClearance,
                 right = content.right - cornerClearance,
                 outerDirection = -1f
@@ -225,7 +240,7 @@ class PortClusterView @JvmOverloads constructor(
         if (hasPorts(PortSide.BOTTOM)) {
             drawHorizontalRail(
                 canvas = canvas,
-                centerY = content.bottom.toFloat(),
+                centerY = bottomEdgeY(content),
                 left = content.left + cornerClearance,
                 right = content.right - cornerClearance,
                 outerDirection = 1f
@@ -742,32 +757,29 @@ class PortClusterView @JvmOverloads constructor(
         edgeCenter: Int
     ): Pair<Int, Int> {
         val socketCenter = getSocketCenter(port)
-        val inset = dp(
-            config.edgeInsetDp.coerceAtLeast(0f)
-        )
 
         val targetSocketX: Float
         val targetSocketY: Float
 
         when (side) {
             PortSide.LEFT -> {
-                targetSocketX = (content.left - inset).toFloat()
+                targetSocketX = leftEdgeX(content)
                 targetSocketY = edgeCenter.toFloat()
             }
 
             PortSide.RIGHT -> {
-                targetSocketX = (content.right + inset).toFloat()
+                targetSocketX = rightEdgeX(content)
                 targetSocketY = edgeCenter.toFloat()
             }
 
             PortSide.TOP -> {
                 targetSocketX = edgeCenter.toFloat()
-                targetSocketY = (content.top - inset).toFloat()
+                targetSocketY = topEdgeY(content)
             }
 
             PortSide.BOTTOM -> {
                 targetSocketX = edgeCenter.toFloat()
-                targetSocketY = (content.bottom + inset).toFloat()
+                targetSocketY = bottomEdgeY(content)
             }
         }
 
