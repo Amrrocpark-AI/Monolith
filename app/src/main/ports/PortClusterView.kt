@@ -20,7 +20,8 @@ class PortClusterView @JvmOverloads constructor(
 
     private data class PortEntry(
         val view: PortView,
-        val label: String
+        val label: String,
+        val slotIndex: Int
     )
 
     private data class ContentBounds(
@@ -54,6 +55,7 @@ class PortClusterView @JvmOverloads constructor(
     var onPortSelected: ((PortSpec) -> Unit)? = null
 
     private val ports = LinkedHashMap<String, PortEntry>()
+    private val nextSlotBySide = HashMap<PortSide, Int>()
 
     private val density = resources.displayMetrics.density
 
@@ -460,7 +462,8 @@ class PortClusterView @JvmOverloads constructor(
 
         if (sideCount >= maxPorts) return null
 
-        val id = createPortId(side, sideCount)
+        val slotIndex = allocateNextSlot(side)
+        val id = createPortId(side, slotIndex)
 
         ports[id]?.let {
             return it.view
@@ -503,7 +506,8 @@ class PortClusterView @JvmOverloads constructor(
 
         ports[id] = PortEntry(
             view = port,
-            label = label
+            label = label,
+            slotIndex = slotIndex
         )
 
         addView(port)
@@ -533,8 +537,6 @@ class PortClusterView @JvmOverloads constructor(
 
         removeView(entry.view)
 
-        refreshIds()
-
         requestLayout()
         invalidate()
     }
@@ -545,6 +547,7 @@ class PortClusterView @JvmOverloads constructor(
         }
 
         ports.clear()
+        nextSlotBySide.clear()
         removeAllViews()
 
         requestLayout()
@@ -640,25 +643,23 @@ class PortClusterView @JvmOverloads constructor(
     // Port IDs
     // ---------------------------------------------------------
 
+    private fun allocateNextSlot(side: PortSide): Int {
+        val next = nextSlotBySide[side] ?: 0
+        nextSlotBySide[side] = next + 1
+        return next
+    }
+
     private fun refreshIds() {
         if (ports.isEmpty()) return
 
         val entries = ports.values.toList()
-
-        val rebuilt =
-            LinkedHashMap<String, PortEntry>()
-
-        val indexes = mutableMapOf<PortSide, Int>()
+        val rebuilt = LinkedHashMap<String, PortEntry>()
 
         entries.forEach { entry ->
             val port = entry.view
-
-            val index = indexes[port.portSide] ?: 0
-            indexes[port.portSide] = index + 1
-
             val newId = createPortId(
                 port.portSide,
-                index
+                entry.slotIndex
             )
 
             port.portId = newId
