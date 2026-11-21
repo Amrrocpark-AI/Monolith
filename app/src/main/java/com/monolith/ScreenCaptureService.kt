@@ -39,18 +39,18 @@ class ScreenCaptureService : Service() {
     private var imageReader: ImageReader? = null
 
     private val serviceScope = CoroutineScope(Dispatchers.IO)
-    
+
     // متغيرات الرؤية الحية
     private var isLiveVisionActive = false
     private var lastProcessedTime: Long = 0
     private val VISION_INTERVAL_MS = 300L // 300 مللي ثانية = 3 صور بالثانية
 
+    // قفل لتزامن تحديث وقراءة ومسح الإطار الأخير مع أبعاده
+    private val frameLock = Any()
+
     // تخزين آخر إطار للرؤية العميقة (VLM)
-    @Volatile
     private var latestFrameBuffer: ByteBuffer? = null
-    @Volatile
     private var latestFrameWidth: Int = 0
-    @Volatile
     private var latestFrameHeight: Int = 0
 
     companion object {
@@ -60,7 +60,7 @@ class ScreenCaptureService : Service() {
         const val ACTION_STOP_LIVE_VISION = "STOP_LIVE_VISION"
         const val EXTRA_RESULT_CODE = "RESULT_CODE"
         const val EXTRA_DATA_INTENT = "DATA_INTENT"
-        
+
         // Singleton instance للوصول من AgentBrain
         @Volatile
         var instance: ScreenCaptureService? = null
@@ -108,10 +108,12 @@ class ScreenCaptureService : Service() {
             }
             ACTION_START_LIVE_VISION -> {
                 isLiveVisionActive = true
+                lastProcessedTime = 0L
                 Log.d("MonolithVision", "Live vision started")
             }
             ACTION_STOP_LIVE_VISION -> {
                 isLiveVisionActive = false
+                clearLatestFrame()
                 Log.d("MonolithVision", "Live vision stopped")
             }
         }
@@ -130,6 +132,7 @@ class ScreenCaptureService : Service() {
                 virtualDisplay?.release()
                 imageReader?.close()
                 mediaProjection = null
+                clearLatestFrame()
                 instance = null
             }
         }, Handler(Looper.getMainLooper()))
@@ -162,28 +165,22 @@ class ScreenCaptureService : Service() {
             val currentTime = System.currentTimeMillis()
             if (currentTime - lastProcessedTime >= VISION_INTERVAL_MS) {
                 lastProcessedTime = currentTime
-                
+
                 var image: Image? = null
                 try {
                     image = reader.acquireLatestImage()
                     if (image != null) {
-                        val buffer: ByteBuffer = image.planes[0].buffer
-                        
-                        // 1. تحديث آخر إطار للرؤية العميقة (VLM) قبل إغلاق الصورة
-                        // نحتاج إلى نسخة من البيانات لأن buffer سيُغلق بعد image.close()
-                        val bufferCopy = ByteBuffer.allocateDirect(buffer.capacity())
-                        bufferCopy.put(buffer)
-                        bufferCopy.rewind()
-                        
-                        latestFrameBuffer = bufferCopy
-                        latestFrameWidth = image.width
-                        latestFrameHeight = image.height
+                        val packedBuffer = extractPackedRgbaBuffer(image)
+                        if (packedBuffer != null && isLiveVisionActive) {
+                            storeLatestFrame(packedBuffer, image.width, image.height)
 
-                        // 2. استدعاء دالة C++ لمعالجة التغييرات (الرؤية المحيطية)
-                        val changedRegions = VisionProcessor.processFrame(buffer, image.width, image.height)
-                        
-                        if (changedRegions != "[]" && changedRegions.isNotEmpty()) {
-                            Log.d("MonolithVision", "Detected Changes: $changedRegions")
+                            // استدعاء دالة C++ لمعالجة التغييرات (الرؤية المحيطية) باستخدام نسخة مستقلة
+                            val visionInput = cloneDirectBuffer(packedBuffer)
+                            val changedRegions = VisionProcessor.processFrame(visionInput, image.width, image.height)
+
+                            if (changedRegions != "[]" && changedRegions.isNotEmpty()) {
+                                Log.d("MonolithVision", "Detected Changes: $changedRegions")
+                            }
                         }
                     }
                 } catch (e: Exception) {
@@ -206,8 +203,86 @@ class ScreenCaptureService : Service() {
             null,
             null
         )
-        
+
         Toast.makeText(this, "تم تفعيل كاميرا تصوير الشاشة", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun extractPackedRgbaBuffer(image: Image): ByteBuffer? {
+        val plane = image.planes.firstOrNull() ?: run {
+            Log.e("MonolithVision", "Unsupported frame: missing image plane")
+            return null
+        }
+
+        val width = image.width
+        val height = image.height
+        val pixelStride = plane.pixelStride
+        val rowStride = plane.rowStride
+        val rowBytes = width * 4
+
+        if (width <= 0 || height <= 0) {
+            Log.e("MonolithVision", "Unsupported frame dimensions: ${width}x${height}")
+            return null
+        }
+
+        if (pixelStride != 4) {
+            Log.e("MonolithVision", "Unsupported pixelStride ($pixelStride) for packed RGBA_8888; expected 4")
+            return null
+        }
+
+        if (rowStride < rowBytes) {
+            Log.e("MonolithVision", "Invalid rowStride ($rowStride) smaller than rowBytes ($rowBytes)")
+            return null
+        }
+
+        val source = plane.buffer.duplicate()
+        val requiredCapacity = rowStride.toLong() * height.toLong()
+        if (source.capacity().toLong() < requiredCapacity) {
+            Log.e(
+                "MonolithVision",
+                "Plane buffer capacity (${source.capacity()}) is smaller than required ($requiredCapacity)"
+            )
+            return null
+        }
+
+        val packedBuffer = ByteBuffer.allocateDirect(width * height * 4)
+        val rowView = source.duplicate()
+
+        for (row in 0 until height) {
+            val rowStart = row * rowStride
+            val rowEnd = rowStart + rowBytes
+            rowView.limit(rowEnd)
+            rowView.position(rowStart)
+            packedBuffer.put(rowView)
+        }
+
+        packedBuffer.flip()
+        return packedBuffer
+    }
+
+    private fun cloneDirectBuffer(source: ByteBuffer): ByteBuffer {
+        val readOnlyView = source.asReadOnlyBuffer()
+        readOnlyView.rewind()
+        val copy = ByteBuffer.allocateDirect(readOnlyView.remaining())
+        copy.put(readOnlyView)
+        copy.flip()
+        return copy
+    }
+
+    private fun storeLatestFrame(packedBuffer: ByteBuffer, width: Int, height: Int) {
+        synchronized(frameLock) {
+            if (!isLiveVisionActive) return
+            latestFrameBuffer = cloneDirectBuffer(packedBuffer)
+            latestFrameWidth = width
+            latestFrameHeight = height
+        }
+    }
+
+    private fun clearLatestFrame() {
+        synchronized(frameLock) {
+            latestFrameBuffer = null
+            latestFrameWidth = 0
+            latestFrameHeight = 0
+        }
     }
 
     /**
@@ -215,15 +290,11 @@ class ScreenCaptureService : Service() {
      * Return: Triple(buffer, width, height)
      */
     fun getLatestFrameForVision(): Triple<ByteBuffer, Int, Int>? {
-        val buffer = latestFrameBuffer
-        if (buffer == null) return null
-        
-        // إعادة نسخة جديدة لضمان عدم التلاعب بالبيانات الأصلية
-        val freshBuffer = ByteBuffer.allocateDirect(buffer.capacity())
-        freshBuffer.put(buffer)
-        freshBuffer.rewind()
-        
-        return Triple(freshBuffer, latestFrameWidth, latestFrameHeight)
+        synchronized(frameLock) {
+            val buffer = latestFrameBuffer ?: return null
+            if (latestFrameWidth <= 0 || latestFrameHeight <= 0) return null
+            return Triple(cloneDirectBuffer(buffer), latestFrameWidth, latestFrameHeight)
+        }
     }
 
     private fun captureScreen() {
@@ -299,6 +370,7 @@ class ScreenCaptureService : Service() {
         virtualDisplay?.release()
         imageReader?.close()
         mediaProjection?.stop()
+        clearLatestFrame()
         instance = null
     }
 
