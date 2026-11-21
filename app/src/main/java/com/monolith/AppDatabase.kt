@@ -595,7 +595,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
     private fun queryMaps(
         sql: String,
         args: Array<String>? = null
-    val result = mutableListOf<Map<String, String>>()
+    val result = mutableListOf>()
         val result = mutableListOf>()
         val db = readableDatabase
 
@@ -620,7 +620,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
     private fun cursorString(
         cursor: Cursor,
         column: String
-    ): List<Map<String, String>> {
+    ): List> {
         val index = cursor.getColumnIndex(column)
         return if (index >= 0 && !cursor.isNull(index)) {
             cursor.getString(index)
