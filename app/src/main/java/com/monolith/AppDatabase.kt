@@ -889,7 +889,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
 
     fun getRelationsForMessage(
         messageId: String
-    ): List> {
+    ): List<Map<String, String>> {
         return queryMaps(
             """
             SELECT * FROM message_relations
@@ -902,7 +902,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
 
     fun getOutgoingRelations(
         messageId: String
-    ): List> {
+    ): List<Map<String, String>> {
         return queryMaps(
             """
             SELECT * FROM message_relations
@@ -958,7 +958,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
 
     fun getBranchesForConversation(
         conversationId: String
-    ): List> {
+    ): List<Map<String, String>> {
         return queryMaps(
             """
             SELECT * FROM message_branches
@@ -1053,7 +1053,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
 
     fun getToolExecutions(
         messageId: String
-    ): List> {
+    ): List<Map<String, String>> {
         return queryMaps(
             """
             SELECT * FROM message_tool_executions
@@ -1097,7 +1097,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
 
     fun getGenerationEvents(
         messageId: String
-    ): List> {
+    ): List<Map<String, String>> {
         return queryMaps(
             """
             SELECT * FROM message_generation_events
