@@ -595,7 +595,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
     private fun queryMaps(
         sql: String,
         args: Array<String>? = null
-    ): List> {
+    ): List<Map<String, String>>
         val result = mutableListOf>()
         val db = readableDatabase
 
@@ -1729,7 +1729,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
     fun getWorkspaceItemsByTag(
         tagId: String,
         lifecycleState: String? = WORKSPACE_STATE_ACTIVE
-    ): List> {
+    ): List<Map<String, String>>
         return if (lifecycleState.isNullOrBlank()) {
             queryMaps(
                 """
@@ -2218,7 +2218,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
 
     fun getRecentLifecycleEvents(
         limit: Int = 10
-    ): List> {
+    ): List<Map<String, String>>
         return queryMaps(
             """
             SELECT * FROM agent_lifecycle_log
@@ -2258,7 +2258,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
 
     fun getRecentPerformanceLogs(
         limit: Int = 10
-    ): List> {
+    ): List<Map<String, String>>
         return queryMaps(
             """
             SELECT * FROM agent_performance_log
@@ -2343,7 +2343,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
         taskType: String,
         status: String,
         limit: Int = 5
-    ): List> {
+    ): List<Map<String, String>>
         return queryMaps(
             """
             SELECT * FROM agent_tasks
