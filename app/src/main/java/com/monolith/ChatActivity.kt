@@ -3684,7 +3684,7 @@ object DialogInitiativeProtocol {
         "$START_MARKER\n" +
         "[{\"kind\":\"FOLLOW_UP\",\"label\":\"عنوان زر قصير\",\"text\":\"النص الكامل الذي سيُرسل عند الضغط\"}]\n" +
         "$END_MARKER\n" +
-        "2) الأنواع المسموحة فقط: PERMISSION, MISSING_INFO, FOLLOW_UP, NEXT_STEP, CONTINUE_TASK.\n"
+        "2) الأنواع المسموحة فقط: PERMISSION, MISSING_INFO, FOLLOW_UP, NEXT_STEP, CONTINUE_TASK.\n" +
         "3) لا تضع أكثر من $MAX_INITIATIVES مبادرة، ولا تكرر المبادرة نفسها، ولا تضع الكتلة إذا لم تكن هناك حاجة حقيقية.\n" +
         "4) لا تكتب أي نص بعد $END_MARKER، ولا تُعِد كتابة الكتلة مرتين.\n" +
         "5) هذه المبادرات اقتراحات للمستخدم فقط، وليست أوامر تنفيذ تلقائية.\n" +
