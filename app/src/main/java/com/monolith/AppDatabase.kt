@@ -1942,7 +1942,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
     fun getWorkspaceCodeItems(
         lifecycleState: String = WORKSPACE_STATE_ACTIVE,
         folderId: String? = null
-    ): List<Map<String, String>>
+            ): List<Map<String, String>> {
         val normalizedState = normalizeWorkspaceState(lifecycleState)
         return if (folderId == null) {
             queryMaps(
@@ -2153,7 +2153,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
 
     fun getThreadsForMessage(
         messageId: String
-    ): List<Map<String, String>>
+        ): List<Map<String, String>> {
         return queryMaps(
             """
             SELECT * FROM message_threads
@@ -2218,7 +2218,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
 
     fun getRecentLifecycleEvents(
         limit: Int = 10
-    ): List<Map<String, String>>
+        ): List<Map<String, String>> {
         return queryMaps(
             """
             SELECT * FROM agent_lifecycle_log
@@ -2258,7 +2258,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
 
     fun getRecentPerformanceLogs(
         limit: Int = 10
-    ): List<Map<String, String>>
+        ): List<Map<String, String>> {
         return queryMaps(
             """
             SELECT * FROM agent_performance_log
@@ -2343,7 +2343,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
         taskType: String,
         status: String,
         limit: Int = 5
-    ): List<Map<String, String>>
+        ): List<Map<String, String>> {
         return queryMaps(
             """
             SELECT * FROM agent_tasks
@@ -2386,7 +2386,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
 
     fun getManagedTask(
         taskId: String
-    ): List<Map<String, String>> {
+        ): Map<String, String>? {
         return queryMaps(
             "SELECT * FROM agent_tasks WHERE id = ?",
             arrayOf(taskId)
