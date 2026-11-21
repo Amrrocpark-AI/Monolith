@@ -870,8 +870,8 @@ class ConnectionLayerView @JvmOverloads constructor(
         animators.clear()
         progress.clear()
 
+        clearActivePlugDrag(resetToResolvedPosition = false)
         pressedConnectionId = null
-        draggingPlugId = null
         touchMoved = false
 
         super.onDetachedFromWindow()
@@ -893,6 +893,25 @@ class ConnectionLayerView @JvmOverloads constructor(
         return null
     }
 
+    private fun clearActivePlugDrag(resetToResolvedPosition: Boolean) {
+        val plugId = draggingPlugId
+        draggingPlugId = null
+        if (plugId != null) {
+            plugs[plugId]?.let { plug ->
+                if (resetToResolvedPosition) {
+                    val pos = resolvePlugPosition(plug)
+                    plugs[plugId] = plug.copy(
+                        x = pos.x,
+                        y = pos.y,
+                        isDragging = false
+                    )
+                } else if (plug.isDragging) {
+                    plugs[plugId] = plug.copy(isDragging = false)
+                }
+            }
+        }
+    }
+
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.actionMasked) {
 
@@ -902,7 +921,7 @@ class ConnectionLayerView @JvmOverloads constructor(
 
                 touchMoved = false
                 pressedConnectionId = null
-                draggingPlugId = null
+                clearActivePlugDrag(resetToResolvedPosition = false)
 
                 if (!wiresVisible) {
                     return false
@@ -914,6 +933,7 @@ class ConnectionLayerView @JvmOverloads constructor(
                     draggingPlugId = hitPlug.id
                     dragOffsetX = pos.x - event.x
                     dragOffsetY = pos.y - event.y
+                    plugs[hitPlug.id] = hitPlug.copy(isDragging = true)
                     return true
                 }
 
@@ -934,7 +954,8 @@ class ConnectionLayerView @JvmOverloads constructor(
                     val updated = plug.copy(
                         x = if (touchMoved) nextX else currentPosition.x,
                         y = if (touchMoved) nextY else currentPosition.y,
-                        attachedPortId = if (touchMoved) null else plug.attachedPortId
+                        attachedPortId = if (touchMoved) null else plug.attachedPortId,
+                        isDragging = true
                     )
                     plugs[plugId] = updated
                     rebuildPaths()
@@ -969,13 +990,15 @@ class ConnectionLayerView @JvmOverloads constructor(
                             plug.copy(
                                 x = snapped.second.x,
                                 y = snapped.second.y,
-                                attachedPortId = snapped.first
+                                attachedPortId = snapped.first,
+                                isDragging = false
                             )
                         } else {
                             plug.copy(
                                 x = currentPos.x,
                                 y = currentPos.y,
-                                attachedPortId = null
+                                attachedPortId = null,
+                                isDragging = false
                             )
                         }
                         plugs[plugId] = updated
@@ -1027,8 +1050,10 @@ class ConnectionLayerView @JvmOverloads constructor(
 
             MotionEvent.ACTION_CANCEL -> {
                 pressedConnectionId = null
-                draggingPlugId = null
+                clearActivePlugDrag(resetToResolvedPosition = true)
                 touchMoved = false
+                rebuildPaths()
+                invalidate()
                 return true
             }
 
