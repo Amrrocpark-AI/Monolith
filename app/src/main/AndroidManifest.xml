@@ -53,6 +53,10 @@
         <activity android:name=".ImageEditorActivity" android:exported="false" android:theme="@style/Theme.Monolith" android:screenOrientation="portrait" />
         <activity android:name=".DispersionEditorActivity" android:exported="false" android:theme="@style/Theme.Monolith" android:screenOrientation="portrait" />
         <activity android:name=".SurgicalLensActivity" android:exported="false" android:theme="@style/Theme.Monolith" android:screenOrientation="portrait" />
+        <activity
+            android:name=".CodeWorkspaceActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
         <activity android:name=".CapturePermissionActivity" android:theme="@android:style/Theme.Translucent.NoTitleBar" android:excludeFromRecents="true" android:exported="false" />
 
         <service android:name=".PlaybackService" android:foregroundServiceType="mediaPlayback" android:exported="true">
