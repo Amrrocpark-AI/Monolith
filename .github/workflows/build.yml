@@ -1,11 +1,14 @@
 name: Build Monolith APK
+
 on: [push, workflow_dispatch]
+
 permissions:
   contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
     - uses: actions/checkout@v4
 
@@ -34,7 +37,9 @@ jobs:
 
     - name: Decode Fixed Keystore
       run: |
-        echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > $RUNNER_TEMP/fixed.p12
+        set -euo pipefail
+        echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/fixed.p12"
+        test -s "$RUNNER_TEMP/fixed.p12"
 
     - name: Clean and Build with Gradle (Signed)
       env:
@@ -43,6 +48,55 @@ jobs:
         KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
       run: |
         gradle clean assembleDebug
+
+    - name: Validate APK Before Release
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        APK="app/build/outputs/apk/debug/app-debug.apk"
+
+        echo "Checking APK file..."
+        test -s "$APK"
+
+        echo "Locating Android Build Tools..."
+        BUILD_TOOLS_VERSION="$(find "$ANDROID_SDK_ROOT/build-tools" \
+          -mindepth 1 -maxdepth 1 -type d \
+          -printf '%f\n' | sort -V | tail -n 1)"
+
+        if [ -z "$BUILD_TOOLS_VERSION" ]; then
+          echo "::error::Android Build Tools were not found."
+          exit 1
+        fi
+
+        BUILD_TOOLS="$ANDROID_SDK_ROOT/build-tools/$BUILD_TOOLS_VERSION"
+
+        ZIPALIGN="$BUILD_TOOLS/zipalign"
+        APKSIGNER="$BUILD_TOOLS/apksigner"
+        AAPT="$BUILD_TOOLS/aapt"
+
+        test -x "$ZIPALIGN"
+        test -x "$APKSIGNER"
+        test -x "$AAPT"
+
+        echo "Checking APK alignment..."
+        "$ZIPALIGN" -c -v 4 "$APK"
+
+        echo "Verifying APK signature..."
+        "$APKSIGNER" verify --verbose --print-certs "$APK"
+
+        echo "Checking application ID..."
+        "$AAPT" dump badging "$APK" > "$RUNNER_TEMP/apk-badging.txt"
+
+        if ! grep -Eq "^package: name='com\.monolith'([[:space:]]|$)" \
+          "$RUNNER_TEMP/apk-badging.txt"; then
+          echo "::error::APK application ID is not com.monolith."
+          cat "$RUNNER_TEMP/apk-badging.txt"
+          exit 1
+        fi
+
+        echo "APK validation passed."
+        sha256sum "$APK"
 
     - name: Create Release and Upload APK
       uses: softprops/action-gh-release@v2
