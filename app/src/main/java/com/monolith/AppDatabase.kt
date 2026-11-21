@@ -2395,7 +2395,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
 
     fun getChildTasks(
         parentTaskId: String
-    ): List> {
+        ): List<Map<String, String>> {
         return queryMaps(
             """
             SELECT * FROM agent_tasks
