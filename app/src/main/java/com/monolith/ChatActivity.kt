@@ -7,6 +7,7 @@ import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.graphics.PointF
 import android.graphics.PorterDuff
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.ColorDrawable
@@ -63,6 +64,7 @@ import java.io.FileOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.math.abs
 
 class ChatActivity : AppCompatActivity() {
 
@@ -95,6 +97,13 @@ class ChatActivity : AppCompatActivity() {
         // Ports & Wires
         private const val RIGHT_PORT_SUFFIX = ":right:0"
         private const val LEFT_PORT_SUFFIX = ":left:0"
+
+        // إعدادات أداة القوابس والكابلات المستقلة (اختيارية)
+        private const val PREFS_NAME = "Settings"
+        private const val KEY_PLUGS_TOOL_ENABLED = "plugs_cable_tool_enabled"
+        private const val KEY_PLUGS_TOOL_COLOR = "plugs_cable_tool_color"
+        private const val KEY_PLUGS_TOOL_STROKE = "plugs_cable_tool_stroke_dp"
+        private const val KEY_PLUGS_TOOL_GLOW = "plugs_cable_tool_glow"
     }
 
     /**
@@ -178,6 +187,14 @@ class ChatActivity : AppCompatActivity() {
     private var selectedTargetPort: PortSpec? = null
     private var adapterDataObserver: RecyclerView.AdapterDataObserver? = null
     private var portsSystemReady = false
+
+    // حالة وتخصيص أداة القوابس والكابلات المستقلة (اختيارية)
+    private var plugsCableToolEnabled = false
+    private var plugsCableToolColor = PortPalette.CYAN
+    private var plugsCableToolStrokeDp = 2.5f
+    private var plugsCableToolGlow = true
+    private val activePlugs = LinkedHashMap<String, PlugSpec>()
+    private val activeCables = LinkedHashMap<String, CableSpec>()
 
     // حقول إدارة مستمع التخطيط (Layout Listener) لمنع تسريب الذاكرة والتحديثات القديمة
     private var endpointLayoutListenerPending = false
@@ -376,6 +393,7 @@ class ChatActivity : AppCompatActivity() {
 
             initializeSecurePreferences()
             loadInitialTheme()
+            loadPlugsCableToolPreferences()
             initializeViews()
             initializeAdapter()
             initializeTopBar()
@@ -402,13 +420,31 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun loadInitialTheme() {
-        val settings = getSharedPreferences("Settings", MODE_PRIVATE)
+        val settings = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         themeColorHex = settings.getString("AppThemeColor", "#00D4FF") ?: "#00D4FF"
         try {
             Color.parseColor(themeColorHex)
         } catch (_: Exception) {
             themeColorHex = "#00D4FF"
         }
+    }
+
+    private fun loadPlugsCableToolPreferences() {
+        val settings = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        plugsCableToolEnabled = settings.getBoolean(KEY_PLUGS_TOOL_ENABLED, false)
+        plugsCableToolColor = settings.getInt(KEY_PLUGS_TOOL_COLOR, PortPalette.CYAN)
+        plugsCableToolStrokeDp = settings.getFloat(KEY_PLUGS_TOOL_STROKE, 2.5f).coerceIn(1f, 8f)
+        plugsCableToolGlow = settings.getBoolean(KEY_PLUGS_TOOL_GLOW, true)
+    }
+
+    private fun savePlugsCableToolPreferences() {
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_PLUGS_TOOL_ENABLED, plugsCableToolEnabled)
+            .putInt(KEY_PLUGS_TOOL_COLOR, plugsCableToolColor)
+            .putFloat(KEY_PLUGS_TOOL_STROKE, plugsCableToolStrokeDp)
+            .putBoolean(KEY_PLUGS_TOOL_GLOW, plugsCableToolGlow)
+            .apply()
     }
 
     private fun initializeViews() {
@@ -556,6 +592,7 @@ class ChatActivity : AppCompatActivity() {
             clipToPadding = false
             isClickable = false
             isFocusable = false
+            visibility = if (plugsCableToolEnabled) View.VISIBLE else View.GONE
         }
 
         connectionLayerView = ConnectionLayerView(this).apply {
@@ -573,6 +610,10 @@ class ChatActivity : AppCompatActivity() {
             onConnectionSelected = { connection ->
                 handleConnectionSelected(connection)
             }
+
+            onPlugMoved = { plugId, position ->
+                handlePlugMoved(plugId, position)
+            }
         }
 
         portsOverlay.addView(connectionLayerView)
@@ -589,6 +630,253 @@ class ChatActivity : AppCompatActivity() {
         }
 
         portsSystemReady = true
+    }
+
+    private fun setPlugsAndCablesToolEnabled(enabled: Boolean) {
+        plugsCableToolEnabled = enabled
+        savePlugsCableToolPreferences()
+
+        if (!portsSystemReady || !::portsOverlay.isInitialized) return
+
+        if (!enabled) {
+            activePlugs.clear()
+            activeCables.clear()
+            try {
+                connectionLayerView.clearPlugs()
+                connectionLayerView.clearCables()
+            } catch (_: Exception) { }
+            portsOverlay.visibility = View.GONE
+            return
+        }
+
+        portsOverlay.visibility = View.VISIBLE
+        syncPlugsAndCablesForCurrentState()
+        schedulePortsUpdate()
+    }
+
+    private fun showPlugsAndCablesToolDialog() {
+        val colorOptions = arrayOf(
+            "سماوي (CYAN)" to PortPalette.CYAN,
+            "أخضر (GREEN)" to PortPalette.GREEN,
+            "بنفسجي (PURPLE)" to PortPalette.PURPLE,
+            "أزرق (BLUE)" to PortPalette.BLUE,
+            "برتقالي (ORANGE)" to PortPalette.ORANGE,
+            "أحمر (RED)" to PortPalette.RED
+        )
+        val strokeOptions = floatArrayOf(1.5f, 2.5f, 4.0f)
+
+        var selectedColor = plugsCableToolColor
+        var selectedStrokeIndex = strokeOptions.indexOfFirst { abs(it - plugsCableToolStrokeDp) < 0.1f }
+            .takeIf { it >= 0 } ?: 1
+        var selectedGlow = plugsCableToolGlow
+
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dpToPx(16), dpToPx(12), dpToPx(16), dpToPx(8))
+        }
+
+        val enableSwitch = Switch(this).apply {
+            text = "تفعيل أداة القوابس والكابلات المستقلة"
+            isChecked = plugsCableToolEnabled
+            setTextColor(Color.WHITE)
+        }
+
+        val colorLabel = TextView(this).apply {
+            text = "لون القوابس والكابلات"
+            setTextColor(Color.LTGRAY)
+            textSize = 12f
+            setPadding(0, dpToPx(12), 0, dpToPx(4))
+        }
+
+        val colorSpinner = Spinner(this).apply {
+            adapter = ArrayAdapter(
+                this@ChatActivity,
+                android.R.layout.simple_spinner_dropdown_item,
+                colorOptions.map { it.first }
+            )
+            val currentIdx = colorOptions.indexOfFirst { it.second == plugsCableToolColor }
+            if (currentIdx >= 0) setSelection(currentIdx)
+            onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                    selectedColor = colorOptions[position].second
+                }
+                override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+            }
+        }
+
+        val strokeLabel = TextView(this).apply {
+            text = "سُمك الكابل"
+            setTextColor(Color.LTGRAY)
+            textSize = 12f
+            setPadding(0, dpToPx(12), 0, dpToPx(4))
+        }
+
+        val strokeSpinner = Spinner(this).apply {
+            adapter = ArrayAdapter(
+                this@ChatActivity,
+                android.R.layout.simple_spinner_dropdown_item,
+                strokeOptions.map { "${it} dp" }
+            )
+            setSelection(selectedStrokeIndex)
+            onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                    selectedStrokeIndex = position
+                }
+                override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+            }
+        }
+
+        val glowCheck = CheckBox(this).apply {
+            text = "تفعيل التوهج (Glow)"
+            isChecked = plugsCableToolGlow
+            setTextColor(Color.WHITE)
+            setPadding(0, dpToPx(10), 0, 0)
+            setOnCheckedChangeListener { _, isChecked -> selectedGlow = isChecked }
+        }
+
+        container.addView(enableSwitch)
+        container.addView(colorLabel)
+        container.addView(colorSpinner)
+        container.addView(strokeLabel)
+        container.addView(strokeSpinner)
+        container.addView(glowCheck)
+
+        AlertDialog.Builder(this)
+            .setTitle("إعدادات القوابس والكابلات")
+            .setView(container)
+            .setPositiveButton("حفظ") { _, _ ->
+                plugsCableToolColor = selectedColor
+                plugsCableToolStrokeDp = strokeOptions[selectedStrokeIndex]
+                plugsCableToolGlow = selectedGlow
+                savePlugsCableToolPreferences()
+                setPlugsAndCablesToolEnabled(enableSwitch.isChecked)
+                showToast(
+                    if (enableSwitch.isChecked) "تم تفعيل وتخصيص أداة القوابس والكابلات"
+                    else "تم إلغاء تفعيل أداة القوابس والكابلات"
+                )
+            }
+            .setNeutralButton("إضافة قابس حر") { _, _ ->
+                if (!plugsCableToolEnabled) {
+                    plugsCableToolEnabled = true
+                    savePlugsCableToolPreferences()
+                    if (portsSystemReady && ::portsOverlay.isInitialized) {
+                        portsOverlay.visibility = View.VISIBLE
+                    }
+                }
+                addIndependentPlugAndCable()
+            }
+            .setNegativeButton("إغلاق", null)
+            .show()
+    }
+
+    private fun addIndependentPlugAndCable() {
+        if (!portsSystemReady) return
+        val index = activePlugs.size + 1
+        val plugId = "plug_${currentConversationId}_$index"
+        val cableId = "cable_${currentConversationId}_$index"
+
+        val startX = dpToPx(64).toFloat()
+        val startY = ((chatContentContainer.height.takeIf { it > 0 } ?: dpToPx(320)) * 0.45f)
+
+        val plug = PlugSpec(
+            id = plugId,
+            x = startX,
+            y = startY,
+            angleDeg = 0f,
+            color = plugsCableToolColor,
+            attachedPortId = null,
+            isDragging = false
+        )
+
+        val cable = CableSpec(
+            id = cableId,
+            sourcePlugId = plugId,
+            targetPlugId = null,
+            color = plugsCableToolColor,
+            visible = true,
+            animated = true,
+            glowEnabled = plugsCableToolGlow,
+            strokeWidthDp = plugsCableToolStrokeDp,
+            label = "كابل مستقل #$index"
+        )
+
+        activePlugs[plugId] = plug
+        activeCables[cableId] = cable
+        pushPlugsAndCablesToLayer()
+        showToast("تمت إضافة قابس وكابل مستقل")
+    }
+
+    private fun syncPlugsAndCablesForCurrentState() {
+        if (!portsSystemReady || !plugsCableToolEnabled) return
+
+        val points = portEndpointRegistry.getPoints()
+        if (points.isEmpty()) {
+            pushPlugsAndCablesToLayer()
+            return
+        }
+
+        val updatedPlugs = LinkedHashMap<String, PlugSpec>()
+        val updatedCables = LinkedHashMap<String, CableSpec>()
+
+        activePlugs.forEach { (id, plug) ->
+            updatedPlugs[id] = plug.copy(
+                color = plugsCableToolColor
+            )
+        }
+
+        activeCables.forEach { (id, cable) ->
+            updatedCables[id] = cable.copy(
+                color = plugsCableToolColor,
+                strokeWidthDp = plugsCableToolStrokeDp,
+                glowEnabled = plugsCableToolGlow
+            )
+        }
+
+        if (updatedPlugs.isEmpty()) {
+            val firstEntry = points.entries.firstOrNull()
+            if (firstEntry != null) {
+                val plugId = "plug_${currentConversationId}_init"
+                val cableId = "cable_${currentConversationId}_init"
+                updatedPlugs[plugId] = PlugSpec(
+                    id = plugId,
+                    x = firstEntry.value.x,
+                    y = firstEntry.value.y,
+                    angleDeg = 0f,
+                    color = plugsCableToolColor,
+                    attachedPortId = firstEntry.key,
+                    isDragging = false
+                )
+                updatedCables[cableId] = CableSpec(
+                    id = cableId,
+                    sourcePlugId = plugId,
+                    targetPlugId = null,
+                    color = plugsCableToolColor,
+                    visible = true,
+                    animated = true,
+                    glowEnabled = plugsCableToolGlow,
+                    strokeWidthDp = plugsCableToolStrokeDp
+                )
+            }
+        }
+
+        activePlugs.clear()
+        activePlugs.putAll(updatedPlugs)
+        activeCables.clear()
+        activeCables.putAll(updatedCables)
+        pushPlugsAndCablesToLayer()
+    }
+
+    private fun pushPlugsAndCablesToLayer() {
+        if (!portsSystemReady || !plugsCableToolEnabled) return
+        try {
+            connectionLayerView.setPlugs(activePlugs.values.toList())
+            connectionLayerView.setCables(activeCables.values.toList())
+        } catch (_: Exception) { }
+    }
+
+    private fun handlePlugMoved(plugId: String, position: PointF) {
+        val current = activePlugs[plugId] ?: return
+        activePlugs[plugId] = current.copy(x = position.x, y = position.y)
     }
 
     private fun setupRecyclerScrollListener() {
@@ -872,6 +1160,10 @@ class ChatActivity : AppCompatActivity() {
 
         previousEndpointIds.clear()
         previousEndpointIds.addAll(currentPortIds)
+
+        if (plugsCableToolEnabled) {
+            syncPlugsAndCablesForCurrentState()
+        }
     }
 
     private fun applyConnectionsToLayer() {
@@ -903,13 +1195,13 @@ class ChatActivity : AppCompatActivity() {
                         val nodesById = nodesList.associateBy { it["id"] ?: "" }
 
                         val seenThreadIds = mutableSetOf<String>()
-                        val rawThreads = mutableListOf<Map<String, String>>()
+                        val rawThreads = mutableListOf>()
 
                         messageIds.forEach { msgId ->
                             val rows = try {
                                 appDatabase.getThreadsForMessage(msgId)
                             } catch (_: Exception) {
-                                emptyList<Map<String, String>>()
+                                emptyList>()
                             }
                             rows.forEach { row ->
                                 val tid = row["id"] ?: return@forEach
@@ -1006,6 +1298,8 @@ class ChatActivity : AppCompatActivity() {
 
         selectedSourcePort = null
         selectedTargetPort = null
+        activePlugs.clear()
+        activeCables.clear()
 
         portClusters.values.forEach { cluster ->
             try { portsOverlay.removeView(cluster) } catch (_: Exception) { }
@@ -1017,6 +1311,8 @@ class ChatActivity : AppCompatActivity() {
 
         try {
             connectionLayerView.setConnections(emptyList())
+            connectionLayerView.clearPlugs()
+            connectionLayerView.clearCables()
             connectionLayerView.clearEndpoints()
         } catch (_: Exception) { }
 
@@ -2607,12 +2903,19 @@ class ChatActivity : AppCompatActivity() {
     private fun showThreadsBottomSheet() {
         val dialog = BottomSheetDialog(this)
         val listView = ListView(this)
+        val toggleLabel = if (plugsCableToolEnabled) {
+            "إلغاء تفعيل أداة القوابس والكابلات"
+        } else {
+            "تفعيل أداة القوابس والكابلات"
+        }
         val items = arrayOf(
             "إنشاء خيط لوني جديد",
             "ربط رسالتين بخيط",
             "عرض الخيوط اللونية",
             "إضافة ملاحظة إلى خيط",
-            "عرض ملاحظات خيط"
+            "عرض ملاحظات خيط",
+            toggleLabel,
+            "تخصيص القوابس والكابلات"
         )
         listView.adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, items)
         listView.setOnItemClickListener { _, _, position, _ ->
@@ -2623,6 +2926,15 @@ class ChatActivity : AppCompatActivity() {
                 2 -> showNodesListDialog()
                 3 -> showAddThreadAnnotationDialog()
                 4 -> showThreadAnnotationsDialog()
+                5 -> {
+                    val nextState = !plugsCableToolEnabled
+                    setPlugsAndCablesToolEnabled(nextState)
+                    showToast(
+                        if (nextState) "تم تفعيل أداة القوابس والكابلات"
+                        else "تم إلغاء تفعيل أداة القوابس والكابلات"
+                    )
+                }
+                6 -> showPlugsAndCablesToolDialog()
             }
         }
         dialog.setContentView(listView)
@@ -3177,7 +3489,7 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun applyCurrentTheme() {
-        val settings = getSharedPreferences("Settings", MODE_PRIVATE)
+        val settings = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         val rootLayout = findViewById<LinearLayout>(R.id.rootLayout)
         val previousTheme = themeColorHex
 
@@ -3372,7 +3684,7 @@ object DialogInitiativeProtocol {
         "$START_MARKER\n" +
         "[{\"kind\":\"FOLLOW_UP\",\"label\":\"عنوان زر قصير\",\"text\":\"النص الكامل الذي سيُرسل عند الضغط\"}]\n" +
         "$END_MARKER\n" +
-        "2) الأنواع المسموحة فقط: PERMISSION, MISSING_INFO, FOLLOW_UP, NEXT_STEP, CONTINUE_TASK.\n" +
+        "2) الأنواع المسموحة فقط: PERMISSION, MISSING_INFO, FOLLOW_UP, NEXT_STEP, CONTINUE_TASK.\n"
         "3) لا تضع أكثر من $MAX_INITIATIVES مبادرة، ولا تكرر المبادرة نفسها، ولا تضع الكتلة إذا لم تكن هناك حاجة حقيقية.\n" +
         "4) لا تكتب أي نص بعد $END_MARKER، ولا تُعِد كتابة الكتلة مرتين.\n" +
         "5) هذه المبادرات اقتراحات للمستخدم فقط، وليست أوامر تنفيذ تلقائية.\n" +
