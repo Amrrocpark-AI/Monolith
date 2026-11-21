@@ -1,5 +1,6 @@
 package com.monolith
 
+import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -7,13 +8,18 @@ import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
+import android.widget.EditText
 import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.PopupMenu
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.cardview.widget.CardView
@@ -24,6 +30,7 @@ import com.bumptech.glide.Glide
 import io.noties.markwon.Markwon
 import io.noties.markwon.ext.tables.TablePlugin
 import io.noties.markwon.ext.tables.TableTheme
+import java.util.LinkedHashMap
 
 /**
  * Monolith Conversation Graph UI
@@ -78,7 +85,8 @@ data class ToolPresentation(
 data class ExtractedCodeBlock(
     val index: Int,
     val language: String,
-    val code: String
+    val code: String,
+    val isClosed: Boolean = true
 )
 
 class ChatAdapter(
@@ -142,6 +150,11 @@ class ChatAdapter(
             )
             .build()
 
+    // Session-scoped working copies/snippets keyed by messageId + block index (never mutates msg.content).
+    private val workingCodeOverrides = mutableMapOf<String, String>()
+    private val workingLanguageOverrides = mutableMapOf<String, String>()
+    private val savedSnippets = LinkedHashMap<String, ExtractedCodeBlock>()
+
     companion object {
         private const val TYPE_USER = 1
         private const val TYPE_AI = 2
@@ -162,9 +175,6 @@ class ChatAdapter(
         private const val TAG_CODE_BLOCKS_CONTAINER = "monolith_code_blocks_container"
         private const val TAG_ACTIONS = "monolith_actions"
         private const val TAG_LEGEND = "monolith_legend"
-
-        private val FENCE_OPEN_REGEX = Regex("^[ \\t]*```([^\\n`]*)$")
-        private val FENCE_CLOSE_REGEX = Regex("^[ \\t]*```[ \\t]*$")
 
         private val DIFF_CALLBACK =
             object : DiffUtil.ItemCallback<ChatMessage>() {
@@ -395,7 +405,7 @@ class ChatAdapter(
 
             addView(toolsContainer)
 
-            // 6. Code blocks workspace actions container.
+            // 6. Code blocks interactive zones & contextual toolbars (hidden until interaction).
             val codeBlocksContainer = LinearLayout(context).apply {
                 tag = TAG_CODE_BLOCKS_CONTAINER
                 orientation = LinearLayout.VERTICAL
@@ -521,56 +531,159 @@ class ChatAdapter(
         }
     }
 
+    /**
+     * Markdown fenced code block parser tracking fence character (` or ~),
+     * opening fence length, matching closing fence (>= opening length),
+     * optional language info string, full block content in order, and
+     * unclosed fences through the end of the message without mutating input.
+     */
     private fun extractCodeBlocks(content: String): List<ExtractedCodeBlock> {
-        if (content.isEmpty() || !content.contains("```")) {
+        if (content.isEmpty() || (!content.contains("```") && !content.contains("~~~"))) {
             return emptyList()
         }
 
         val lines = content.split('\n')
         val result = mutableListOf<ExtractedCodeBlock>()
 
-        var insideBlock = false
+        var inFence = false
+        var fenceChar = '`'
+        var fenceLength = 0
         var currentLanguage = "Text"
         val currentLines = mutableListOf<String>()
 
-        for (line in lines) {
-            val normalizedLine = line.trimEnd('\r')
-            if (!insideBlock) {
-                val match = FENCE_OPEN_REGEX.matchEntire(normalizedLine)
-                if (match != null) {
-                    val rawLang = match.groupValues[1].trim()
-                    currentLanguage = rawLang.ifEmpty { "Text" }
+        for (rawLine in lines) {
+            val line = rawLine.trimEnd('\r')
+
+            if (!inFence) {
+                val openInfo = parseOpeningFence(line)
+                if (openInfo != null) {
+                    inFence = true
+                    fenceChar = openInfo.first
+                    fenceLength = openInfo.second
+                    currentLanguage = openInfo.third.ifEmpty { "Text" }
                     currentLines.clear()
-                    insideBlock = true
                 }
             } else {
-                if (FENCE_CLOSE_REGEX.matches(normalizedLine)) {
+                if (isClosingFence(line, fenceChar, fenceLength)) {
                     result.add(
                         ExtractedCodeBlock(
                             index = result.size + 1,
                             language = currentLanguage,
-                            code = currentLines.joinToString("\n")
+                            code = currentLines.joinToString("\n"),
+                            isClosed = true
                         )
                     )
-                    insideBlock = false
+                    inFence = false
+                    fenceLength = 0
                     currentLanguage = "Text"
                     currentLines.clear()
                 } else {
-                    currentLines.add(normalizedLine)
+                    currentLines.add(line)
                 }
             }
+        }
+
+        if (inFence) {
+            result.add(
+                ExtractedCodeBlock(
+                    index = result.size + 1,
+                    language = currentLanguage,
+                    code = currentLines.joinToString("\n"),
+                    isClosed = false
+                )
+            )
         }
 
         return result
     }
 
+    private fun parseOpeningFence(line: String): Triple<Char, Int, String>? {
+        var idx = 0
+        var spaces = 0
+        while (idx < line.length && spaces < 3 && (line[idx] == ' ' || line[idx] == '\t')) {
+            idx++
+            spaces++
+        }
+        if (idx >= line.length) return null
+
+        val candidateChar = line[idx]
+        if (candidateChar != '`' && candidateChar != '~') return null
+
+        var count = 0
+        while (idx < line.length && line[idx] == candidateChar) {
+            count++
+            idx++
+        }
+        if (count < 3) return null
+
+        val infoString = line.substring(idx).trim()
+        // CommonMark backtick info strings cannot contain backticks.
+        if (candidateChar == '`' && infoString.contains('`')) return null
+
+        val language = infoString.split(Regex("\\s+")).firstOrNull()?.trim().orEmpty()
+        return Triple(candidateChar, count, language)
+    }
+
+    private fun isClosingFence(
+        line: String,
+        fenceChar: Char,
+        minLength: Int
+    ): Boolean {
+        var idx = 0
+        var spaces = 0
+        while (idx < line.length && spaces < 3 && (line[idx] == ' ' || line[idx] == '\t')) {
+            idx++
+            spaces++
+        }
+        if (idx >= line.length || line[idx] != fenceChar) return false
+
+        var count = 0
+        while (idx < line.length && line[idx] == fenceChar) {
+            count++
+            idx++
+        }
+        if (count < minLength) return false
+
+        while (idx < line.length) {
+            if (line[idx] != ' ' && line[idx] != '\t') return false
+            idx++
+        }
+        return true
+    }
+
+    private fun blockKey(messageId: String, blockIndex: Int): String {
+        return "${messageId}::block::$blockIndex"
+    }
+
+    private fun resolveBlockCode(messageId: String, block: ExtractedCodeBlock): String {
+        return workingCodeOverrides[blockKey(messageId, block.index)] ?: block.code
+    }
+
+    private fun resolveBlockLanguage(messageId: String, block: ExtractedCodeBlock): String {
+        return workingLanguageOverrides[blockKey(messageId, block.index)] ?: block.language
+    }
+
+    private fun copyTextToClipboard(context: Context, label: String, text: String, toastMessage: String) {
+        val clipboard = context.getSystemService(
+            Context.CLIPBOARD_SERVICE
+        ) as ClipboardManager
+
+        clipboard.setPrimaryClip(
+            ClipData.newPlainText(label, text)
+        )
+
+        Toast.makeText(context, toastMessage, Toast.LENGTH_SHORT).show()
+    }
+
     private fun openInCodeWorkspace(
         context: Context,
         block: ExtractedCodeBlock,
-        message: ChatMessage? = null
+        message: ChatMessage? = null,
+        effectiveCode: String = block.code,
+        effectiveLanguage: String = block.language
     ) {
         val title = buildString {
-            append(block.language)
+            append(effectiveLanguage)
             append(" #")
             append(block.index)
             message?.id?.take(6)?.let { shortId ->
@@ -582,8 +695,8 @@ class ChatAdapter(
         }
 
         val intent = Intent(context, CodeWorkspaceActivity::class.java).apply {
-            putExtra(CodeWorkspaceActivity.EXTRA_CODE, block.code)
-            putExtra(CodeWorkspaceActivity.EXTRA_LANGUAGE, block.language)
+            putExtra(CodeWorkspaceActivity.EXTRA_CODE, effectiveCode)
+            putExtra(CodeWorkspaceActivity.EXTRA_LANGUAGE, effectiveLanguage)
             putExtra(CodeWorkspaceActivity.EXTRA_TITLE, title)
             if (context !is android.app.Activity) {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -645,6 +758,7 @@ class ChatAdapter(
 
         private var currentMessage: ChatMessage? = null
         private var renderedContent: String? = null
+        private var expandedBlockIndex: Int? = null
 
         init {
             copyButton.setOnClickListener {
@@ -663,6 +777,9 @@ class ChatAdapter(
         }
 
         fun bind(msg: ChatMessage) {
+            if (currentMessage?.id != msg.id) {
+                expandedBlockIndex = null
+            }
             currentMessage = msg
 
             val isUser = msg.role == MessageRole.USER
@@ -735,48 +852,64 @@ class ChatAdapter(
             codeBlocksContainer.removeAllViews()
 
             val blocks = if (msg.isThinking || msg.content.isBlank()) {
+                expandedBlockIndex = null
                 emptyList()
             } else {
                 extractCodeBlocks(msg.content)
             }
 
             if (blocks.isEmpty()) {
+                expandedBlockIndex = null
                 codeBlocksContainer.visibility = View.GONE
                 return
+            }
+
+            if (expandedBlockIndex != null && blocks.none { it.index == expandedBlockIndex }) {
+                expandedBlockIndex = null
             }
 
             codeBlocksContainer.visibility = View.VISIBLE
 
             blocks.forEach { block ->
+                val isExpanded = expandedBlockIndex == block.index
                 codeBlocksContainer.addView(
-                    createCodeBlockActionRow(root.context, msg, block)
+                    createCodeBlockItem(
+                        context = root.context,
+                        msg = msg,
+                        block = block,
+                        isExpanded = isExpanded,
+                        onToggleExpand = {
+                            expandedBlockIndex = if (expandedBlockIndex == block.index) {
+                                null
+                            } else {
+                                block.index
+                            }
+                            currentMessage?.let { bindCodeBlocks(it) }
+                        },
+                        onCloseTools = {
+                            if (expandedBlockIndex == block.index) {
+                                expandedBlockIndex = null
+                                currentMessage?.let { bindCodeBlocks(it) }
+                            }
+                        }
+                    )
                 )
             }
         }
 
-        private fun createCodeBlockActionRow(
+        private fun createCodeBlockItem(
             context: Context,
             msg: ChatMessage,
-            block: ExtractedCodeBlock
+            block: ExtractedCodeBlock,
+            isExpanded: Boolean,
+            onToggleExpand: () -> Unit,
+            onCloseTools: () -> Unit
         ): View {
+            val effectiveLanguage = resolveBlockLanguage(msg.id, block)
+            val effectiveCode = resolveBlockCode(msg.id, block)
+
             return LinearLayout(context).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-
-                background = roundedBackground(
-                    panelColor,
-                    dp(context, 12).toFloat(),
-                    accentColor,
-                    dp(context, 1)
-                )
-
-                setPadding(
-                    dp(context, 12),
-                    dp(context, 8),
-                    dp(context, 12),
-                    dp(context, 8)
-                )
-
+                orientation = LinearLayout.VERTICAL
                 layoutParams = LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT
@@ -784,56 +917,622 @@ class ChatAdapter(
                     bottomMargin = dp(context, 6)
                 }
 
-                val badge = TextView(context).apply {
-                    text = block.language
-                    textSize = 10f
-                    setTextColor(accentColor)
-                    setTypeface(null, Typeface.BOLD)
+                // Interaction trigger / compact preview zone (does not open Workspace directly).
+                val triggerRow = LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+
                     background = roundedBackground(
-                        Color.argb(30, 0, 212, 255),
-                        dp(context, 6).toFloat()
+                        panelColor,
+                        dp(context, 12).toFloat(),
+                        if (isExpanded) accentColor else borderColor,
+                        dp(context, 1)
                     )
+
                     setPadding(
-                        dp(context, 7),
-                        dp(context, 3),
-                        dp(context, 7),
-                        dp(context, 3)
+                        dp(context, 12),
+                        dp(context, 8),
+                        dp(context, 12),
+                        dp(context, 8)
                     )
-                }
 
-                val label = TextView(context).apply {
-                    text = "كتلة كود #${block.index}"
-                    textSize = 12f
-                    setTextColor(textColor)
-                    maxLines = 1
-                    layoutParams = LinearLayout.LayoutParams(
-                        0,
-                        ViewGroup.LayoutParams.WRAP_CONTENT,
-                        1f
-                    ).apply {
-                        marginStart = dp(context, 8)
-                        marginEnd = dp(context, 8)
+                    val badge = TextView(context).apply {
+                        text = effectiveLanguage
+                        textSize = 10f
+                        setTextColor(accentColor)
+                        setTypeface(null, Typeface.BOLD)
+                        background = roundedBackground(
+                            Color.argb(30, 0, 212, 255),
+                            dp(context, 6).toFloat()
+                        )
+                        setPadding(
+                            dp(context, 7),
+                            dp(context, 3),
+                            dp(context, 7),
+                            dp(context, 3)
+                        )
                     }
+
+                    val label = TextView(context).apply {
+                        val lineCount = effectiveCode.split('\n').size
+                        text = "كتلة كود #${block.index} ($lineCount سطر)"
+                        textSize = 12f
+                        setTextColor(textColor)
+                        maxLines = 1
+                        layoutParams = LinearLayout.LayoutParams(
+                            0,
+                            ViewGroup.LayoutParams.WRAP_CONTENT,
+                            1f
+                        ).apply {
+                            marginStart = dp(context, 8)
+                            marginEnd = dp(context, 8)
+                        }
+                    }
+
+                    val toggleHint = TextView(context).apply {
+                        text = if (isExpanded) "إخفاء الأدوات" else "أدوات الكود"
+                        textSize = 11f
+                        setTextColor(if (isExpanded) accentColor else mutedColor)
+                        setTypeface(null, Typeface.BOLD)
+                    }
+
+                    addView(badge)
+                    addView(label)
+                    addView(toggleHint)
+
+                    isClickable = true
+                    isFocusable = true
+                    setOnClickListener { onToggleExpand() }
                 }
 
-                val openAction = TextView(context).apply {
-                    text = "فتح في Workspace"
-                    textSize = 11f
-                    setTextColor(accentColor)
-                    setTypeface(null, Typeface.BOLD)
-                }
+                addView(triggerRow)
 
-                addView(badge)
-                addView(label)
-                addView(openAction)
-
-                isClickable = true
-                isFocusable = true
-
-                setOnClickListener {
-                    openInCodeWorkspace(context, block, msg)
+                // Contextual toolbar remains strictly hidden until this specific block is interacted with.
+                if (isExpanded) {
+                    addView(
+                        createCodeBlockToolsPanel(
+                            context = context,
+                            msg = msg,
+                            block = block,
+                            onCloseTools = onCloseTools
+                        )
+                    )
                 }
             }
+        }
+
+        private fun createCodeBlockToolsPanel(
+            context: Context,
+            msg: ChatMessage,
+            block: ExtractedCodeBlock,
+            onCloseTools: () -> Unit
+        ): View {
+            var currentCode = resolveBlockCode(msg.id, block)
+            var currentLanguage = resolveBlockLanguage(msg.id, block)
+            var showLineNumbers = false
+            var fontSizeSp = 12f
+            var codeTextColor = textColor
+            var codeBgColor = Color.rgb(8, 12, 25)
+            var isExpandedHeight = false
+
+            val panel = LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                background = roundedBackground(
+                    surfaceColor,
+                    dp(context, 12).toFloat(),
+                    accentColor,
+                    dp(context, 1)
+                )
+                setPadding(
+                    dp(context, 10),
+                    dp(context, 10),
+                    dp(context, 10),
+                    dp(context, 10)
+                )
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    topMargin = dp(context, 6)
+                }
+            }
+
+            val codePreview = TextView(context).apply {
+                textSize = fontSizeSp
+                setTextColor(codeTextColor)
+                typeface = Typeface.MONOSPACE
+                setPadding(
+                    dp(context, 10),
+                    dp(context, 8),
+                    dp(context, 10),
+                    dp(context, 8)
+                )
+                background = roundedBackground(
+                    codeBgColor,
+                    dp(context, 8).toFloat(),
+                    borderColor,
+                    dp(context, 1)
+                )
+                maxLines = 8
+                setTextIsSelectable(true)
+            }
+
+            fun refreshCodePreview() {
+                codePreview.textSize = fontSizeSp
+                codePreview.setTextColor(codeTextColor)
+                codePreview.background = roundedBackground(
+                    codeBgColor,
+                    dp(context, 8).toFloat(),
+                    borderColor,
+                    dp(context, 1)
+                )
+                codePreview.maxLines = if (isExpandedHeight) Int.MAX_VALUE else 8
+                codePreview.text = if (showLineNumbers) {
+                    currentCode.split('\n').mapIndexed { idx, line ->
+                        "${idx + 1} | $line"
+                    }.joinToString("\n")
+                } else {
+                    currentCode
+                }
+            }
+
+            refreshCodePreview()
+            panel.addView(codePreview)
+
+            val chipsScroll = HorizontalScrollView(context).apply {
+                isHorizontalScrollBarEnabled = false
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    topMargin = dp(context, 8)
+                }
+            }
+
+            val chipsRow = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+
+            fun addToolChip(title: String, tint: Int = textColor, onClick: () -> Unit) {
+                val chip = TextView(context).apply {
+                    text = title
+                    textSize = 11f
+                    setTextColor(tint)
+                    setTypeface(null, Typeface.BOLD)
+                    background = roundedBackground(
+                        panelColor,
+                        dp(context, 8).toFloat(),
+                        borderColor,
+                        dp(context, 1)
+                    )
+                    setPadding(
+                        dp(context, 10),
+                        dp(context, 6),
+                        dp(context, 10),
+                        dp(context, 6)
+                    )
+                    layoutParams = LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                    ).apply {
+                        marginEnd = dp(context, 6)
+                    }
+                    isClickable = true
+                    isFocusable = true
+                    setOnClickListener { onClick() }
+                }
+                chipsRow.addView(chip)
+            }
+
+            // 1. نسخ الكود كاملاً
+            addToolChip("1. نسخ الكود كاملاً", accentColor) {
+                copyTextToClipboard(
+                    context = context,
+                    label = "MonolithCodeBlock",
+                    text = currentCode,
+                    toastMessage = "تم نسخ الكود كاملاً"
+                )
+            }
+
+            // 2. تحرير الكود
+            addToolChip("2. تحرير الكود") {
+                showEditCodeBlockDialog(
+                    context = context,
+                    initialCode = currentCode,
+                    onSave = { edited ->
+                        currentCode = edited
+                        workingCodeOverrides[blockKey(msg.id, block.index)] = edited
+                        refreshCodePreview()
+                        Toast.makeText(context, "تم تحديث نسخة الكود المحلية", Toast.LENGTH_SHORT).show()
+                    }
+                )
+            }
+
+            // 3. تحليل الكود
+            addToolChip("3. تحليل الكود") {
+                showCodeAnalysisDialog(context, currentLanguage, currentCode)
+            }
+
+            // 4. توسيع مساحة الكود
+            addToolChip("4. توسيع مساحة الكود") {
+                isExpandedHeight = !isExpandedHeight
+                refreshCodePreview()
+                Toast.makeText(
+                    context,
+                    if (isExpandedHeight) "تم توسيع مساحة عرض الكود" else "تم تقليص مساحة عرض الكود",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+
+            // 5. تغيير لغة البرمجة
+            addToolChip("5. تغيير لغة البرمجة") {
+                showChangeLanguageDialog(
+                    context = context,
+                    currentLanguage = currentLanguage,
+                    onLanguageSelected = { newLang ->
+                        currentLanguage = newLang.ifBlank { "Text" }
+                        workingLanguageOverrides[blockKey(msg.id, block.index)] = currentLanguage
+                        currentMessage?.let { bindCodeBlocks(it) }
+                        Toast.makeText(context, "اللغة: $currentLanguage", Toast.LENGTH_SHORT).show()
+                    }
+                )
+            }
+
+            // 6. تخصيص حجم الخط والألوان
+            addToolChip("6. حجم الخط والألوان") {
+                showAppearanceDialog(
+                    context = context,
+                    currentFontSizeSp = fontSizeSp,
+                    currentBgColor = codeBgColor,
+                    currentFgColor = codeTextColor,
+                    onApply = { newSize, newBg, newFg ->
+                        fontSizeSp = newSize
+                        codeBgColor = newBg
+                        codeTextColor = newFg
+                        refreshCodePreview()
+                    }
+                )
+            }
+
+            // 7. إظهار أرقام الأسطر
+            addToolChip("7. أرقام الأسطر") {
+                showLineNumbers = !showLineNumbers
+                refreshCodePreview()
+                Toast.makeText(
+                    context,
+                    if (showLineNumbers) "تم إظهار أرقام الأسطر" else "تم إخفاء أرقام الأسطر",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+
+            // 8. تحديد جزء من الكود ونسخه
+            addToolChip("8. تحديد ونسخ جزء") {
+                showSelectPartialCodeDialog(context, currentCode)
+            }
+
+            // 9. مقارنة نسختين من الكود
+            addToolChip("9. مقارنة نسختين") {
+                showCompareVersionsDialog(
+                    context = context,
+                    originalCode = block.code,
+                    currentCode = currentCode
+                )
+            }
+
+            // 10. حفظ الكود كمقتطف مستقل
+            addToolChip("10. حفظ كمقتطف") {
+                val key = blockKey(msg.id, block.index)
+                savedSnippets[key] = ExtractedCodeBlock(
+                    index = block.index,
+                    language = currentLanguage,
+                    code = currentCode,
+                    isClosed = block.isClosed
+                )
+                Toast.makeText(context, "تم حفظ الكود كمقتطف مستقل", Toast.LENGTH_SHORT).show()
+            }
+
+            // AI 1. شرح الكود (غير مربوط بمحرك فعلي في المحول)
+            addToolChip("AI: شرح الكود", purpleColor) {
+                showUnboundAiActionNotice(
+                    context = context,
+                    actionName = "شرح الكود",
+                    language = currentLanguage,
+                    code = currentCode
+                )
+            }
+
+            // AI 2. إصلاح الأخطاء (غير مربوط بمحرك فعلي في المحول)
+            addToolChip("AI: إصلاح الأخطاء", purpleColor) {
+                showUnboundAiActionNotice(
+                    context = context,
+                    actionName = "إصلاح الأخطاء",
+                    language = currentLanguage,
+                    code = currentCode
+                )
+            }
+
+            // AI 3. تحسين الكود وإعادة هيكلته (غير مربوط بمحرك فعلي في المحول)
+            addToolChip("AI: تحسين وإعادة هيكلة", purpleColor) {
+                showUnboundAiActionNotice(
+                    context = context,
+                    actionName = "تحسين الكود وإعادة هيكلته",
+                    language = currentLanguage,
+                    code = currentCode
+                )
+            }
+
+            // فتح في CodeWorkspaceActivity
+            addToolChip("فتح في Workspace", accentColor) {
+                openInCodeWorkspace(
+                    context = context,
+                    block = block,
+                    message = msg,
+                    effectiveCode = currentCode,
+                    effectiveLanguage = currentLanguage
+                )
+            }
+
+            // إغلاق الأدوات
+            addToolChip("إغلاق", mutedColor) {
+                onCloseTools()
+            }
+
+            chipsScroll.addView(chipsRow)
+            panel.addView(chipsScroll)
+
+            return panel
+        }
+
+        private fun showEditCodeBlockDialog(
+            context: Context,
+            initialCode: String,
+            onSave: (String) -> Unit
+        ) {
+            val input = EditText(context).apply {
+                setText(initialCode)
+                setTextColor(Color.WHITE)
+                typeface = Typeface.MONOSPACE
+                textSize = 12f
+                minLines = 6
+                gravity = Gravity.TOP or Gravity.START
+                setPadding(dp(context, 12), dp(context, 12), dp(context, 12), dp(context, 12))
+            }
+
+            AlertDialog.Builder(context)
+                .setTitle("تحرير كتلة الكود")
+                .setView(input)
+                .setPositiveButton("حفظ") { _, _ ->
+                    onSave(input.text.toString())
+                }
+                .setNegativeButton("إلغاء", null)
+                .show()
+        }
+
+        private fun showCodeAnalysisDialog(
+            context: Context,
+            language: String,
+            code: String
+        ) {
+            val lines = code.split('\n')
+            val nonEmptyLines = lines.count { it.isNotBlank() }
+            val charCount = code.length
+            val summary = buildString {
+                append("اللغة: ").append(language).append('\n')
+                append("إجمالي الأسطر: ").append(lines.size).append('\n')
+                append("الأسطر غير الفارغة: ").append(nonEmptyLines).append('\n')
+                append("عدد الأحرف: ").append(charCount)
+            }
+
+            AlertDialog.Builder(context)
+                .setTitle("تحليل الكود")
+                .setMessage(summary)
+                .setPositiveButton("حسناً", null)
+                .show()
+        }
+
+        private fun showChangeLanguageDialog(
+            context: Context,
+            currentLanguage: String,
+            onLanguageSelected: (String) -> Unit
+        ) {
+            val presets = arrayOf("Text", "kotlin", "java", "python", "xml", "json", "javascript", "sql")
+            val input = EditText(context).apply {
+                setText(currentLanguage)
+                setTextColor(Color.WHITE)
+                hint = "اسم اللغة (مثال: kotlin أو Text)"
+                setSingleLine(true)
+            }
+
+            val container = LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(context, 16), dp(context, 12), dp(context, 16), dp(context, 8))
+                addView(input)
+            }
+
+            AlertDialog.Builder(context)
+                .setTitle("تغيير لغة البرمجة")
+                .setView(container)
+                .setItems(presets) { _, which ->
+                    onLanguageSelected(presets[which])
+                }
+                .setPositiveButton("تطبيق") { _, _ ->
+                    onLanguageSelected(input.text.toString().trim())
+                }
+                .setNegativeButton("إلغاء", null)
+                .show()
+        }
+
+        private fun showAppearanceDialog(
+            context: Context,
+            currentFontSizeSp: Float,
+            currentBgColor: Int,
+            currentFgColor: Int,
+            onApply: (Float, Int, Int) -> Unit
+        ) {
+            val sizes = arrayOf("11 sp", "12 sp", "14 sp", "16 sp")
+            val sizeValues = floatArrayOf(11f, 12f, 14f, 16f)
+            val themes = arrayOf(
+                "داكن أزرق (افتراضي)" to (Color.rgb(8, 12, 25) to Color.rgb(235, 241, 255)),
+                "داكن محايد" to (Color.rgb(18, 18, 20) to Color.rgb(240, 240, 240)),
+                "تباين عالٍ" to (Color.BLACK to Color.WHITE)
+            )
+
+            var chosenSize = currentFontSizeSp
+            var chosenBg = currentBgColor
+            var chosenFg = currentFgColor
+
+            val layout = LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(context, 16), dp(context, 12), dp(context, 16), dp(context, 8))
+            }
+
+            val sizeLabel = TextView(context).apply {
+                text = "حجم الخط: ${chosenSize.toInt()} sp"
+                setTextColor(textColor)
+                setPadding(0, 0, 0, dp(context, 6))
+            }
+            layout.addView(sizeLabel)
+
+            sizes.forEachIndexed { idx, label ->
+                layout.addView(
+                    Button(context).apply {
+                        text = label
+                        setOnClickListener {
+                            chosenSize = sizeValues[idx]
+                            sizeLabel.text = "حجم الخط: ${chosenSize.toInt()} sp"
+                        }
+                    }
+                )
+            }
+
+            val themeLabel = TextView(context).apply {
+                text = "نظام الألوان"
+                setTextColor(textColor)
+                setPadding(0, dp(context, 10), 0, dp(context, 6))
+            }
+            layout.addView(themeLabel)
+
+            themes.forEach { (name, pair) ->
+                layout.addView(
+                    Button(context).apply {
+                        text = name
+                        setOnClickListener {
+                            chosenBg = pair.first
+                            chosenFg = pair.second
+                        }
+                    }
+                )
+            }
+
+            AlertDialog.Builder(context)
+                .setTitle("تخصيص حجم الخط والألوان")
+                .setView(layout)
+                .setPositiveButton("تطبيق") { _, _ ->
+                    onApply(chosenSize, chosenBg, chosenFg)
+                }
+                .setNegativeButton("إلغاء", null)
+                .show()
+        }
+
+        private fun showSelectPartialCodeDialog(
+            context: Context,
+            code: String
+        ) {
+            val input = EditText(context).apply {
+                setText(code)
+                setTextColor(Color.WHITE)
+                typeface = Typeface.MONOSPACE
+                textSize = 12f
+                minLines = 5
+                setPadding(dp(context, 12), dp(context, 12), dp(context, 12), dp(context, 12))
+            }
+
+            val copySelectionBtn = Button(context).apply {
+                text = "نسخ التحديد الحالي"
+                setOnClickListener {
+                    val start = input.selectionStart.coerceAtLeast(0)
+                    val end = input.selectionEnd.coerceAtLeast(0)
+                    val lo = minOf(start, end)
+                    val hi = maxOf(start, end)
+                    val selected = if (hi > lo && hi <= input.text.length) {
+                        input.text.subSequence(lo, hi).toString()
+                    } else {
+                        input.text.toString()
+                    }
+                    copyTextToClipboard(
+                        context = context,
+                        label = "MonolithPartialCode",
+                        text = selected,
+                        toastMessage = "تم نسخ الجزء المحدد"
+                    )
+                }
+            }
+
+            val layout = LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(input)
+                addView(copySelectionBtn)
+            }
+
+            input.addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+                override fun afterTextChanged(s: Editable?) = Unit
+            })
+
+            AlertDialog.Builder(context)
+                .setTitle("تحديد جزء من الكود ونسخه")
+                .setView(layout)
+                .setPositiveButton("إغلاق", null)
+                .show()
+        }
+
+        private fun showCompareVersionsDialog(
+            context: Context,
+            originalCode: String,
+            currentCode: String
+        ) {
+            val isIdentical = originalCode == currentCode
+            val comparisonText = if (isIdentical) {
+                "النسخة الحالية مطابقة تماماً للنسخة الأصلية المستخرجة من الرسالة.\n\n--- الكود ---\n$currentCode"
+            } else {
+                "تم تعديل النسخة الحالية عن النسخة الأصلية.\n\n--- النسخة الأصلية ---\n$originalCode\n\n--- النسخة الحالية ---\n$currentCode"
+            }
+
+            val scroll = ScrollView(context).apply {
+                addView(
+                    TextView(context).apply {
+                        text = comparisonText
+                        textSize = 11f
+                        setTextColor(textColor)
+                        typeface = Typeface.MONOSPACE
+                        setPadding(dp(context, 16), dp(context, 12), dp(context, 16), dp(context, 12))
+                    }
+                )
+            }
+
+            AlertDialog.Builder(context)
+                .setTitle("مقارنة نسختين من الكود")
+                .setView(scroll)
+                .setPositiveButton("حسناً", null)
+                .show()
+        }
+
+        private fun showUnboundAiActionNotice(
+            context: Context,
+            actionName: String,
+            language: String,
+            code: String
+        ) {
+            AlertDialog.Builder(context)
+                .setTitle(actionName)
+                .setMessage(
+                    "إجراء «$actionName» غير مربوط بمحرك ذكاء اصطناعي فعلي داخل ChatAdapter ولم يتم تنفيذه.\n" +
+                        "اللغة: $language • طول الكود: ${code.length} حرف."
+                )
+                .setPositiveButton("حسناً", null)
+                .show()
         }
 
         private fun bindRelations(msg: ChatMessage) {
@@ -1361,6 +2060,7 @@ class ChatAdapter(
 
         fun recycle() {
             currentMessage = null
+            expandedBlockIndex = null
 
             for (index in 0 until imageContainer.childCount) {
                 val image =
