@@ -595,7 +595,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
     private fun queryMaps(
         sql: String,
         args: Array<String>? = null
-    ): List<Map<String, String>>
+        ): List<Map<String, String>> {
         val result = mutableListOf<Map<String, String>>()
         val db = readableDatabase
 
@@ -1499,7 +1499,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
         insertReplace("skills", values)
     }
 
-    fun getAllSkills(): List<Map<String, String>>
+        fun getAllSkills(): List<Map<String, String>> {
         return queryMaps(
             "SELECT * FROM skills ORDER BY success_count DESC"
         )
@@ -1729,7 +1729,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
     fun getWorkspaceItemsByTag(
         tagId: String,
         lifecycleState: String? = WORKSPACE_STATE_ACTIVE
-    ): List<Map<String, String>>
+        ): List<Map<String, String>> {
         return if (lifecycleState.isNullOrBlank()) {
             queryMaps(
                 """
