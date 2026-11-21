@@ -1,12 +1,17 @@
-
 package com.monolith.graph.ports.views
 
 import android.content.Context
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.PointF
+import android.graphics.RectF
 import android.util.AttributeSet
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import com.monolith.graph.ports.models.*
 import kotlin.math.max
+import kotlin.math.roundToInt
 
 class PortClusterView @JvmOverloads constructor(
     context: Context,
@@ -17,6 +22,19 @@ class PortClusterView @JvmOverloads constructor(
         val view: PortView,
         val label: String
     )
+
+    private data class ContentBounds(
+        val left: Int,
+        val top: Int,
+        val width: Int,
+        val height: Int
+    ) {
+        val right: Int
+            get() = left + width
+
+        val bottom: Int
+            get() = top + height
+    }
 
     var ownerId: String = ""
         set(value) {
@@ -42,32 +60,74 @@ class PortClusterView @JvmOverloads constructor(
     private fun dp(value: Float): Int =
         (value * density).toInt()
 
+    private fun dpF(value: Float): Float =
+        value * density
+
     /*
      * ChatActivity positions the cluster 17dp
      * outside the card on every side.
      *
-     * The reserved space must match that offset.
-     * PortView is centered on the card boundary;
-     * its outer portion extends beyond that boundary.
+     * The padding must match that offset so that
+     * the content rectangle corresponds exactly
+     * to the card rectangle.
      */
     private val portOutset: Int
         get() = dp(17f)
 
+    // ---------------------------------------------------------
+    // Mechanical edge chassis paints
+    // ---------------------------------------------------------
+
+    private val railBodyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = 0xFF111B29.toInt()
+    }
+
+    private val railRimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = dpF(1.15f)
+        color = 0xFF697D91.toInt()
+    }
+
+    private val railGroovePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = 0xFF050B14.toInt()
+    }
+
+    private val railHighlightPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = dpF(0.8f)
+        color = 0xFFB5C8D9.toInt()
+        alpha = 145
+    }
+
+    private val railSeamPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = 0xFF02060D.toInt()
+    }
+
+    private val railReflectionPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = Color.WHITE
+        alpha = 45
+    }
+
+    private val railOuterRect = RectF()
+    private val railInnerRect = RectF()
+    private val railGrooveRect = RectF()
+
     init {
         clipChildren = false
         clipToPadding = false
+        setWillNotDraw(false)
 
         updateReservedSpace()
     }
 
-    /*
-     * The padding defines the actual card rectangle
-     * inside this cluster.
-     *
-     * edgeInset is included in the reserved area so
-     * the connector center remains symmetric on all
-     * four sides.
-     */
+    // ---------------------------------------------------------
+    // Reserved card area
+    // ---------------------------------------------------------
+
     private fun updateReservedSpace() {
         val inset = dp(
             config.edgeInsetDp.coerceAtLeast(0f)
@@ -80,6 +140,286 @@ class PortClusterView @JvmOverloads constructor(
             reserved,
             reserved,
             reserved
+        )
+    }
+
+    private fun getContentBounds(
+        left: Int,
+        top: Int,
+        right: Int,
+        bottom: Int
+    ): ContentBounds {
+        return ContentBounds(
+            left = paddingLeft,
+            top = paddingTop,
+            width = (
+                right - left - paddingLeft - paddingRight
+            ).coerceAtLeast(0),
+            height = (
+                bottom - top - paddingTop - paddingBottom
+            ).coerceAtLeast(0)
+        )
+    }
+
+    // ---------------------------------------------------------
+    // Mechanical edge chassis drawing
+    // ---------------------------------------------------------
+
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+
+        if (ports.isEmpty()) return
+
+        val content = getContentBounds(
+            left = left,
+            top = top,
+            right = right,
+            bottom = bottom
+        )
+
+        if (
+            content.width <= 0 ||
+            content.height <= 0
+        ) {
+            return
+        }
+
+        val cornerClearance = dpF(12f)
+
+        /*
+         * Draw only the sides that actually contain
+         * ports. Each side gets one continuous rail,
+         * rather than independent floating bases.
+         */
+
+        if (hasPorts(PortSide.LEFT)) {
+            drawVerticalRail(
+                canvas = canvas,
+                centerX = content.left.toFloat(),
+                top = content.top + cornerClearance,
+                bottom = content.bottom - cornerClearance,
+                outerDirection = -1f
+            )
+        }
+
+        if (hasPorts(PortSide.RIGHT)) {
+            drawVerticalRail(
+                canvas = canvas,
+                centerX = content.right.toFloat(),
+                top = content.top + cornerClearance,
+                bottom = content.bottom - cornerClearance,
+                outerDirection = 1f
+            )
+        }
+
+        if (hasPorts(PortSide.TOP)) {
+            drawHorizontalRail(
+                canvas = canvas,
+                centerY = content.top.toFloat(),
+                left = content.left + cornerClearance,
+                right = content.right - cornerClearance,
+                outerDirection = -1f
+            )
+        }
+
+        if (hasPorts(PortSide.BOTTOM)) {
+            drawHorizontalRail(
+                canvas = canvas,
+                centerY = content.bottom.toFloat(),
+                left = content.left + cornerClearance,
+                right = content.right - cornerClearance,
+                outerDirection = 1f
+            )
+        }
+    }
+
+    private fun hasPorts(side: PortSide): Boolean =
+        ports.values.any {
+            it.view.portSide == side
+        }
+
+    private fun drawVerticalRail(
+        canvas: Canvas,
+        centerX: Float,
+        top: Float,
+        bottom: Float,
+        outerDirection: Float
+    ) {
+        if (bottom <= top) return
+
+        val halfWidth = dpF(4.2f)
+        val innerHalfWidth = dpF(2.6f)
+
+        railOuterRect.set(
+            centerX - halfWidth,
+            top,
+            centerX + halfWidth,
+            bottom
+        )
+
+        // Main structural rail.
+        canvas.drawRoundRect(
+            railOuterRect,
+            dpF(2.2f),
+            dpF(2.2f),
+            railBodyPaint
+        )
+
+        // Metallic outer rim.
+        canvas.drawRoundRect(
+            railOuterRect,
+            dpF(2.2f),
+            dpF(2.2f),
+            railRimPaint
+        )
+
+        // Recessed central channel.
+        railInnerRect.set(
+            centerX - innerHalfWidth,
+            top + dpF(2f),
+            centerX + innerHalfWidth,
+            bottom - dpF(2f)
+        )
+
+        canvas.drawRoundRect(
+            railInnerRect,
+            dpF(1.2f),
+            dpF(1.2f),
+            railGroovePaint
+        )
+
+        // Narrow internal groove.
+        val seamX = centerX +
+            outerDirection * dpF(0.7f)
+
+        railGrooveRect.set(
+            seamX - dpF(0.45f),
+            top + dpF(5f),
+            seamX + dpF(0.45f),
+            bottom - dpF(5f)
+        )
+
+        canvas.drawRoundRect(
+            railGrooveRect,
+            dpF(0.4f),
+            dpF(0.4f),
+            railSeamPaint
+        )
+
+        // Outer metallic reflection.
+        val highlightX = centerX -
+            outerDirection * dpF(2.8f)
+
+        canvas.drawLine(
+            highlightX,
+            top + dpF(4f),
+            highlightX,
+            bottom - dpF(4f),
+            railHighlightPaint
+        )
+
+        // Subtle opposite-side reflection.
+        val reflectionX = centerX +
+            outerDirection * dpF(2.8f)
+
+        canvas.drawLine(
+            reflectionX,
+            top + dpF(5f),
+            reflectionX,
+            bottom - dpF(5f),
+            railReflectionPaint
+        )
+    }
+
+    private fun drawHorizontalRail(
+        canvas: Canvas,
+        centerY: Float,
+        left: Float,
+        right: Float,
+        outerDirection: Float
+    ) {
+        if (right <= left) return
+
+        val halfHeight = dpF(4.2f)
+        val innerHalfHeight = dpF(2.6f)
+
+        railOuterRect.set(
+            left,
+            centerY - halfHeight,
+            right,
+            centerY + halfHeight
+        )
+
+        // Main structural rail.
+        canvas.drawRoundRect(
+            railOuterRect,
+            dpF(2.2f),
+            dpF(2.2f),
+            railBodyPaint
+        )
+
+        // Metallic outer rim.
+        canvas.drawRoundRect(
+            railOuterRect,
+            dpF(2.2f),
+            dpF(2.2f),
+            railRimPaint
+        )
+
+        // Recessed central channel.
+        railInnerRect.set(
+            left + dpF(2f),
+            centerY - innerHalfHeight,
+            right - dpF(2f),
+            centerY + innerHalfHeight
+        )
+
+        canvas.drawRoundRect(
+            railInnerRect,
+            dpF(1.2f),
+            dpF(1.2f),
+            railGroovePaint
+        )
+
+        // Narrow internal groove.
+        val seamY = centerY +
+            outerDirection * dpF(0.7f)
+
+        railGrooveRect.set(
+            left + dpF(5f),
+            seamY - dpF(0.45f),
+            right - dpF(5f),
+            seamY + dpF(0.45f)
+        )
+
+        canvas.drawRoundRect(
+            railGrooveRect,
+            dpF(0.4f),
+            dpF(0.4f),
+            railSeamPaint
+        )
+
+        // Metallic reflection.
+        val highlightY = centerY -
+            outerDirection * dpF(2.8f)
+
+        canvas.drawLine(
+            left + dpF(4f),
+            highlightY,
+            right - dpF(4f),
+            highlightY,
+            railHighlightPaint
+        )
+
+        val reflectionY = centerY +
+            outerDirection * dpF(2.8f)
+
+        canvas.drawLine(
+            left + dpF(5f),
+            reflectionY,
+            right - dpF(5f),
+            reflectionY,
+            railReflectionPaint
         )
     }
 
@@ -152,6 +492,7 @@ class PortClusterView @JvmOverloads constructor(
         )
 
         addView(port)
+
         requestLayout()
         invalidate()
 
@@ -174,6 +515,7 @@ class PortClusterView @JvmOverloads constructor(
         val entry = ports.remove(portId) ?: return
 
         entry.view.onPortClick = null
+
         removeView(entry.view)
 
         refreshIds()
@@ -255,6 +597,7 @@ class PortClusterView @JvmOverloads constructor(
         shape: PortShape
     ) {
         ports[portId]?.view?.shape = shape
+
         requestLayout()
         invalidate()
     }
@@ -286,7 +629,9 @@ class PortClusterView @JvmOverloads constructor(
         if (ports.isEmpty()) return
 
         val entries = ports.values.toList()
-        val rebuilt = LinkedHashMap<String, PortEntry>()
+
+        val rebuilt =
+            LinkedHashMap<String, PortEntry>()
 
         val indexes = mutableMapOf<PortSide, Int>()
 
@@ -349,6 +694,13 @@ class PortClusterView @JvmOverloads constructor(
             widthMeasureSpec,
             heightMeasureSpec
         )
+
+        ports.values.forEach { entry ->
+            val port = entry.view
+            if (port.measuredWidth <= 0 || port.measuredHeight <= 0) {
+                measureChild(port, widthMeasureSpec, heightMeasureSpec)
+            }
+        }
     }
 
     // ---------------------------------------------------------
@@ -362,60 +714,72 @@ class PortClusterView @JvmOverloads constructor(
         right: Int,
         bottom: Int
     ) {
-        val contentLeft = paddingLeft
-        val contentTop = paddingTop
-
-        val contentWidth = (
-            right - left -
-                paddingLeft -
-                paddingRight
-            ).coerceAtLeast(0)
-
-        val contentHeight = (
-            bottom - top -
-                paddingTop -
-                paddingBottom
-            ).coerceAtLeast(0)
-
-        layoutSide(
-            side = PortSide.LEFT,
-            width = contentWidth,
-            height = contentHeight,
-            offsetX = contentLeft,
-            offsetY = contentTop
+        val content = getContentBounds(
+            left = left,
+            top = top,
+            right = right,
+            bottom = bottom
         )
 
-        layoutSide(
-            side = PortSide.RIGHT,
-            width = contentWidth,
-            height = contentHeight,
-            offsetX = contentLeft,
-            offsetY = contentTop
+        PortSide.values().forEach { side ->
+            layoutSide(
+                side = side,
+                content = content
+            )
+        }
+    }
+
+    private fun getSocketCenter(
+        port: PortView
+    ): PointF {
+        return port.getSocketCenter()
+    }
+
+    private fun calculatePortPosition(
+        side: PortSide,
+        port: PortView,
+        content: ContentBounds,
+        edgeCenter: Int
+    ): Pair<Int, Int> {
+        val socketCenter = getSocketCenter(port)
+        val inset = dp(
+            config.edgeInsetDp.coerceAtLeast(0f)
         )
 
-        layoutSide(
-            side = PortSide.TOP,
-            width = contentWidth,
-            height = contentHeight,
-            offsetX = contentLeft,
-            offsetY = contentTop
-        )
+        val targetSocketX: Float
+        val targetSocketY: Float
 
-        layoutSide(
-            side = PortSide.BOTTOM,
-            width = contentWidth,
-            height = contentHeight,
-            offsetX = contentLeft,
-            offsetY = contentTop
-        )
+        when (side) {
+            PortSide.LEFT -> {
+                targetSocketX = (content.left - inset).toFloat()
+                targetSocketY = edgeCenter.toFloat()
+            }
+
+            PortSide.RIGHT -> {
+                targetSocketX = (content.right + inset).toFloat()
+                targetSocketY = edgeCenter.toFloat()
+            }
+
+            PortSide.TOP -> {
+                targetSocketX = edgeCenter.toFloat()
+                targetSocketY = (content.top - inset).toFloat()
+            }
+
+            PortSide.BOTTOM -> {
+                targetSocketX = edgeCenter.toFloat()
+                targetSocketY = (content.bottom + inset).toFloat()
+            }
+        }
+
+        val portX = (targetSocketX - socketCenter.x).roundToInt()
+        val portY = (targetSocketY - socketCenter.y).roundToInt()
+
+        return Pair(portX, portY)
     }
 
     private fun layoutSide(
         side: PortSide,
-        width: Int,
-        height: Int,
-        offsetX: Int,
-        offsetY: Int
+        content: ContentBounds
     ) {
         val sidePorts = ports.values
             .map { it.view }
@@ -428,7 +792,7 @@ class PortClusterView @JvmOverloads constructor(
                 side == PortSide.RIGHT
 
         val availableSpace =
-            if (horizontalEdge) height else width
+            if (horizontalEdge) content.height else content.width
 
         if (availableSpace <= 0) {
             sidePorts.forEach {
@@ -472,80 +836,34 @@ class PortClusterView @JvmOverloads constructor(
             requestedSpacing = effectiveSpacing
         )
 
-        val inset = dp(
-            config.edgeInsetDp.coerceAtLeast(0f)
-        )
+        val edgeOrigin =
+            if (horizontalEdge) content.top else content.left
 
         sidePorts.forEachIndexed { index, port ->
             val portWidth = port.measuredWidth
             val portHeight = port.measuredHeight
+            val edgeCenter = edgeOrigin + centers[index]
 
-            val center = centers[index]
-
-            val x: Int
-            val y: Int
-
-            when (side) {
-                PortSide.LEFT -> {
-                    x = offsetX -
-                        portWidth / 2 -
-                        inset
-
-                    y = offsetY +
-                        center -
-                        portHeight / 2
-                }
-
-                PortSide.RIGHT -> {
-                    x = offsetX +
-                        width -
-                        portWidth / 2 +
-                        inset
-
-                    y = offsetY +
-                        center -
-                        portHeight / 2
-                }
-
-                PortSide.TOP -> {
-                    x = offsetX +
-                        center -
-                        portWidth / 2
-
-                    y = offsetY -
-                        portHeight / 2 -
-                        inset
-                }
-
-                PortSide.BOTTOM -> {
-                    x = offsetX +
-                        center -
-                        portWidth / 2
-
-                    y = offsetY +
-                        height -
-                        portHeight / 2 +
-                        inset
-                }
-            }
+            val (portX, portY) = calculatePortPosition(
+                side = side,
+                port = port,
+                content = content,
+                edgeCenter = edgeCenter
+            )
 
             port.layout(
-                x,
-                y,
-                x + portWidth,
-                y + portHeight
+                portX,
+                portY,
+                portX + portWidth,
+                portY + portHeight
             )
         }
     }
 
-    /*
-     * Calculates evenly distributed connector centers.
-     *
-     * Each connector keeps its own measured footprint.
-     * When the requested spacing fits, it is preserved.
-     * Otherwise the ports are distributed across the
-     * available edge without arbitrary one-sided offsets.
-     */
+    // ---------------------------------------------------------
+    // Port distribution
+    // ---------------------------------------------------------
+
     private fun calculateCenters(
         extents: List<Int>,
         availableSpace: Int,
@@ -584,10 +902,12 @@ class PortClusterView @JvmOverloads constructor(
         }
 
         /*
-         * When the edge is too short, distribute
-         * centers proportionally while keeping the
-         * first and last connectors inside the edge.
+         * When the requested spacing does not fit,
+         * distribute the centers over the available
+         * edge while preserving the first and last
+         * connector center offsets.
          */
+
         val halfFirst = extents.first() / 2f
         val halfLast = extents.last() / 2f
 
