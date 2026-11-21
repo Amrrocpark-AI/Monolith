@@ -365,7 +365,7 @@ class CodeWorkspaceActivity : AppCompatActivity() {
         root.addView(header)
 
         root.addView(label("CODE WORKSPACE", 10f, accentColor, true))
-        root.addView(label("مساحة العمل البرمجية", 13f, mutedColor, false))
+        root.addView(label("مساحة العمل البرمجة", 13f, mutedColor, false))
 
         metaSummaryLabel = label("", 11f, mutedColor, false)
         root.addView(metaSummaryLabel)
@@ -661,6 +661,7 @@ class CodeWorkspaceActivity : AppCompatActivity() {
                 return
             }
 
+            // Item already exists in database
             val hasCodeChange = currentCode != originalCode
             val currentItemRow = db.getWorkspaceCodeItem(existingId)
             val titleChanged = (currentItemRow?.get("title") ?: "") != cleanTitle
@@ -832,6 +833,8 @@ class CodeWorkspaceActivity : AppCompatActivity() {
         val restoredContent = versionMap["content"].orEmpty()
         val restoredLang = versionMap["language"]?.takeIf { it.isNotBlank() } ?: currentLanguage
 
+        // Exit read-only preview and load content as a pending edit against originalCode
+        // so saving creates a new version while preserving history.
         currentLanguage = restoredLang
         isReadOnlyVersion = false
         viewedVersionNumber = null
