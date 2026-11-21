@@ -82,6 +82,9 @@ class ConnectionLayerView @JvmOverloads constructor(
 
     private var selectedId: String? = null
     private var pressedConnectionId: String? = null
+    private var draggingPlugId: String? = null
+    private var dragOffsetX = 0f
+    private var dragOffsetY = 0f
 
     private var wiresVisible = true
     private var glowEnabled = true
@@ -95,6 +98,7 @@ class ConnectionLayerView @JvmOverloads constructor(
 
     var onConnectionSelected: ((WireConnection) -> Unit)? = null
     var onConnectionUpdated: ((WireConnection) -> Unit)? = null
+    var onPlugMoved: ((plugId: String, position: PointF) -> Unit)? = null
 
     init {
         setWillNotDraw(false)
@@ -113,6 +117,9 @@ class ConnectionLayerView @JvmOverloads constructor(
         items.forEach { plug ->
             plugs[plug.id] = plug
         }
+        if (draggingPlugId !in plugs.keys) {
+            draggingPlugId = null
+        }
         rebuildPaths()
         invalidate()
     }
@@ -125,12 +132,32 @@ class ConnectionLayerView @JvmOverloads constructor(
 
     fun removePlug(plugId: String) {
         plugs.remove(plugId)
+        if (draggingPlugId == plugId) {
+            draggingPlugId = null
+        }
         rebuildPaths()
         invalidate()
     }
 
     fun clearPlugs() {
         plugs.clear()
+        draggingPlugId = null
+        rebuildPaths()
+        invalidate()
+    }
+
+    fun detachPlug(plugId: String) {
+        val current = plugs[plugId] ?: return
+        val pos = resolvePlugPosition(current)
+        plugs[plugId] = current.copy(x = pos.x, y = pos.y)
+        rebuildPaths()
+        invalidate()
+    }
+
+    fun attachPlugToSocket(plugId: String, portId: String) {
+        val current = plugs[plugId] ?: return
+        val socketCenter = endpoints[portId] ?: return
+        plugs[plugId] = current.copy(x = socketCenter.x, y = socketCenter.y)
         rebuildPaths()
         invalidate()
     }
@@ -212,6 +239,7 @@ class ConnectionLayerView @JvmOverloads constructor(
 
     fun updateEndpoint(portId: String, x: Float, y: Float) {
         endpoints[portId] = PointF(x, y)
+        syncAttachedPlugsToSocket(portId, PointF(x, y))
         rebuildPaths()
         invalidate()
     }
@@ -219,6 +247,7 @@ class ConnectionLayerView @JvmOverloads constructor(
     fun updateEndpoints(points: Map<String, PointF>) {
         points.forEach { (id, point) ->
             endpoints[id] = PointF(point.x, point.y)
+            syncAttachedPlugsToSocket(id, point)
         }
 
         rebuildPaths()
@@ -243,80 +272,43 @@ class ConnectionLayerView @JvmOverloads constructor(
         invalidate()
     }
 
-    // ---------------------------------------------------------
-    // Settings
-    // ---------------------------------------------------------
-
-    fun setWiresVisible(value: Boolean) {
-        if (wiresVisible == value) return
-
-        wiresVisible = value
-        updateAnimations()
-        invalidate()
+    private fun syncAttachedPlugsToSocket(portId: String, socketPos: PointF) {
+        val socketAnchor = endpoints[portId] ?: socketPos
+        plugs.entries.forEach { (id, plug) ->
+            val dist = hypot(plug.x - socketAnchor.x, plug.y - socketAnchor.y)
+            if (dist <= dp(2f) && id != draggingPlugId) {
+                plugs[id] = plug.copy(x = socketAnchor.x, y = socketAnchor.y)
+            }
+        }
     }
 
-    fun areWiresVisible(): Boolean = wiresVisible
+    private fun findNearestSocketAnchor(position: PointF): Pair<String, PointF>? {
+        val snapRadius = dp(24f)
+        var best: Pair<String, PointF>? = null
+        var bestDist = snapRadius
 
-    fun setGlowEnabled(value: Boolean) {
-        glowEnabled = value
-        invalidate()
-    }
+        endpoints.forEach { (portId, point) ->
+            val d = hypot(position.x - point.x, position.y - point.y)
+            if (d <= bestDist) {
+                bestDist = d
+                best = Pair(portId, PointF(point.x, point.y))
+            }
+        }
 
-    fun setAnimationEnabled(value: Boolean) {
-        if (animationEnabled == value) return
-
-        animationEnabled = value
-        updateAnimations()
-        invalidate()
-    }
-
-    fun setDirectionVisible(value: Boolean) {
-        directionVisible = value
-        invalidate()
-    }
-
-    fun setControlPointsVisible(value: Boolean) {
-        controlPointsVisible = value
-        invalidate()
-    }
-
-    // ---------------------------------------------------------
-    // Connection editing
-    // ---------------------------------------------------------
-
-    fun updateControlPoints(
-        id: String,
-        first: PointF,
-        second: PointF
-    ) {
-        val old = connections[id] ?: return
-
-        val updated = old.copy(
-            control1 = PointF(first.x, first.y),
-            control2 = PointF(second.x, second.y)
-        )
-
-        connections[id] = updated
-
-        rebuildPaths()
-        onConnectionUpdated?.invoke(updated)
-        invalidate()
-    }
-
-    fun updateConnectionColor(id: String, color: Int) {
-        val old = connections[id] ?: return
-
-        connections[id] = old.copy(color = color)
-        invalidate()
+        return best
     }
 
     // ---------------------------------------------------------
     // Path construction
     // ---------------------------------------------------------
 
+    private fun resolvePlugPosition(plug: PlugSpec): PointF {
+        return PointF(plug.x, plug.y)
+    }
+
     private fun resolveEndpointAnchor(id: String): PointF? {
         plugs[id]?.let { plug ->
-            return PointF(plug.x, plug.y)
+            return resolvePlugPosition(plug)
         }
         return endpoints[id]
     }
@@ -490,8 +482,9 @@ class ConnectionLayerView @JvmOverloads constructor(
         canvas: Canvas,
         plug: PlugSpec
     ) {
+        val pos = resolvePlugPosition(plug)
         val save = canvas.save()
-        canvas.translate(plug.x, plug.y)
+        canvas.translate(pos.x, pos.y)
         canvas.rotate(plug.angleDeg)
 
         val pinLen = dp(6f)
@@ -849,6 +842,7 @@ class ConnectionLayerView @JvmOverloads constructor(
         progress.clear()
 
         pressedConnectionId = null
+        draggingPlugId = null
         touchMoved = false
 
         super.onDetachedFromWindow()
@@ -858,6 +852,18 @@ class ConnectionLayerView @JvmOverloads constructor(
     // Touch interaction
     // ---------------------------------------------------------
 
+    private fun findPlugAt(x: Float, y: Float): PlugSpec? {
+        val hitRadius = dp(18f)
+        val candidates = plugs.values.toList().asReversed()
+        for (plug in candidates) {
+            val pos = resolvePlugPosition(plug)
+            if (hypot(x - pos.x, y - pos.y) <= hitRadius) {
+                return plug
+            }
+        }
+        return null
+    }
+
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.actionMasked) {
 
@@ -866,18 +872,43 @@ class ConnectionLayerView @JvmOverloads constructor(
                 downY = event.y
 
                 touchMoved = false
+                pressedConnectionId = null
+                draggingPlugId = null
 
-                pressedConnectionId =
-                    if (wiresVisible) {
-                        findConnectionAt(event.x, event.y)?.id
-                    } else {
-                        null
-                    }
+                if (!wiresVisible) {
+                    return false
+                }
 
+                val hitPlug = findPlugAt(event.x, event.y)
+                if (hitPlug != null) {
+                    val pos = resolvePlugPosition(hitPlug)
+                    draggingPlugId = hitPlug.id
+                    dragOffsetX = pos.x - event.x
+                    dragOffsetY = pos.y - event.y
+                    return true
+                }
+
+                pressedConnectionId = findConnectionAt(event.x, event.y)?.id
                 return pressedConnectionId != null
             }
 
             MotionEvent.ACTION_MOVE -> {
+                val plugId = draggingPlugId
+                if (plugId != null) {
+                    val plug = plugs[plugId] ?: return false
+                    if (hypot(event.x - downX, event.y - downY) > touchSlop) {
+                        touchMoved = true
+                    }
+                    val nextX = event.x + dragOffsetX
+                    val nextY = event.y + dragOffsetY
+                    val updated = plug.copy(x = nextX, y = nextY)
+                    plugs[plugId] = updated
+                    rebuildPaths()
+                    invalidate()
+                    onPlugMoved?.invoke(plugId, PointF(nextX, nextY))
+                    return true
+                }
+
                 if (pressedConnectionId == null) {
                     return false
                 }
@@ -893,6 +924,26 @@ class ConnectionLayerView @JvmOverloads constructor(
             }
 
             MotionEvent.ACTION_UP -> {
+                val plugId = draggingPlugId
+                if (plugId != null) {
+                    draggingPlugId = null
+                    val plug = plugs[plugId]
+                    if (plug != null) {
+                        val currentPos = resolvePlugPosition(plug)
+                        val snapped = findNearestSocketAnchor(currentPos)
+                        val finalPos = snapped?.second ?: currentPos
+                        val updated = plug.copy(x = finalPos.x, y = finalPos.y)
+                        plugs[plugId] = updated
+                        rebuildPaths()
+                        invalidate()
+                        onPlugMoved?.invoke(plugId, PointF(finalPos.x, finalPos.y))
+                    }
+                    if (!touchMoved) {
+                        performClick()
+                    }
+                    return true
+                }
+
                 val pressedId = pressedConnectionId
                 pressedConnectionId = null
 
@@ -931,12 +982,13 @@ class ConnectionLayerView @JvmOverloads constructor(
 
             MotionEvent.ACTION_CANCEL -> {
                 pressedConnectionId = null
+                draggingPlugId = null
                 touchMoved = false
                 return true
             }
 
             else -> {
-                return pressedConnectionId != null
+                return pressedConnectionId != null || draggingPlugId != null
             }
         }
     }
