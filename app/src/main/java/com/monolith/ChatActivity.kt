@@ -1200,7 +1200,7 @@ class ChatActivity : AppCompatActivity() {
                             val rows = try {
                                 appDatabase.getThreadsForMessage(msgId)
                             } catch (_: Exception) {
-                                emptyList>()[span_3](start_span)[span_3](end_span)
+                                emptyList<Map<String, String>>()
                             }
                             rows.forEach { row ->
                                 val tid = row["id"] ?: return@forEach
