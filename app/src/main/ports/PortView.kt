@@ -7,6 +7,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.PointF
 import android.graphics.RectF
+import android.text.TextPaint
 import android.text.TextUtils
 import android.util.AttributeSet
 import android.view.View
@@ -86,7 +87,7 @@ class PortView @JvmOverloads constructor(
         value * density
 
     private fun sp(value: Float): Float =
-        value * resources.scaledDensity
+        value * resources.displayMetrics.scaledDensity
 
     private val bodyPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -96,7 +97,7 @@ class PortView @JvmOverloads constructor(
     private val ledPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val badgeBgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val badgeBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val badgeTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    private val badgeTextPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
         textAlign = Paint.Align.CENTER
     }
 
