@@ -265,6 +265,16 @@ class ConnectionLayerView @JvmOverloads constructor(
     }
 
     fun removeEndpoint(portId: String) {
+        plugs.entries.forEach { (id, plug) ->
+            if (plug.attachedPortId == portId) {
+                val pos = resolvePlugPosition(plug)
+                plugs[id] = plug.copy(
+                    x = pos.x,
+                    y = pos.y,
+                    attachedPortId = null
+                )
+            }
+        }
         endpoints.remove(portId)
         rebuildPaths()
         invalidate()
@@ -328,10 +338,8 @@ class ConnectionLayerView @JvmOverloads constructor(
     }
 
     private fun resolveCableEndpointAnchor(id: String): PointF? {
-        plugs[id]?.let { plug ->
-            return resolvePlugPosition(plug)
-        }
-        return endpoints[id]
+        val plug = plugs[id] ?: return null
+        return resolvePlugPosition(plug)
     }
 
     private fun getControlPoints(
