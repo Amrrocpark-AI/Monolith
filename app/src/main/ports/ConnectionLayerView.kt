@@ -711,10 +711,10 @@ class ConnectionLayerView @JvmOverloads constructor(
         canvas: Canvas,
         connection: WireConnection
     ) {
-        val start = endpoints[connection.sourcePortId]
+        val start = resolveEndpointAnchor(connection.sourcePortId)
             ?: return
 
-        val end = endpoints[connection.targetPortId]
+        val end = resolveEndpointAnchor(connection.targetPortId)
             ?: return
 
         val (first, second) = getControlPoints(
