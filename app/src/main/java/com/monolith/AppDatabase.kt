@@ -1942,7 +1942,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
     fun getWorkspaceCodeItems(
         lifecycleState: String = WORKSPACE_STATE_ACTIVE,
         folderId: String? = null
-    ): List> {
+    ): List<Map<String, String>>
         val normalizedState = normalizeWorkspaceState(lifecycleState)
         return if (folderId == null) {
             queryMaps(
@@ -2153,7 +2153,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
 
     fun getThreadsForMessage(
         messageId: String
-    ): List> {
+    ): List<Map<String, String>>
         return queryMaps(
             """
             SELECT * FROM message_threads
