@@ -3,7 +3,6 @@ package com.monolith.graph.ports.layout
 import android.graphics.PointF
 import android.view.View
 import com.monolith.graph.ports.models.PortEndpoint
-import com.monolith.graph.ports.models.PortSide
 import com.monolith.graph.ports.views.PortClusterView
 
 class PortEndpointRegistry {
@@ -13,9 +12,6 @@ class PortEndpointRegistry {
 
     private val plugEndpoints =
         LinkedHashMap<String, PortEndpoint>()
-
-    private fun dp(view: View, value: Float): Float =
-        value * view.resources.displayMetrics.density
 
     /**
      * Updates all fixed socket endpoints belonging to a cluster.
@@ -52,38 +48,7 @@ class PortEndpointRegistry {
             val portLocation = IntArray(2)
             port.getLocationOnScreen(portLocation)
 
-            val edgeInset = dp(port, 3f)
-
-            val localPoint = when (port.portSide) {
-
-                PortSide.RIGHT -> {
-                    PointF(
-                        port.width.toFloat() - edgeInset,
-                        port.height / 2f
-                    )
-                }
-
-                PortSide.LEFT -> {
-                    PointF(
-                        edgeInset,
-                        port.height / 2f
-                    )
-                }
-
-                PortSide.TOP -> {
-                    PointF(
-                        port.width / 2f,
-                        edgeInset
-                    )
-                }
-
-                PortSide.BOTTOM -> {
-                    PointF(
-                        port.width / 2f,
-                        port.height.toFloat() - edgeInset
-                    )
-                }
-            }
+            val localPoint = port.getSocketCenter()
 
             val x =
                 portLocation[0] -
