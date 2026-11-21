@@ -2386,7 +2386,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
 
     fun getManagedTask(
         taskId: String
-    ): Map<String, String>? {
+    ): List<Map<String, String>> {
         return queryMaps(
             "SELECT * FROM agent_tasks WHERE id = ?",
             arrayOf(taskId)
