@@ -149,7 +149,11 @@ class ConnectionLayerView @JvmOverloads constructor(
     fun detachPlug(plugId: String) {
         val current = plugs[plugId] ?: return
         val pos = resolvePlugPosition(current)
-        plugs[plugId] = current.copy(x = pos.x, y = pos.y)
+        plugs[plugId] = current.copy(
+            x = pos.x,
+            y = pos.y,
+            attachedPortId = null
+        )
         rebuildPaths()
         invalidate()
     }
@@ -157,7 +161,11 @@ class ConnectionLayerView @JvmOverloads constructor(
     fun attachPlugToSocket(plugId: String, portId: String) {
         val current = plugs[plugId] ?: return
         val socketCenter = endpoints[portId] ?: return
-        plugs[plugId] = current.copy(x = socketCenter.x, y = socketCenter.y)
+        plugs[plugId] = current.copy(
+            x = socketCenter.x,
+            y = socketCenter.y,
+            attachedPortId = portId
+        )
         rebuildPaths()
         invalidate()
     }
@@ -238,16 +246,18 @@ class ConnectionLayerView @JvmOverloads constructor(
     // ---------------------------------------------------------
 
     fun updateEndpoint(portId: String, x: Float, y: Float) {
-        endpoints[portId] = PointF(x, y)
-        syncAttachedPlugsToSocket(portId, PointF(x, y))
+        val anchor = PointF(x, y)
+        endpoints[portId] = anchor
+        syncAttachedPlugsToSocket(portId, anchor)
         rebuildPaths()
         invalidate()
     }
 
     fun updateEndpoints(points: Map<String, PointF>) {
         points.forEach { (id, point) ->
-            endpoints[id] = PointF(point.x, point.y)
-            syncAttachedPlugsToSocket(id, point)
+            val anchor = PointF(point.x, point.y)
+            endpoints[id] = anchor
+            syncAttachedPlugsToSocket(id, anchor)
         }
 
         rebuildPaths()
@@ -272,12 +282,13 @@ class ConnectionLayerView @JvmOverloads constructor(
         invalidate()
     }
 
-    private fun syncAttachedPlugsToSocket(portId: String, socketPos: PointF) {
-        val socketAnchor = endpoints[portId] ?: socketPos
+    private fun syncAttachedPlugsToSocket(portId: String, socketAnchor: PointF) {
         plugs.entries.forEach { (id, plug) ->
-            val dist = hypot(plug.x - socketAnchor.x, plug.y - socketAnchor.y)
-            if (dist <= dp(2f) && id != draggingPlugId) {
-                plugs[id] = plug.copy(x = socketAnchor.x, y = socketAnchor.y)
+            if (plug.attachedPortId == portId && id != draggingPlugId) {
+                plugs[id] = plug.copy(
+                    x = socketAnchor.x,
+                    y = socketAnchor.y
+                )
             }
         }
     }
@@ -303,10 +314,20 @@ class ConnectionLayerView @JvmOverloads constructor(
     // ---------------------------------------------------------
 
     private fun resolvePlugPosition(plug: PlugSpec): PointF {
-        return PointF(plug.x, plug.y)
+        val attachedPortId = plug.attachedPortId
+            ?: return PointF(plug.x, plug.y)
+
+        val socketCenter = endpoints[attachedPortId]
+            ?: return PointF(plug.x, plug.y)
+
+        return PointF(socketCenter.x, socketCenter.y)
     }
 
     private fun resolveEndpointAnchor(id: String): PointF? {
+        return endpoints[id]
+    }
+
+    private fun resolveCableEndpointAnchor(id: String): PointF? {
         plugs[id]?.let { plug ->
             return resolvePlugPosition(plug)
         }
@@ -397,10 +418,10 @@ class ConnectionLayerView @JvmOverloads constructor(
         }
 
         cables.values.forEach { cable ->
-            val start = resolveEndpointAnchor(cable.sourcePlugId)
+            val start = resolveCableEndpointAnchor(cable.sourcePlugId)
                 ?: return@forEach
 
-            val end = cable.targetPlugId?.let { resolveEndpointAnchor(it) }
+            val end = cable.targetPlugId?.let { resolveCableEndpointAnchor(it) }
                 ?: PointF(start.x + dp(46f), start.y + dp(28f))
 
             val (first, second) = getCableControlPoints(
@@ -899,13 +920,18 @@ class ConnectionLayerView @JvmOverloads constructor(
                     if (hypot(event.x - downX, event.y - downY) > touchSlop) {
                         touchMoved = true
                     }
+                    val currentPosition = resolvePlugPosition(plug)
                     val nextX = event.x + dragOffsetX
                     val nextY = event.y + dragOffsetY
-                    val updated = plug.copy(x = nextX, y = nextY)
+                    val updated = plug.copy(
+                        x = if (touchMoved) nextX else currentPosition.x,
+                        y = if (touchMoved) nextY else currentPosition.y,
+                        attachedPortId = if (touchMoved) null else plug.attachedPortId
+                    )
                     plugs[plugId] = updated
                     rebuildPaths()
                     invalidate()
-                    onPlugMoved?.invoke(plugId, PointF(nextX, nextY))
+                    onPlugMoved?.invoke(plugId, PointF(updated.x, updated.y))
                     return true
                 }
 
@@ -931,12 +957,23 @@ class ConnectionLayerView @JvmOverloads constructor(
                     if (plug != null) {
                         val currentPos = resolvePlugPosition(plug)
                         val snapped = findNearestSocketAnchor(currentPos)
-                        val finalPos = snapped?.second ?: currentPos
-                        val updated = plug.copy(x = finalPos.x, y = finalPos.y)
+                        val updated = if (snapped != null) {
+                            plug.copy(
+                                x = snapped.second.x,
+                                y = snapped.second.y,
+                                attachedPortId = snapped.first
+                            )
+                        } else {
+                            plug.copy(
+                                x = currentPos.x,
+                                y = currentPos.y,
+                                attachedPortId = null
+                            )
+                        }
                         plugs[plugId] = updated
                         rebuildPaths()
                         invalidate()
-                        onPlugMoved?.invoke(plugId, PointF(finalPos.x, finalPos.y))
+                        onPlugMoved?.invoke(plugId, PointF(updated.x, updated.y))
                     }
                     if (!touchMoved) {
                         performClick()
