@@ -1793,12 +1793,16 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
                 put("updated_at", now)
             }
 
-            db.insertWithOnConflict(
+            val insertedItemId = db.insertWithOnConflict(
                 "workspace_code_items",
                 null,
                 itemValues,
-                SQLiteDatabase.CONFLICT_REPLACE
+                SQLiteDatabase.CONFLICT_ABORT
             )
+
+            check(insertedItemId != -1L) {
+                "Failed to create workspace code item"
+            }
 
             val versionValues = ContentValues().apply {
                 put("id", versionId)
@@ -1811,12 +1815,16 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
                 put("created_at", now)
             }
 
-            db.insertWithOnConflict(
+            val insertedVersionId = db.insertWithOnConflict(
                 "workspace_code_versions",
                 null,
                 versionValues,
-                SQLiteDatabase.CONFLICT_REPLACE
+                SQLiteDatabase.CONFLICT_ABORT
             )
+
+            check(insertedVersionId != -1L) {
+                "Failed to create initial workspace code version"
+            }
 
             db.setTransactionSuccessful()
             return itemId
@@ -1886,12 +1894,16 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
                 put("created_at", now)
             }
 
-            db.insertWithOnConflict(
+            val insertedVersionId = db.insertWithOnConflict(
                 "workspace_code_versions",
                 null,
                 versionValues,
-                SQLiteDatabase.CONFLICT_REPLACE
+                SQLiteDatabase.CONFLICT_ABORT
             )
+
+            check(insertedVersionId != -1L) {
+                "Failed to insert workspace code version $nextVersion"
+            }
 
             val itemUpdateValues = ContentValues().apply {
                 put("current_version", nextVersion)
