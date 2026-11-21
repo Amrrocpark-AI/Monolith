@@ -90,6 +90,23 @@ class ConnectionLayerView @JvmOverloads constructor(
     private var glowEnabled = true
     private var animationEnabled = true
     private var directionVisible = true
+
+    fun setGlowEnabled(enabled: Boolean) {
+        glowEnabled = enabled
+        invalidate()
+    }
+
+    fun setAnimationEnabled(enabled: Boolean) {
+        animationEnabled = enabled
+        updateAnimations()
+        invalidate()
+    }
+
+    fun setDirectionVisible(visible: Boolean) {
+        directionVisible = visible
+        invalidate()
+    }
+
     private var controlPointsVisible = false
 
     private var downX = 0f
