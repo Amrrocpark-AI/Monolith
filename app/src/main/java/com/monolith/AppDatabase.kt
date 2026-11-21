@@ -1993,7 +1993,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
         ).firstOrNull()
     }
 
-    fun getWorkspaceCodeVersionHistory(itemId: String): List> {
+    fun getWorkspaceCodeVersionHistory(itemId: String): List<Map<String, String>>
         if (itemId.isBlank()) return emptyList()
         return queryMaps(
             """
@@ -2127,7 +2127,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
         insertReplace("chromatic_nodes", values)
     }
 
-    fun getAllChromaticNodes(): List> {
+    fun getAllChromaticNodes(): List<Map<String, String>>
         return queryMaps("SELECT * FROM chromatic_nodes")
     }
 
