@@ -1,12 +1,15 @@
-
 #include <jni.h>
 #include <string>
 #include <vector>
 #include <mutex>
 #include <memory>
 #include <cstdint>
+#include <cstddef>
+#include <cstdlib>
 #include <limits>
 #include <new>
+#include <algorithm>
+#include <stdexcept>
 
 #include <android/log.h>
 
@@ -41,6 +44,15 @@ static constexpr int VISION_THREADS = 4;
 
 static constexpr int MAX_OUTPUT_TOKENS = 256;
 static constexpr uint64_t MAX_IMAGE_PIXELS = 16ULL * 1024ULL * 1024ULL;
+
+// ==========================================
+// Motion Detection State (Protected by motion_mutex)
+// ==========================================
+
+static std::mutex motion_mutex;
+static std::vector<uint8_t> previousFrame;
+static int prevWidth = 0;
+static int prevHeight = 0;
 
 // ==========================================
 // Error Helpers
@@ -255,6 +267,140 @@ Java_com_monolith_VisionProcessor_nativeInitVision(
         releaseVisionResources();
 
         return JNI_FALSE;
+    }
+}
+
+// ==========================================
+// Peripheral Change Detection (processFrame)
+// ==========================================
+
+extern "C" JNIEXPORT jstring JNICALL
+
+Java_com_monolith_VisionProcessor_processFrame(
+    JNIEnv* env,
+    jobject,
+    jobject byteBuffer,
+    jint width,
+    jint height
+) {
+    if (env == nullptr) {
+        return nullptr;
+    }
+
+    if (byteBuffer == nullptr) {
+        return env->NewStringUTF("[]");
+    }
+
+    if (width <= 0 || height <= 0) {
+        return env->NewStringUTF("[]");
+    }
+
+    const uint64_t w64 = static_cast<uint64_t>(width);
+    const uint64_t h64 = static_cast<uint64_t>(height);
+    const uint64_t bytesPerPixel = 4ULL;
+
+    if (w64 > std::numeric_limits<uint64_t>::max() / h64) {
+        return env->NewStringUTF("[]");
+    }
+
+    const uint64_t pixelCount64 = w64 * h64;
+    if (pixelCount64 > std::numeric_limits<uint64_t>::max() / bytesPerPixel) {
+        return env->NewStringUTF("[]");
+    }
+
+    const uint64_t requiredBytes64 = pixelCount64 * bytesPerPixel;
+    if (requiredBytes64 > static_cast<uint64_t>(std::numeric_limits<size_t>::max())) {
+        return env->NewStringUTF("[]");
+    }
+
+    void* bufferAddress = env->GetDirectBufferAddress(byteBuffer);
+    const jlong bufferCapacity = env->GetDirectBufferCapacity(byteBuffer);
+
+    if (bufferAddress == nullptr ||
+        bufferCapacity < 0 ||
+        static_cast<uint64_t>(bufferCapacity) < requiredBytes64) {
+        return env->NewStringUTF("[]");
+    }
+
+    const size_t frameSize = static_cast<size_t>(requiredBytes64);
+    const uint8_t* currentPixels = static_cast<const uint8_t*>(bufferAddress);
+    const int frameW = static_cast<int>(width);
+    const int frameH = static_cast<int>(height);
+
+    constexpr int blockSize = 16;
+    constexpr int diffThreshold = 30;
+    constexpr size_t maxRegions = 10;
+
+    std::lock_guard<std::mutex> lock(motion_mutex);
+
+    try {
+        std::vector<uint8_t> nextFrame(frameSize);
+        std::copy_n(currentPixels, frameSize, nextFrame.begin());
+
+        const bool dimensionsChanged =
+            (prevWidth != frameW) ||
+            (prevHeight != frameH) ||
+            (previousFrame.size() != frameSize);
+
+        if (dimensionsChanged) {
+            previousFrame = std::move(nextFrame);
+            prevWidth = frameW;
+            prevHeight = frameH;
+            return env->NewStringUTF("[]");
+        }
+
+        std::string json = "[";
+        size_t regionCount = 0;
+
+        for (int by = 0; by < frameH && regionCount < maxRegions; by += blockSize) {
+            const int cellH = std::min(blockSize, frameH - by);
+
+            for (int bx = 0; bx < frameW && regionCount < maxRegions; bx += blockSize) {
+                const int cellW = std::min(blockSize, frameW - bx);
+
+                uint64_t diffSum = 0;
+                uint64_t cellPixels = 0;
+
+                for (int y = by; y < by + cellH; ++y) {
+                    const size_t rowOffset =
+                        static_cast<size_t>(y) * static_cast<size_t>(frameW) * 4ULL;
+
+                    for (int x = bx; x < bx + cellW; ++x) {
+                        const size_t idx = rowOffset + static_cast<size_t>(x) * 4ULL;
+                        const int currVal = static_cast<int>(nextFrame[idx]);
+                        const int prevVal = static_cast<int>(previousFrame[idx]);
+                        diffSum += static_cast<uint64_t>(std::abs(currVal - prevVal));
+                        ++cellPixels;
+                    }
+                }
+
+                if (cellPixels > 0 &&
+                    (diffSum / cellPixels) > static_cast<uint64_t>(diffThreshold)) {
+                    if (regionCount > 0) {
+                        json += ",";
+                    }
+                    json += "{\"x\":" + std::to_string(bx) +
+                            ",\"y\":" + std::to_string(by) +
+                            ",\"w\":" + std::to_string(cellW) +
+                            ",\"h\":" + std::to_string(cellH) + "}";
+                    ++regionCount;
+                }
+            }
+        }
+
+        json += "]";
+
+        previousFrame = std::move(nextFrame);
+        prevWidth = frameW;
+        prevHeight = frameH;
+
+        return env->NewStringUTF(json.c_str());
+
+    } catch (...) {
+        previousFrame.clear();
+        prevWidth = 0;
+        prevHeight = 0;
+        return env->NewStringUTF("[]");
     }
 }
 
