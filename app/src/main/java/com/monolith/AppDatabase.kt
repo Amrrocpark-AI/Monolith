@@ -595,8 +595,8 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
     private fun queryMaps(
         sql: String,
         args: Array<String>? = null
-    ): List<Map<String, String>> {
-        val result = mutableListOf<Map<String, String>>()
+    ): List> {
+        val result = mutableListOf>()
         val db = readableDatabase
 
         db.rawQuery(sql, args).use { cursor ->
