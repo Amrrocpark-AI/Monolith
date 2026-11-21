@@ -455,7 +455,7 @@ class ChatActivity : AppCompatActivity() {
         imagePreviewContainer = findViewById(R.id.imagePreviewContainer)
         previewListContainer = findViewById(R.id.previewListContainer)
 
-        // عناصر سجل المحادثات
+        // عناصر سجل المحادثات (من activity_chat.xml)
         conversationHistoryPopup = findViewById(R.id.conversationHistoryPopup)
         conversationHistoryList = findViewById(R.id.conversationHistoryList)
         conversationHistoryScroll = findViewById(R.id.conversationHistoryScroll)
@@ -592,7 +592,7 @@ class ChatActivity : AppCompatActivity() {
             clipToPadding = false
             isClickable = false
             isFocusable = false
-            visibility = if (plugsCableToolEnabled) View.VISIBLE else View.GONE
+            visibility = View.VISIBLE
         }
 
         connectionLayerView = ConnectionLayerView(this).apply {
@@ -638,6 +638,8 @@ class ChatActivity : AppCompatActivity() {
 
         if (!portsSystemReady || !::portsOverlay.isInitialized) return
 
+        portsOverlay.visibility = View.VISIBLE
+
         if (!enabled) {
             activePlugs.clear()
             activeCables.clear()
@@ -645,11 +647,14 @@ class ChatActivity : AppCompatActivity() {
                 connectionLayerView.clearPlugs()
                 connectionLayerView.clearCables()
             } catch (_: Exception) { }
-            portsOverlay.visibility = View.GONE
+            applyConnectionsToLayer()
+            refreshPortStates()
+            schedulePortsUpdate()
             return
         }
 
-        portsOverlay.visibility = View.VISIBLE
+        applyConnectionsToLayer()
+        refreshPortStates()
         syncPlugsAndCablesForCurrentState()
         schedulePortsUpdate()
     }
@@ -1195,12 +1200,12 @@ class ChatActivity : AppCompatActivity() {
                         val nodesById = nodesList.associateBy { it["id"] ?: "" }
 
                         val seenThreadIds = mutableSetOf<String>()
-                        val rawThreads = mutableListOf<Map<String, String>>()
+                        val rawThreads = mutableListOf>()
                         messageIds.forEach { msgId ->
                             val rows = try {
                                 appDatabase.getThreadsForMessage(msgId)
                             } catch (_: Exception) {
-                                emptyList<Map<String, String>>()
+                                emptyList>()
                             }
                             rows.forEach { row ->
                                 val tid = row["id"] ?: return@forEach
