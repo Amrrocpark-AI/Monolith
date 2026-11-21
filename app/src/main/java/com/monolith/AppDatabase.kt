@@ -27,6 +27,13 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
         /** معرّف المحادثة الرئيسية المحمية من الحذف الاعتيادي. */
         const val MAIN_CONVERSATION_ID = "main_chat"
 
+        const val WORKSPACE_STATE_ACTIVE = "ACTIVE"
+        const val WORKSPACE_STATE_ARCHIVED = "ARCHIVED"
+        const val WORKSPACE_STATE_TRASHED = "TRASHED"
+
+        const val WORKSPACE_SOURCE_MANUAL = "MANUAL"
+        const val WORKSPACE_SOURCE_AI = "AI"
+
         private fun createCoreTables(db: SQLiteDatabase) {
 
             db.execSQL("""
@@ -286,6 +293,109 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
             """)
         }
 
+        private fun ensureCodeWorkspaceTables(db: SQLiteDatabase) {
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS workspace_folders (
+                    id TEXT PRIMARY KEY,
+                    parent_id TEXT,
+                    name TEXT NOT NULL,
+                    description TEXT,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL,
+                    FOREIGN KEY(parent_id) REFERENCES workspace_folders(id)
+                        ON DELETE SET NULL
+                )
+            """)
+
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS workspace_tags (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL UNIQUE,
+                    color_hex TEXT,
+                    created_at INTEGER NOT NULL
+                )
+            """)
+
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS workspace_code_items (
+                    id TEXT PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    file_name TEXT,
+                    language TEXT NOT NULL DEFAULT 'Text',
+                    folder_id TEXT,
+                    source_conversation_id TEXT,
+                    source_message_id TEXT,
+                    current_version INTEGER NOT NULL DEFAULT 1,
+                    lifecycle_state TEXT NOT NULL DEFAULT 'ACTIVE',
+                    archived_at INTEGER,
+                    trashed_at INTEGER,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL,
+                    FOREIGN KEY(folder_id) REFERENCES workspace_folders(id)
+                        ON DELETE SET NULL
+                )
+            """)
+
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS workspace_code_versions (
+                    id TEXT PRIMARY KEY,
+                    item_id TEXT NOT NULL,
+                    version_number INTEGER NOT NULL,
+                    content TEXT NOT NULL,
+                    language TEXT NOT NULL DEFAULT 'Text',
+                    edit_source TEXT NOT NULL DEFAULT 'MANUAL',
+                    change_summary TEXT,
+                    created_at INTEGER NOT NULL,
+                    UNIQUE(item_id, version_number),
+                    FOREIGN KEY(item_id) REFERENCES workspace_code_items(id)
+                        ON DELETE CASCADE
+                )
+            """)
+
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS workspace_item_tags (
+                    item_id TEXT NOT NULL,
+                    tag_id TEXT NOT NULL,
+                    created_at INTEGER NOT NULL,
+                    PRIMARY KEY(item_id, tag_id),
+                    FOREIGN KEY(item_id) REFERENCES workspace_code_items(id)
+                        ON DELETE CASCADE,
+                    FOREIGN KEY(tag_id) REFERENCES workspace_tags(id)
+                        ON DELETE CASCADE
+                )
+            """)
+
+            db.execSQL("""
+                CREATE INDEX IF NOT EXISTS idx_workspace_items_state_updated
+                ON workspace_code_items(lifecycle_state, updated_at DESC)
+            """)
+
+            db.execSQL("""
+                CREATE INDEX IF NOT EXISTS idx_workspace_items_folder
+                ON workspace_code_items(folder_id)
+            """)
+
+            db.execSQL("""
+                CREATE INDEX IF NOT EXISTS idx_workspace_items_conversation
+                ON workspace_code_items(source_conversation_id)
+            """)
+
+            db.execSQL("""
+                CREATE INDEX IF NOT EXISTS idx_workspace_versions_item_ver
+                ON workspace_code_versions(item_id, version_number DESC)
+            """)
+
+            db.execSQL("""
+                CREATE INDEX IF NOT EXISTS idx_workspace_folders_parent
+                ON workspace_folders(parent_id)
+            """)
+
+            db.execSQL("""
+                CREATE INDEX IF NOT EXISTS idx_workspace_item_tags_tag
+                ON workspace_item_tags(tag_id)
+            """)
+        }
+
         private fun createMessageArchitecture(db: SQLiteDatabase) {
 
             // Extended message metadata without changing legacy messages.
@@ -424,6 +534,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
             createCoreTables(db)
             createAgentTables(db)
             createMessageArchitecture(db)
+            ensureCodeWorkspaceTables(db)
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
@@ -449,9 +560,19 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
                 createMessageArchitecture(db)
             }
 
+            ensureCodeWorkspaceTables(db)
+
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
+        }
+    }
+
+    override fun onOpen(db: SQLiteDatabase) {
+        super.onOpen(db)
+        db.setForeignKeyConstraintsEnabled(true)
+        if (!db.isReadOnly) {
+            ensureCodeWorkspaceTables(db)
         }
     }
 
@@ -474,8 +595,8 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
     private fun queryMaps(
         sql: String,
         args: Array<String>? = null
-    ): List<Map<String, String>> {
-        val result = mutableListOf<Map<String, String>>()
+    ): List> {
+        val result = mutableListOf>()
         val db = readableDatabase
 
         db.rawQuery(sql, args).use { cursor ->
@@ -504,6 +625,21 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
         return if (index >= 0 && !cursor.isNull(index)) {
             cursor.getString(index)
         } else null
+    }
+
+    private fun normalizeWorkspaceState(state: String?): String {
+        return when (state?.trim()?.uppercase()) {
+            WORKSPACE_STATE_ARCHIVED -> WORKSPACE_STATE_ARCHIVED
+            WORKSPACE_STATE_TRASHED -> WORKSPACE_STATE_TRASHED
+            else -> WORKSPACE_STATE_ACTIVE
+        }
+    }
+
+    private fun normalizeEditSource(source: String?): String {
+        return when (source?.trim()?.uppercase()) {
+            WORKSPACE_SOURCE_AI -> WORKSPACE_SOURCE_AI
+            else -> WORKSPACE_SOURCE_MANUAL
+        }
     }
 
     // =========================================================
@@ -753,7 +889,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
 
     fun getRelationsForMessage(
         messageId: String
-    ): List<Map<String, String>> {
+    ): List> {
         return queryMaps(
             """
             SELECT * FROM message_relations
@@ -766,7 +902,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
 
     fun getOutgoingRelations(
         messageId: String
-    ): List<Map<String, String>> {
+    ): List> {
         return queryMaps(
             """
             SELECT * FROM message_relations
@@ -822,7 +958,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
 
     fun getBranchesForConversation(
         conversationId: String
-    ): List<Map<String, String>> {
+    ): List> {
         return queryMaps(
             """
             SELECT * FROM message_branches
@@ -917,7 +1053,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
 
     fun getToolExecutions(
         messageId: String
-    ): List<Map<String, String>> {
+    ): List> {
         return queryMaps(
             """
             SELECT * FROM message_tool_executions
@@ -961,7 +1097,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
 
     fun getGenerationEvents(
         messageId: String
-    ): List<Map<String, String>> {
+    ): List> {
         return queryMaps(
             """
             SELECT * FROM message_generation_events
@@ -1363,7 +1499,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
         insertReplace("skills", values)
     }
 
-    fun getAllSkills(): List<Map<String, String>> {
+    fun getAllSkills(): List> {
         return queryMaps(
             "SELECT * FROM skills ORDER BY success_count DESC"
         )
@@ -1434,6 +1570,495 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
     }
 
     // =========================================================
+    // CODE WORKSPACE
+    // =========================================================
+
+    fun createWorkspaceFolder(
+        name: String,
+        parentId: String? = null,
+        description: String? = null,
+        id: String = UUID.randomUUID().toString()
+    ): String {
+        val cleanName = name.trim()
+        require(cleanName.isNotEmpty()) { "اسم المجلد لا يمكن أن يكون فارغاً" }
+
+        val now = System.currentTimeMillis()
+        val values = ContentValues().apply {
+            put("id", id)
+            put("parent_id", parentId)
+            put("name", cleanName)
+            put("description", description)
+            put("created_at", now)
+            put("updated_at", now)
+        }
+
+        insertReplace("workspace_folders", values)
+        return id
+    }
+
+    fun getWorkspaceFolders(parentId: String? = null): List> {
+        return if (parentId == null) {
+            queryMaps(
+                """
+                SELECT * FROM workspace_folders
+                WHERE parent_id IS NULL
+                ORDER BY name ASC
+                """.trimIndent()
+            )
+        } else {
+            queryMaps(
+                """
+                SELECT * FROM workspace_folders
+                WHERE parent_id = ?
+                ORDER BY name ASC
+                """.trimIndent(),
+                arrayOf(parentId)
+            )
+        }
+    }
+
+    fun getAllWorkspaceFolders(): List> {
+        return queryMaps(
+            """
+            SELECT * FROM workspace_folders
+            ORDER BY name ASC
+            """.trimIndent()
+        )
+    }
+
+    fun assignWorkspaceItemFolder(itemId: String, folderId: String?): Boolean {
+        if (itemId.isBlank()) return false
+        val values = ContentValues().apply {
+            put("folder_id", folderId)
+            put("updated_at", System.currentTimeMillis())
+        }
+        return writableDatabase.update(
+            "workspace_code_items",
+            values,
+            "id = ?",
+            arrayOf(itemId)
+        ) > 0
+    }
+
+    fun upsertWorkspaceTag(
+        name: String,
+        colorHex: String? = null,
+        id: String = UUID.randomUUID().toString()
+    ): String {
+        val cleanName = name.trim()
+        require(cleanName.isNotEmpty()) { "اسم الوسم لا يمكن أن يكون فارغاً" }
+
+        readableDatabase.rawQuery(
+            "SELECT id FROM workspace_tags WHERE name = ? LIMIT 1",
+            arrayOf(cleanName)
+        ).use { cursor ->
+            if (cursor.moveToFirst()) {
+                val existingId = cursor.getString(0)
+                if (colorHex != null) {
+                    val updateValues = ContentValues().apply {
+                        put("color_hex", colorHex)
+                    }
+                    writableDatabase.update(
+                        "workspace_tags",
+                        updateValues,
+                        "id = ?",
+                        arrayOf(existingId)
+                    )
+                }
+                return existingId
+            }
+        }
+
+        val values = ContentValues().apply {
+            put("id", id)
+            put("name", cleanName)
+            put("color_hex", colorHex)
+            put("created_at", System.currentTimeMillis())
+        }
+
+        insertReplace("workspace_tags", values)
+        return id
+    }
+
+    fun attachTagToWorkspaceItem(itemId: String, tagId: String): Boolean {
+        if (itemId.isBlank() || tagId.isBlank()) return false
+        val values = ContentValues().apply {
+            put("item_id", itemId)
+            put("tag_id", tagId)
+            put("created_at", System.currentTimeMillis())
+        }
+        return writableDatabase.insertWithOnConflict(
+            "workspace_item_tags",
+            null,
+            values,
+            SQLiteDatabase.CONFLICT_IGNORE
+        ) != -1L
+    }
+
+    fun detachTagFromWorkspaceItem(itemId: String, tagId: String): Boolean {
+        if (itemId.isBlank() || tagId.isBlank()) return false
+        return writableDatabase.delete(
+            "workspace_item_tags",
+            "item_id = ? AND tag_id = ?",
+            arrayOf(itemId, tagId)
+        ) > 0
+    }
+
+    fun getTagsForWorkspaceItem(itemId: String): List> {
+        return queryMaps(
+            """
+            SELECT t.*
+            FROM workspace_tags t
+            INNER JOIN workspace_item_tags it ON t.id = it.tag_id
+            WHERE it.item_id = ?
+            ORDER BY t.name ASC
+            """.trimIndent(),
+            arrayOf(itemId)
+        )
+    }
+
+    fun getAllWorkspaceTags(): List> {
+        return queryMaps(
+            """
+            SELECT * FROM workspace_tags
+            ORDER BY name ASC
+            """.trimIndent()
+        )
+    }
+
+    fun getWorkspaceItemsByTag(
+        tagId: String,
+        lifecycleState: String? = WORKSPACE_STATE_ACTIVE
+    ): List> {
+        return if (lifecycleState.isNullOrBlank()) {
+            queryMaps(
+                """
+                SELECT i.*
+                FROM workspace_code_items i
+                INNER JOIN workspace_item_tags it ON i.id = it.item_id
+                WHERE it.tag_id = ?
+                ORDER BY i.updated_at DESC
+                """.trimIndent(),
+                arrayOf(tagId)
+            )
+        } else {
+            val normalizedState = normalizeWorkspaceState(lifecycleState)
+            queryMaps(
+                """
+                SELECT i.*
+                FROM workspace_code_items i
+                INNER JOIN workspace_item_tags it ON i.id = it.item_id
+                WHERE it.tag_id = ? AND i.lifecycle_state = ?
+                ORDER BY i.updated_at DESC
+                """.trimIndent(),
+                arrayOf(tagId, normalizedState)
+            )
+        }
+    }
+
+    fun createWorkspaceCodeItem(
+        title: String,
+        content: String,
+        language: String = "Text",
+        fileName: String? = null,
+        folderId: String? = null,
+        sourceConversationId: String? = null,
+        sourceMessageId: String? = null,
+        editSource: String = WORKSPACE_SOURCE_MANUAL,
+        changeSummary: String? = null,
+        itemId: String = UUID.randomUUID().toString()
+    ): String {
+        val now = System.currentTimeMillis()
+        val cleanLanguage = language.trim().ifEmpty { "Text" }
+        val cleanTitle = title.trim().ifEmpty { fileName?.trim().orEmpty().ifEmpty { "Untitled" } }
+        val normalizedSource = normalizeEditSource(editSource)
+        val versionId = UUID.randomUUID().toString()
+
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val itemValues = ContentValues().apply {
+                put("id", itemId)
+                put("title", cleanTitle)
+                put("file_name", fileName)
+                put("language", cleanLanguage)
+                put("folder_id", folderId)
+                put("source_conversation_id", sourceConversationId)
+                put("source_message_id", sourceMessageId)
+                put("current_version", 1)
+                put("lifecycle_state", WORKSPACE_STATE_ACTIVE)
+                putNull("archived_at")
+                putNull("trashed_at")
+                put("created_at", now)
+                put("updated_at", now)
+            }
+
+            db.insertWithOnConflict(
+                "workspace_code_items",
+                null,
+                itemValues,
+                SQLiteDatabase.CONFLICT_REPLACE
+            )
+
+            val versionValues = ContentValues().apply {
+                put("id", versionId)
+                put("item_id", itemId)
+                put("version_number", 1)
+                put("content", content)
+                put("language", cleanLanguage)
+                put("edit_source", normalizedSource)
+                put("change_summary", changeSummary ?: "Initial version")
+                put("created_at", now)
+            }
+
+            db.insertWithOnConflict(
+                "workspace_code_versions",
+                null,
+                versionValues,
+                SQLiteDatabase.CONFLICT_REPLACE
+            )
+
+            db.setTransactionSuccessful()
+            return itemId
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    fun addWorkspaceCodeVersion(
+        itemId: String,
+        content: String,
+        language: String? = null,
+        editSource: String = WORKSPACE_SOURCE_MANUAL,
+        changeSummary: String? = null,
+        title: String? = null,
+        fileName: String? = null
+    ): Int? {
+        if (itemId.isBlank()) return null
+
+        val now = System.currentTimeMillis()
+        val normalizedSource = normalizeEditSource(editSource)
+
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            var currentItemLanguage = "Text"
+            var maxVersion = 0
+            var foundItem = false
+
+            db.rawQuery(
+                "SELECT language, current_version FROM workspace_code_items WHERE id = ? LIMIT 1",
+                arrayOf(itemId)
+            ).use { cursor ->
+                if (cursor.moveToFirst()) {
+                    foundItem = true
+                    currentItemLanguage = cursor.getString(0)?.takeIf { it.isNotBlank() } ?: "Text"
+                    maxVersion = cursor.getInt(1)
+                }
+            }
+
+            if (!foundItem) return null
+
+            db.rawQuery(
+                "SELECT COALESCE(MAX(version_number), 0) FROM workspace_code_versions WHERE item_id = ?",
+                arrayOf(itemId)
+            ).use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val tableMax = cursor.getInt(0)
+                    if (tableMax > maxVersion) {
+                        maxVersion = tableMax
+                    }
+                }
+            }
+
+            val nextVersion = maxVersion + 1
+            val effectiveLanguage = language?.trim()?.ifEmpty { null } ?: currentItemLanguage
+            val versionId = UUID.randomUUID().toString()
+
+            val versionValues = ContentValues().apply {
+                put("id", versionId)
+                put("item_id", itemId)
+                put("version_number", nextVersion)
+                put("content", content)
+                put("language", effectiveLanguage)
+                put("edit_source", normalizedSource)
+                put("change_summary", changeSummary)
+                put("created_at", now)
+            }
+
+            db.insertWithOnConflict(
+                "workspace_code_versions",
+                null,
+                versionValues,
+                SQLiteDatabase.CONFLICT_REPLACE
+            )
+
+            val itemUpdateValues = ContentValues().apply {
+                put("current_version", nextVersion)
+                put("language", effectiveLanguage)
+                put("updated_at", now)
+                if (title != null && title.isNotBlank()) {
+                    put("title", title.trim())
+                }
+                if (fileName != null) {
+                    put("file_name", fileName)
+                }
+            }
+
+            db.update(
+                "workspace_code_items",
+                itemUpdateValues,
+                "id = ?",
+                arrayOf(itemId)
+            )
+
+            db.setTransactionSuccessful()
+            return nextVersion
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    fun getWorkspaceCodeItem(itemId: String): Map<String, String>? {
+        if (itemId.isBlank()) return null
+        return queryMaps(
+            "SELECT * FROM workspace_code_items WHERE id = ? LIMIT 1",
+            arrayOf(itemId)
+        ).firstOrNull()
+    }
+
+    fun getWorkspaceCodeItems(
+        lifecycleState: String = WORKSPACE_STATE_ACTIVE,
+        folderId: String? = null
+    ): List> {
+        val normalizedState = normalizeWorkspaceState(lifecycleState)
+        return if (folderId == null) {
+            queryMaps(
+                """
+                SELECT * FROM workspace_code_items
+                WHERE lifecycle_state = ?
+                ORDER BY updated_at DESC
+                """.trimIndent(),
+                arrayOf(normalizedState)
+            )
+        } else {
+            queryMaps(
+                """
+                SELECT * FROM workspace_code_items
+                WHERE lifecycle_state = ? AND folder_id = ?
+                ORDER BY updated_at DESC
+                """.trimIndent(),
+                arrayOf(normalizedState, folderId)
+            )
+        }
+    }
+
+    fun getWorkspaceCodeVersion(
+        itemId: String,
+        versionNumber: Int
+    ): Map<String, String>? {
+        if (itemId.isBlank() || versionNumber <= 0) return null
+        return queryMaps(
+            """
+            SELECT * FROM workspace_code_versions
+            WHERE item_id = ? AND version_number = ?
+            LIMIT 1
+            """.trimIndent(),
+            arrayOf(itemId, versionNumber.toString())
+        ).firstOrNull()
+    }
+
+    fun getLatestWorkspaceCodeVersion(itemId: String): Map<String, String>? {
+        if (itemId.isBlank()) return null
+        return queryMaps(
+            """
+            SELECT * FROM workspace_code_versions
+            WHERE item_id = ?
+            ORDER BY version_number DESC
+            LIMIT 1
+            """.trimIndent(),
+            arrayOf(itemId)
+        ).firstOrNull()
+    }
+
+    fun getWorkspaceCodeVersionHistory(itemId: String): List> {
+        if (itemId.isBlank()) return emptyList()
+        return queryMaps(
+            """
+            SELECT * FROM workspace_code_versions
+            WHERE item_id = ?
+            ORDER BY version_number DESC
+            """.trimIndent(),
+            arrayOf(itemId)
+        )
+    }
+
+    fun archiveWorkspaceCodeItem(itemId: String): Boolean {
+        if (itemId.isBlank()) return false
+        val now = System.currentTimeMillis()
+        val values = ContentValues().apply {
+            put("lifecycle_state", WORKSPACE_STATE_ARCHIVED)
+            put("archived_at", now)
+            putNull("trashed_at")
+            put("updated_at", now)
+        }
+        return writableDatabase.update(
+            "workspace_code_items",
+            values,
+            "id = ?",
+            arrayOf(itemId)
+        ) > 0
+    }
+
+    fun moveWorkspaceCodeItemToTrash(itemId: String): Boolean {
+        if (itemId.isBlank()) return false
+        val now = System.currentTimeMillis()
+        val values = ContentValues().apply {
+            put("lifecycle_state", WORKSPACE_STATE_TRASHED)
+            put("trashed_at", now)
+            put("updated_at", now)
+        }
+        return writableDatabase.update(
+            "workspace_code_items",
+            values,
+            "id = ?",
+            arrayOf(itemId)
+        ) > 0
+    }
+
+    fun restoreWorkspaceCodeItem(itemId: String): Boolean {
+        if (itemId.isBlank()) return false
+        val now = System.currentTimeMillis()
+        val values = ContentValues().apply {
+            put("lifecycle_state", WORKSPACE_STATE_ACTIVE)
+            putNull("archived_at")
+            putNull("trashed_at")
+            put("updated_at", now)
+        }
+        return writableDatabase.update(
+            "workspace_code_items",
+            values,
+            "id = ?",
+            arrayOf(itemId)
+        ) > 0
+    }
+
+    fun deleteWorkspaceCodeItemPermanently(itemId: String): Boolean {
+        if (itemId.isBlank()) return false
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.delete("workspace_item_tags", "item_id = ?", arrayOf(itemId))
+            db.delete("workspace_code_versions", "item_id = ?", arrayOf(itemId))
+            val deletedRows = db.delete("workspace_code_items", "id = ?", arrayOf(itemId))
+            db.setTransactionSuccessful()
+            return deletedRows > 0
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    // =========================================================
     // AUDIO AND FILE MEMORY
     // =========================================================
 
@@ -1490,7 +2115,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
         insertReplace("chromatic_nodes", values)
     }
 
-    fun getAllChromaticNodes(): List<Map<String, String>> {
+    fun getAllChromaticNodes(): List> {
         return queryMaps("SELECT * FROM chromatic_nodes")
     }
 
@@ -1516,7 +2141,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
 
     fun getThreadsForMessage(
         messageId: String
-    ): List<Map<String, String>> {
+    ): List> {
         return queryMaps(
             """
             SELECT * FROM message_threads
@@ -1581,7 +2206,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
 
     fun getRecentLifecycleEvents(
         limit: Int = 10
-    ): List<Map<String, String>> {
+    ): List> {
         return queryMaps(
             """
             SELECT * FROM agent_lifecycle_log
@@ -1621,7 +2246,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
 
     fun getRecentPerformanceLogs(
         limit: Int = 10
-    ): List<Map<String, String>> {
+    ): List> {
         return queryMaps(
             """
             SELECT * FROM agent_performance_log
@@ -1706,7 +2331,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
         taskType: String,
         status: String,
         limit: Int = 5
-    ): List<Map<String, String>> {
+    ): List> {
         return queryMaps(
             """
             SELECT * FROM agent_tasks
@@ -1758,7 +2383,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
 
     fun getChildTasks(
         parentTaskId: String
-    ): List<Map<String, String>> {
+    ): List> {
         return queryMaps(
             """
             SELECT * FROM agent_tasks
