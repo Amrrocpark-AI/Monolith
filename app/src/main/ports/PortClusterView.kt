@@ -913,27 +913,26 @@ class PortClusterView @JvmOverloads constructor(
             }
         }
 
-        /*
-         * When the requested spacing does not fit,
-         * distribute the centers over the available
-         * edge while preserving the first and last
-         * connector center offsets.
-         */
+        val totalExtentInsufficient = extents.sum()
 
-        val halfFirst = extents.first() / 2f
-        val halfLast = extents.last() / 2f
+        val compressedGap =
+            (availableSpace - totalExtentInsufficient).toFloat() /
+                (count - 1)
 
-        val usableSpace = (
-            availableSpace - halfFirst - halfLast
-        ).coerceAtLeast(0f)
+        val centers = ArrayList<Int>(count)
 
-        return List(count) { index ->
-            val fraction =
-                index.toFloat() / (count - 1).toFloat()
+        var cursor = extents.first() / 2f
+        centers.add(cursor.roundToInt())
 
-            (
-                halfFirst + usableSpace * fraction
-            ).toInt()
+        for (index in 0 until count - 1) {
+            val currentHalf = extents[index] / 2f
+            val nextHalf = extents[index + 1] / 2f
+
+            cursor += currentHalf + nextHalf + compressedGap
+
+            centers.add(cursor.roundToInt())
         }
+
+        return centers
     }
 }
