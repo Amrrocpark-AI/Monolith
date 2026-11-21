@@ -97,6 +97,8 @@ class ChatActivity : AppCompatActivity() {
         // Ports & Wires
         private const val RIGHT_PORT_SUFFIX = ":right:0"
         private const val LEFT_PORT_SUFFIX = ":left:0"
+        private const val PORTS_PREFS_NAME = "monolith_ports_preferences"
+        private const val KEY_MESSAGE_PORTS_ENABLED = "message_ports_enabled"
 
         // إعدادات أداة القوابس والكابلات المستقلة (اختيارية)
         private const val PREFS_NAME = "Settings"
@@ -175,6 +177,7 @@ class ChatActivity : AppCompatActivity() {
     // =========================================================
     // Ports & Wires
     // =========================================================
+    private var messagePortsEnabled = true
     private lateinit var chatContentContainer: FrameLayout
     private lateinit var portsOverlay: FrameLayout
     private lateinit var connectionLayerView: ConnectionLayerView
@@ -447,6 +450,18 @@ class ChatActivity : AppCompatActivity() {
             .apply()
     }
 
+    private fun loadMessagePortsPreference() {
+        messagePortsEnabled = getSharedPreferences(PORTS_PREFS_NAME, MODE_PRIVATE)
+            .getBoolean(KEY_MESSAGE_PORTS_ENABLED, true)
+    }
+
+    private fun saveMessagePortsPreference() {
+        getSharedPreferences(PORTS_PREFS_NAME, MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_MESSAGE_PORTS_ENABLED, messagePortsEnabled)
+            .apply()
+    }
+
     private fun initializeViews() {
         etMessage = findViewById(R.id.etMessage)
         btnSend = findViewById(R.id.btnSend)
@@ -472,7 +487,10 @@ class ChatActivity : AppCompatActivity() {
             stackFromEnd = false
         }
 
-        setupPortsOverlay()
+        loadMessagePortsPreference()
+        if (messagePortsEnabled || plugsCableToolEnabled) {
+            setupPortsOverlay()
+        }
         setupRecyclerScrollListener()
     }
 
@@ -583,6 +601,15 @@ class ChatActivity : AppCompatActivity() {
         }
         chatContentContainer = container
 
+        if (portsSystemReady && ::portsOverlay.isInitialized && ::connectionLayerView.isInitialized) {
+            portsOverlay.visibility = if (messagePortsEnabled || plugsCableToolEnabled) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
+            return
+        }
+
         portsOverlay = FrameLayout(this).apply {
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -592,7 +619,11 @@ class ChatActivity : AppCompatActivity() {
             clipToPadding = false
             isClickable = false
             isFocusable = false
-            visibility = View.VISIBLE
+            visibility = if (messagePortsEnabled || plugsCableToolEnabled) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
         }
 
         connectionLayerView = ConnectionLayerView(this).apply {
@@ -632,13 +663,71 @@ class ChatActivity : AppCompatActivity() {
         portsSystemReady = true
     }
 
+    private fun setMessagePortsEnabled(enabled: Boolean) {
+        messagePortsEnabled = enabled
+        saveMessagePortsPreference()
+
+        if (enabled) {
+            if (!portsSystemReady || !::portsOverlay.isInitialized || !::connectionLayerView.isInitialized) {
+                setupPortsOverlay()
+            }
+            if (portsSystemReady && ::portsOverlay.isInitialized) {
+                portsOverlay.visibility = View.VISIBLE
+            }
+            val messageIds = messageList.filter { !it.isThinking }.map { it.id }.toSet()
+            loadConnectionsForMessages(loadGeneration, currentConversationId, messageIds)
+            schedulePortsUpdate()
+        } else {
+            cancelPendingEndpointLayoutUpdate()
+            clearMessagePortsVisuals()
+            if (portsSystemReady && ::portsOverlay.isInitialized) {
+                portsOverlay.visibility = if (plugsCableToolEnabled) View.VISIBLE else View.GONE
+            }
+        }
+    }
+
+    private fun clearMessagePortsVisuals() {
+        cancelPendingEndpointLayoutUpdate()
+
+        selectedSourcePort = null
+        selectedTargetPort = null
+
+        if (portsSystemReady && ::portsOverlay.isInitialized) {
+            portClusters.values.forEach { cluster ->
+                try { portsOverlay.removeView(cluster) } catch (_: Exception) { }
+            }
+        }
+        portClusters.clear()
+
+        try { portEndpointRegistry.clear() } catch (_: Exception) { }
+        previousEndpointIds.clear()
+
+        if (portsSystemReady && ::connectionLayerView.isInitialized) {
+            try {
+                connectionLayerView.setConnections(emptyList())
+                connectionLayerView.clearEndpoints()
+            } catch (_: Exception) { }
+        }
+
+        loadedConnections = emptyList()
+        connectionNodeInfo.clear()
+    }
+
     private fun setPlugsAndCablesToolEnabled(enabled: Boolean) {
         plugsCableToolEnabled = enabled
         savePlugsCableToolPreferences()
 
+        if (enabled && (!portsSystemReady || !::portsOverlay.isInitialized || !::connectionLayerView.isInitialized)) {
+            setupPortsOverlay()
+        }
+
         if (!portsSystemReady || !::portsOverlay.isInitialized) return
 
-        portsOverlay.visibility = View.VISIBLE
+        portsOverlay.visibility = if (enabled || messagePortsEnabled) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
 
         if (!enabled) {
             activePlugs.clear()
@@ -647,14 +736,18 @@ class ChatActivity : AppCompatActivity() {
                 connectionLayerView.clearPlugs()
                 connectionLayerView.clearCables()
             } catch (_: Exception) { }
-            applyConnectionsToLayer()
-            refreshPortStates()
-            schedulePortsUpdate()
+            if (messagePortsEnabled) {
+                applyConnectionsToLayer()
+                refreshPortStates()
+                schedulePortsUpdate()
+            }
             return
         }
 
-        applyConnectionsToLayer()
-        refreshPortStates()
+        if (messagePortsEnabled) {
+            applyConnectionsToLayer()
+            refreshPortStates()
+        }
         syncPlugsAndCablesForCurrentState()
         schedulePortsUpdate()
     }
@@ -678,6 +771,12 @@ class ChatActivity : AppCompatActivity() {
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dpToPx(16), dpToPx(12), dpToPx(16), dpToPx(8))
+        }
+
+        val messagePortsSwitch = Switch(this).apply {
+            text = "تفعيل منافذ الرسائل وعلاقاتها"
+            isChecked = messagePortsEnabled
+            setTextColor(Color.WHITE)
         }
 
         val enableSwitch = Switch(this).apply {
@@ -739,6 +838,7 @@ class ChatActivity : AppCompatActivity() {
             setOnCheckedChangeListener { _, isChecked -> selectedGlow = isChecked }
         }
 
+        container.addView(messagePortsSwitch)
         container.addView(enableSwitch)
         container.addView(colorLabel)
         container.addView(colorSpinner)
@@ -747,23 +847,24 @@ class ChatActivity : AppCompatActivity() {
         container.addView(glowCheck)
 
         AlertDialog.Builder(this)
-            .setTitle("إعدادات القوابس والكابلات")
+            .setTitle("إعدادات المنافذ والقوابس والكابلات")
             .setView(container)
             .setPositiveButton("حفظ") { _, _ ->
                 plugsCableToolColor = selectedColor
                 plugsCableToolStrokeDp = strokeOptions[selectedStrokeIndex]
                 plugsCableToolGlow = selectedGlow
                 savePlugsCableToolPreferences()
+                setMessagePortsEnabled(messagePortsSwitch.isChecked)
                 setPlugsAndCablesToolEnabled(enableSwitch.isChecked)
-                showToast(
-                    if (enableSwitch.isChecked) "تم تفعيل وتخصيص أداة القوابس والكابلات"
-                    else "تم إلغاء تفعيل أداة القوابس والكابلات"
-                )
+                showToast("تم حفظ إعدادات المنافذ والقوابس والكابلات")
             }
             .setNeutralButton("إضافة قابس حر") { _, _ ->
                 if (!plugsCableToolEnabled) {
                     plugsCableToolEnabled = true
                     savePlugsCableToolPreferences()
+                    if (!portsSystemReady || !::portsOverlay.isInitialized || !::connectionLayerView.isInitialized) {
+                        setupPortsOverlay()
+                    }
                     if (portsSystemReady && ::portsOverlay.isInitialized) {
                         portsOverlay.visibility = View.VISIBLE
                     }
@@ -775,7 +876,7 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun addIndependentPlugAndCable() {
-        if (!portsSystemReady) return
+        if (!portsSystemReady || !::connectionLayerView.isInitialized) return
         val index = activePlugs.size + 1
         val plugId = "plug_${currentConversationId}_$index"
         val cableId = "cable_${currentConversationId}_$index"
@@ -812,7 +913,7 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun syncPlugsAndCablesForCurrentState() {
-        if (!portsSystemReady || !plugsCableToolEnabled) return
+        if (!portsSystemReady || !plugsCableToolEnabled || !::connectionLayerView.isInitialized) return
 
         val points = portEndpointRegistry.getPoints()
         if (points.isEmpty()) {
@@ -872,7 +973,7 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun pushPlugsAndCablesToLayer() {
-        if (!portsSystemReady || !plugsCableToolEnabled) return
+        if (!portsSystemReady || !plugsCableToolEnabled || !::connectionLayerView.isInitialized) return
         try {
             connectionLayerView.setPlugs(activePlugs.values.toList())
             connectionLayerView.setCables(activeCables.values.toList())
@@ -907,11 +1008,12 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun schedulePortsUpdate() {
+        if (!messagePortsEnabled && !plugsCableToolEnabled) return
         if (!portsSystemReady) return
         if (!isActivityReady) return
         if (!::recyclerViewChat.isInitialized) return
         recyclerViewChat.post {
-            if (isActivityReady && !isFinishing && !isDestroyed) {
+            if (isActivityReady && !isFinishing && !isDestroyed && (messagePortsEnabled || plugsCableToolEnabled)) {
                 updatePortsAndWires()
             }
         }
@@ -987,7 +1089,8 @@ class ChatActivity : AppCompatActivity() {
             endpointLayoutObserver = null
 
             if (!portsSystemReady || !isActivityReady ||
-                isFinishing || isDestroyed
+                isFinishing || isDestroyed ||
+                (!messagePortsEnabled && !plugsCableToolEnabled)
             ) return@Runnable
 
             refreshEndpoints()
@@ -1008,6 +1111,12 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun updatePortsAndWires() {
+        if (!messagePortsEnabled) {
+            if (plugsCableToolEnabled && portsSystemReady && isActivityReady && !isLoadingMessages) {
+                syncPlugsAndCablesForCurrentState()
+            }
+            return
+        }
         if (!portsSystemReady || !isActivityReady || isLoadingMessages) return
         if (!::portsOverlay.isInitialized || !::recyclerViewChat.isInitialized) return
 
@@ -1067,7 +1176,8 @@ class ChatActivity : AppCompatActivity() {
 
                 if (generation != endpointLayoutGeneration) return
                 if (!portsSystemReady || !isActivityReady ||
-                    isFinishing || isDestroyed
+                    isFinishing || isDestroyed ||
+                    (!messagePortsEnabled && !plugsCableToolEnabled)
                 ) return
 
                 refreshEndpoints()
@@ -1136,7 +1246,13 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun refreshEndpoints() {
-        if (!portsSystemReady) return
+        if (!messagePortsEnabled) {
+            if (plugsCableToolEnabled && portsSystemReady) {
+                syncPlugsAndCablesForCurrentState()
+            }
+            return
+        }
+        if (!portsSystemReady || !::connectionLayerView.isInitialized) return
 
         val currentPortIds = mutableSetOf<String>()
         portClusters.values.forEach { cluster ->
@@ -1172,7 +1288,8 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun applyConnectionsToLayer() {
-        if (!portsSystemReady) return
+        if (!messagePortsEnabled) return
+        if (!portsSystemReady || !::connectionLayerView.isInitialized) return
         try {
             connectionLayerView.setConnections(loadedConnections)
         } catch (e: Exception) {
@@ -1185,6 +1302,8 @@ class ChatActivity : AppCompatActivity() {
         conversationId: String,
         messageIds: Set<String>
     ) {
+        if (!messagePortsEnabled) return
+
         if (messageIds.isEmpty()) {
             loadedConnections = emptyList()
             connectionNodeInfo.clear()
@@ -1194,6 +1313,10 @@ class ChatActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             try {
+                if (!messagePortsEnabled || generation != loadGeneration || conversationId != currentConversationId) {
+                    return@launch
+                }
+
                 val result = withContext(Dispatchers.IO) {
                     databaseMutex.withLock {
                         val nodesList = appDatabase.getAllChromaticNodes()
@@ -1217,6 +1340,7 @@ class ChatActivity : AppCompatActivity() {
                     }
                 }
 
+                if (!messagePortsEnabled) return@launch
                 if (generation != loadGeneration) return@launch
                 if (conversationId != currentConversationId) return@launch
                 if (isFinishing || isDestroyed) return@launch
@@ -1269,7 +1393,7 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun refreshPortStates() {
-        if (!portsSystemReady) return
+        if (!messagePortsEnabled || !portsSystemReady) return
         portClusters.forEach { (messageId, cluster) ->
             val rightPortId = messageId + RIGHT_PORT_SUFFIX
             val leftPortId = messageId + LEFT_PORT_SUFFIX
@@ -1296,36 +1420,21 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun clearPortsAndWires() {
-        cancelPendingEndpointLayoutUpdate()
+        clearMessagePortsVisuals()
 
-        if (!portsSystemReady) return
-
-        selectedSourcePort = null
-        selectedTargetPort = null
         activePlugs.clear()
         activeCables.clear()
 
-        portClusters.values.forEach { cluster ->
-            try { portsOverlay.removeView(cluster) } catch (_: Exception) { }
+        if (portsSystemReady && ::connectionLayerView.isInitialized) {
+            try {
+                connectionLayerView.clearPlugs()
+                connectionLayerView.clearCables()
+            } catch (_: Exception) { }
         }
-        portClusters.clear()
-
-        try { portEndpointRegistry.clear() } catch (_: Exception) { }
-        previousEndpointIds.clear()
-
-        try {
-            connectionLayerView.setConnections(emptyList())
-            connectionLayerView.clearPlugs()
-            connectionLayerView.clearCables()
-            connectionLayerView.clearEndpoints()
-        } catch (_: Exception) { }
-
-        loadedConnections = emptyList()
-        connectionNodeInfo.clear()
     }
 
     private fun handlePortSelected(spec: PortSpec) {
-        if (!isActivityReady || isLoadingMessages) return
+        if (!messagePortsEnabled || !isActivityReady || isLoadingMessages) return
 
         val source = selectedSourcePort
         val target = selectedTargetPort
@@ -1449,8 +1558,10 @@ class ChatActivity : AppCompatActivity() {
                     }
                 }
                 showToast("تم ربط الرسالتين")
-                val ids = messageList.map { it.id }.toSet()
-                loadConnectionsForMessages(loadGeneration, currentConversationId, ids)
+                if (messagePortsEnabled) {
+                    val ids = messageList.map { it.id }.toSet()
+                    loadConnectionsForMessages(loadGeneration, currentConversationId, ids)
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -1460,7 +1571,7 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun handleConnectionSelected(connection: WireConnection) {
-        if (!portsSystemReady) return
+        if (!messagePortsEnabled || !portsSystemReady || !::connectionLayerView.isInitialized) return
         try { connectionLayerView.selectConnection(connection.id) } catch (_: Exception) { }
 
         val nodeInfo = connectionNodeInfo[connection.id]
@@ -2203,8 +2314,21 @@ class ChatActivity : AppCompatActivity() {
                 chatAdapter.updateMessages(messageList)
                 if (messageList.isNotEmpty()) scrollToBottom()
 
-                val loadedIds = messageList.filter { !it.isThinking }.map { it.id }.toSet()
-                loadConnectionsForMessages(generation, conversationId, loadedIds)
+                if (messagePortsEnabled) {
+                    val loadedIds = messageList.filter { !it.isThinking }.map { it.id }.toSet()
+                    try {
+                        loadConnectionsForMessages(generation, conversationId, loadedIds)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        android.util.Log.e("Monolith", "Failed to schedule connections load", e)
+                    }
+                } else {
+                    clearMessagePortsVisuals()
+                    if (portsSystemReady && ::portsOverlay.isInitialized) {
+                        portsOverlay.visibility = if (plugsCableToolEnabled) View.VISIBLE else View.GONE
+                    }
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -2348,7 +2472,7 @@ class ChatActivity : AppCompatActivity() {
         if (!isActivityReady || isLoadingMessages) return
 
         val fromInitiative = overrideText != null
-        val text = (overrideText ?: etMessage.text.toString()).trim()
+        val text = overrideText ?: etMessage.text.toString()
         val attachments: List<String> =
             if (fromInitiative) emptyList() else selectedImageUris.map { it.toString() }
         if (text.isBlank() && attachments.isEmpty()) return
@@ -3074,8 +3198,10 @@ class ChatActivity : AppCompatActivity() {
                                                     appDatabase.insertMessageThread(sourceId, targetId, nodeId)
                                                 }
                                                 showToast("تم ربط الرسالتين بالخيط")
-                                                val ids = messageList.map { it.id }.toSet()
-                                                loadConnectionsForMessages(loadGeneration, currentConversationId, ids)
+                                                if (messagePortsEnabled) {
+                                                    val ids = messageList.map { it.id }.toSet()
+                                                    loadConnectionsForMessages(loadGeneration, currentConversationId, ids)
+                                                }
                                             } catch (e: Exception) {
                                                 showToast("تعذر إنشاء الرابط: ${e.message}")
                                             }
@@ -3475,7 +3601,7 @@ class ChatActivity : AppCompatActivity() {
         if (!isActivityReady) return
         applyCurrentTheme()
         updateModelIndicators()
-        if (portsSystemReady) {
+        if (portsSystemReady && ::connectionLayerView.isInitialized) {
             try {
                 connectionLayerView.setAnimationEnabled(true)
             } catch (_: Exception) { }
@@ -3485,7 +3611,7 @@ class ChatActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
-        if (portsSystemReady) {
+        if (portsSystemReady && ::connectionLayerView.isInitialized) {
             try {
                 connectionLayerView.setAnimationEnabled(false)
             } catch (_: Exception) { }
