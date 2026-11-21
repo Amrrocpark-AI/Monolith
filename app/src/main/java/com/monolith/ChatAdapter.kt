@@ -75,6 +75,12 @@ data class ToolPresentation(
     val durationMs: Long? = null
 )
 
+data class ExtractedCodeBlock(
+    val index: Int,
+    val language: String,
+    val code: String
+)
+
 class ChatAdapter(
     context: Context,
     private val onEditClick: (ChatMessage) -> Unit,
@@ -148,6 +154,18 @@ class ChatAdapter(
 
         private const val MAX_VISIBLE_PORTS = 4
 
+        private const val TAG_HEADER = "monolith_header"
+        private const val TAG_CARD = "monolith_card"
+        private const val TAG_IMAGE_SCROLL = "monolith_image_scroll"
+        private const val TAG_GRAPH_PANEL = "monolith_graph_panel"
+        private const val TAG_TOOLS_CONTAINER = "monolith_tools_container"
+        private const val TAG_CODE_BLOCKS_CONTAINER = "monolith_code_blocks_container"
+        private const val TAG_ACTIONS = "monolith_actions"
+        private const val TAG_LEGEND = "monolith_legend"
+
+        private val FENCE_OPEN_REGEX = Regex("^[ \\t]*```([^\\n`]*)$")
+        private val FENCE_CLOSE_REGEX = Regex("^[ \\t]*```[ \\t]*$")
+
         private val DIFF_CALLBACK =
             object : DiffUtil.ItemCallback<ChatMessage>() {
 
@@ -218,8 +236,9 @@ class ChatAdapter(
                 dp(context, 8)
             )
 
-            // Identity header.
+            // 1. Identity header.
             val header = LinearLayout(context).apply {
+                tag = TAG_HEADER
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
                 layoutParams = LinearLayout.LayoutParams(
@@ -253,8 +272,9 @@ class ChatAdapter(
             header.addView(identity)
             addView(header)
 
-            // Message card.
+            // 2. Message card.
             val card = CardView(context).apply {
+                tag = TAG_CARD
                 radius = dp(context, 19).toFloat()
                 cardElevation = dp(context, 5).toFloat()
                 useCompatPadding = false
@@ -306,8 +326,9 @@ class ChatAdapter(
 
             addView(card)
 
-            // Attachments.
+            // 3. Attachments.
             val imageScroll = HorizontalScrollView(context).apply {
+                tag = TAG_IMAGE_SCROLL
                 isHorizontalScrollBarEnabled = false
                 overScrollMode = View.OVER_SCROLL_NEVER
                 visibility = View.GONE
@@ -328,8 +349,9 @@ class ChatAdapter(
             imageScroll.addView(imageContainer)
             addView(imageScroll)
 
-            // Graph node panel.
+            // 4. Graph node panel.
             val graphPanel = LinearLayout(context).apply {
+                tag = TAG_GRAPH_PANEL
                 orientation = LinearLayout.VERTICAL
                 visibility = View.GONE
 
@@ -357,8 +379,9 @@ class ChatAdapter(
 
             addView(graphPanel)
 
-            // Tool execution cards.
+            // 5. Tool execution cards.
             val toolsContainer = LinearLayout(context).apply {
+                tag = TAG_TOOLS_CONTAINER
                 orientation = LinearLayout.VERTICAL
                 visibility = View.GONE
 
@@ -372,8 +395,25 @@ class ChatAdapter(
 
             addView(toolsContainer)
 
-            // Action bar.
+            // 6. Code blocks workspace actions container.
+            val codeBlocksContainer = LinearLayout(context).apply {
+                tag = TAG_CODE_BLOCKS_CONTAINER
+                orientation = LinearLayout.VERTICAL
+                visibility = View.GONE
+
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    topMargin = dp(context, 7)
+                }
+            }
+
+            addView(codeBlocksContainer)
+
+            // 7. Action bar.
             val actions = LinearLayout(context).apply {
+                tag = TAG_ACTIONS
                 orientation = LinearLayout.HORIZONTAL
                 gravity = if (isUser) Gravity.END else Gravity.START
                 visibility = View.GONE
@@ -426,8 +466,9 @@ class ChatAdapter(
 
             addView(actions)
 
-            // Relationship legend.
+            // 8. Relationship legend.
             val legend = LinearLayout(context).apply {
+                tag = TAG_LEGEND
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
                 visibility = View.GONE
@@ -480,6 +521,78 @@ class ChatAdapter(
         }
     }
 
+    private fun extractCodeBlocks(content: String): List<ExtractedCodeBlock> {
+        if (content.isEmpty() || !content.contains("```")) {
+            return emptyList()
+        }
+
+        val lines = content.split('\n')
+        val result = mutableListOf<ExtractedCodeBlock>()
+
+        var insideBlock = false
+        var currentLanguage = "Text"
+        val currentLines = mutableListOf<String>()
+
+        for (line in lines) {
+            val normalizedLine = line.trimEnd('\r')
+            if (!insideBlock) {
+                val match = FENCE_OPEN_REGEX.matchEntire(normalizedLine)
+                if (match != null) {
+                    val rawLang = match.groupValues[1].trim()
+                    currentLanguage = rawLang.ifEmpty { "Text" }
+                    currentLines.clear()
+                    insideBlock = true
+                }
+            } else {
+                if (FENCE_CLOSE_REGEX.matches(normalizedLine)) {
+                    result.add(
+                        ExtractedCodeBlock(
+                            index = result.size + 1,
+                            language = currentLanguage,
+                            code = currentLines.joinToString("\n")
+                        )
+                    )
+                    insideBlock = false
+                    currentLanguage = "Text"
+                    currentLines.clear()
+                } else {
+                    currentLines.add(normalizedLine)
+                }
+            }
+        }
+
+        return result
+    }
+
+    private fun openInCodeWorkspace(
+        context: Context,
+        block: ExtractedCodeBlock,
+        message: ChatMessage? = null
+    ) {
+        val title = buildString {
+            append(block.language)
+            append(" #")
+            append(block.index)
+            message?.id?.take(6)?.let { shortId ->
+                if (shortId.isNotBlank()) {
+                    append(" • ")
+                    append(shortId)
+                }
+            }
+        }
+
+        val intent = Intent(context, CodeWorkspaceActivity::class.java).apply {
+            putExtra(CodeWorkspaceActivity.EXTRA_CODE, block.code)
+            putExtra(CodeWorkspaceActivity.EXTRA_LANGUAGE, block.language)
+            putExtra(CodeWorkspaceActivity.EXTRA_TITLE, title)
+            if (context !is android.app.Activity) {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+        }
+
+        context.startActivity(intent)
+    }
+
     inner class ChatViewHolder(
         itemView: View
     ) : RecyclerView.ViewHolder(itemView) {
@@ -487,28 +600,36 @@ class ChatAdapter(
         private val root = itemView as LinearLayout
 
         private val header =
-            root.getChildAt(0) as LinearLayout
+            root.findViewWithTag<LinearLayout>(TAG_HEADER)
+                ?: (root.getChildAt(0) as LinearLayout)
 
         private val card =
-            root.getChildAt(1) as CardView
+            root.findViewWithTag<CardView>(TAG_CARD)
+                ?: (root.getChildAt(1) as CardView)
 
         private val messageText =
             card.getChildAt(0) as TextView
 
         private val imageScroll =
-            root.getChildAt(2) as HorizontalScrollView
+            root.findViewWithTag<HorizontalScrollView>(TAG_IMAGE_SCROLL)
+                ?: (root.getChildAt(2) as HorizontalScrollView)
 
         private val imageContainer =
             imageScroll.getChildAt(0) as LinearLayout
 
         private val graphPanel =
-            root.getChildAt(3) as LinearLayout
+            root.findViewWithTag<LinearLayout>(TAG_GRAPH_PANEL)
+                ?: (root.getChildAt(3) as LinearLayout)
 
         private val toolsContainer =
-            root.getChildAt(4) as LinearLayout
+            root.findViewWithTag<LinearLayout>(TAG_TOOLS_CONTAINER)
+                ?: (root.getChildAt(4) as LinearLayout)
+
+        private val codeBlocksContainer =
+            root.findViewWithTag<LinearLayout>(TAG_CODE_BLOCKS_CONTAINER)
 
         private val actionBar =
-            root.getChildAt(5) as LinearLayout
+            root.findViewWithTag<LinearLayout>(TAG_ACTIONS)
 
         private val copyButton =
             actionBar.getChildAt(0) as ImageView
@@ -520,7 +641,7 @@ class ChatAdapter(
             actionBar.getChildAt(2) as ImageView
 
         private val legend =
-            root.getChildAt(6) as LinearLayout
+            root.findViewWithTag<LinearLayout>(TAG_LEGEND)
 
         private var currentMessage: ChatMessage? = null
         private var renderedContent: String? = null
@@ -581,6 +702,7 @@ class ChatAdapter(
             bindImages(msg)
             bindRelations(msg)
             bindTools(msg)
+            bindCodeBlocks(msg)
 
             val canShowActions =
                 msg.content.isNotBlank() &&
@@ -607,6 +729,111 @@ class ChatAdapter(
 
             speakButton.alpha =
                 if (speakButton.isEnabled) 1f else 0.4f
+        }
+
+        private fun bindCodeBlocks(msg: ChatMessage) {
+            codeBlocksContainer.removeAllViews()
+
+            val blocks = if (msg.isThinking || msg.content.isBlank()) {
+                emptyList()
+            } else {
+                extractCodeBlocks(msg.content)
+            }
+
+            if (blocks.isEmpty()) {
+                codeBlocksContainer.visibility = View.GONE
+                return
+            }
+
+            codeBlocksContainer.visibility = View.VISIBLE
+
+            blocks.forEach { block ->
+                codeBlocksContainer.addView(
+                    createCodeBlockActionRow(root.context, msg, block)
+                )
+            }
+        }
+
+        private fun createCodeBlockActionRow(
+            context: Context,
+            msg: ChatMessage,
+            block: ExtractedCodeBlock
+        ): View {
+            return LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+
+                background = roundedBackground(
+                    panelColor,
+                    dp(context, 12).toFloat(),
+                    accentColor,
+                    dp(context, 1)
+                )
+
+                setPadding(
+                    dp(context, 12),
+                    dp(context, 8),
+                    dp(context, 12),
+                    dp(context, 8)
+                )
+
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    bottomMargin = dp(context, 6)
+                }
+
+                val badge = TextView(context).apply {
+                    text = block.language
+                    textSize = 10f
+                    setTextColor(accentColor)
+                    setTypeface(null, Typeface.BOLD)
+                    background = roundedBackground(
+                        Color.argb(30, 0, 212, 255),
+                        dp(context, 6).toFloat()
+                    )
+                    setPadding(
+                        dp(context, 7),
+                        dp(context, 3),
+                        dp(context, 7),
+                        dp(context, 3)
+                    )
+                }
+
+                val label = TextView(context).apply {
+                    text = "كتلة كود #${block.index}"
+                    textSize = 12f
+                    setTextColor(textColor)
+                    maxLines = 1
+                    layoutParams = LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f
+                    ).apply {
+                        marginStart = dp(context, 8)
+                        marginEnd = dp(context, 8)
+                    }
+                }
+
+                val openAction = TextView(context).apply {
+                    text = "فتح في Workspace"
+                    textSize = 11f
+                    setTextColor(accentColor)
+                    setTypeface(null, Typeface.BOLD)
+                }
+
+                addView(badge)
+                addView(label)
+                addView(openAction)
+
+                isClickable = true
+                isFocusable = true
+
+                setOnClickListener {
+                    openInCodeWorkspace(context, block, msg)
+                }
+            }
         }
 
         private fun bindRelations(msg: ChatMessage) {
@@ -1145,6 +1372,7 @@ class ChatAdapter(
 
             graphPanel.removeAllViews()
             toolsContainer.removeAllViews()
+            codeBlocksContainer.removeAllViews()
             legend.removeAllViews()
 
             renderedContent = null
@@ -1153,6 +1381,7 @@ class ChatAdapter(
             imageScroll.visibility = View.GONE
             graphPanel.visibility = View.GONE
             toolsContainer.visibility = View.GONE
+            codeBlocksContainer.visibility = View.GONE
             legend.visibility = View.GONE
             card.visibility = View.GONE
             actionBar.visibility = View.GONE
