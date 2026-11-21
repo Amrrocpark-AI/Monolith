@@ -1499,7 +1499,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
         insertReplace("skills", values)
     }
 
-    fun getAllSkills(): List> {
+    fun getAllSkills(): List<Map<String, String>>
         return queryMaps(
             "SELECT * FROM skills ORDER BY success_count DESC"
         )
@@ -1596,7 +1596,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
         return id
     }
 
-    fun getWorkspaceFolders(parentId: String? = null): List> {
+    fun getWorkspaceFolders(parentId: String? = null): List<Map<String, String>>
         return if (parentId == null) {
             queryMaps(
                 """
@@ -1617,7 +1617,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
         }
     }
 
-    fun getAllWorkspaceFolders(): List> {
+    fun getAllWorkspaceFolders(): List<Map<String, String>>
         return queryMaps(
             """
             SELECT * FROM workspace_folders
@@ -1704,7 +1704,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
         ) > 0
     }
 
-    fun getTagsForWorkspaceItem(itemId: String): List> {
+    fun getTagsForWorkspaceItem(itemId: String): List<Map<String, String>>
         return queryMaps(
             """
             SELECT t.*
@@ -1717,7 +1717,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
         )
     }
 
-    fun getAllWorkspaceTags(): List> {
+    fun getAllWorkspaceTags(): List<Map<String, String>>
         return queryMaps(
             """
             SELECT * FROM workspace_tags
