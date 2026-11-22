@@ -1596,7 +1596,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
         return id
     }
 
-    fun getWorkspaceFolders(parentId: String? = null): List<Map<String, String>>
+    fun getWorkspaceFolders(parentId: String? = null    ): List<Map<String, String>> {
         return if (parentId == null) {
             queryMaps(
                 """
@@ -1617,7 +1617,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
         }
     }
 
-    fun getAllWorkspaceFolders(): List<Map<String, String>>
+    fun getAllWorkspaceFolders(    ): List<Map<String, String>> {
         return queryMaps(
             """
             SELECT * FROM workspace_folders
@@ -1704,7 +1704,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
         ) > 0
     }
 
-    fun getTagsForWorkspaceItem(itemId: String): List<Map<String, String>>
+    fun getTagsForWorkspaceItem(itemId: String    ): List<Map<String, String>> {
         return queryMaps(
             """
             SELECT t.*
@@ -1717,7 +1717,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
         )
     }
 
-    fun getAllWorkspaceTags(): List<Map<String, String>>
+    fun getAllWorkspaceTags(    ): List<Map<String, String>> {
         return queryMaps(
             """
             SELECT * FROM workspace_tags
@@ -1993,7 +1993,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
         ).firstOrNull()
     }
 
-    fun getWorkspaceCodeVersionHistory(itemId: String): List<Map<String, String>>
+    fun getWorkspaceCodeVersionHistory(itemId: String    ): List<Map<String, String>> {
         if (itemId.isBlank()) return emptyList()
         return queryMaps(
             """
@@ -2127,7 +2127,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
         insertReplace("chromatic_nodes", values)
     }
 
-    fun getAllChromaticNodes(): List<Map<String, String>>
+    fun getAllChromaticNodes(    ): List<Map<String, String>> {
         return queryMaps("SELECT * FROM chromatic_nodes")
     }
 
