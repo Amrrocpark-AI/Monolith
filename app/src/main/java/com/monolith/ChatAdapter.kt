@@ -5,7 +5,11 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.LayerDrawable
@@ -132,8 +136,20 @@ class ChatAdapter(
     private val purpleColor = Color.rgb(168, 85, 247)
 
     // ألوان الهوية من Gemini
-    private val identitySelfColor = Color.rgb(248, 250, 252)
-    private val identityAiColor = Color.rgb(239, 68, 68)
+    private val identitySelfColor = Color.rgb(248, 250, 252) // #f8fafc
+    private val identityAiColor = Color.rgb(239, 68, 68)    // #ef4444
+
+    // ثوابت تصميم Gemini
+    private val geminiCardBgTop = Color.rgb(20, 25, 36)
+    private val geminiCardBgBottom = Color.rgb(12, 15, 22)
+    private val geminiCardBorder = Color.rgb(35, 45, 63)
+    private val geminiMsgTitle = Color.rgb(142, 161, 189)
+    private val geminiBadgeBg = Color.argb(30, 56, 189, 248)
+    private val geminiBadgeBorder = Color.argb(76, 56, 189, 248)
+    private val geminiBadgeText = Color.rgb(56, 189, 248)
+    private val geminiIconBg = Color.argb(8, 255, 255, 255)
+    private val geminiIconBorder = Color.argb(20, 255, 255, 255)
+    private val geminiShieldColor = Color.argb(148, 9, 12, 17) // 58%
 
     private val markwon: Markwon =
         Markwon.builder(appContext)
@@ -266,7 +282,7 @@ class ChatAdapter(
                     ViewGroup.LayoutParams.WRAP_CONTENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT
                 ).apply {
-                    bottomMargin = dp(context, 5)
+                    bottomMargin = dp(context, 6)
                 }
             }
 
@@ -275,11 +291,11 @@ class ChatAdapter(
                 text = "#0"
                 textSize = 11f
                 setTypeface(Typeface.MONOSPACE, Typeface.BOLD)
-                setTextColor(accentColor)
+                setTextColor(geminiBadgeText)
                 background = roundedBackground(
-                    Color.argb(30, 56, 189, 248),
+                    geminiBadgeBg,
                     dp(context, 6).toFloat(),
-                    Color.argb(76, 56, 189, 248),
+                    geminiBadgeBorder,
                     dp(context, 1)
                 )
                 setPadding(dp(context, 7), dp(context, 2), dp(context, 7), dp(context, 2))
@@ -295,9 +311,9 @@ class ChatAdapter(
                     marginStart = dp(context, 8)
                 }
                 background = roundedBackground(
-                    Color.argb(8, 255, 255, 255),
+                    geminiIconBg,
                     dp(context, 8).toFloat(),
-                    Color.argb(20, 255, 255, 255),
+                    geminiIconBorder,
                     dp(context, 1)
                 )
             }
@@ -306,11 +322,11 @@ class ChatAdapter(
             header.addView(identityIcon)
             addView(header)
 
-            // 2. Message card with dynamic background + contrast shield + title + text.
+            // 2. Message card: خلفية متدرجة + حافة جانبية + طبقة ديناميكية + shield + محتوى.
             val card = CardView(context).apply {
                 tag = TAG_CARD
                 radius = dp(context, 16).toFloat()
-                cardElevation = dp(context, 8).toFloat()
+                cardElevation = dp(context, 5).toFloat()
                 useCompatPadding = false
                 preventCornerOverlap = true
                 setCardBackgroundColor(Color.TRANSPARENT)
@@ -320,9 +336,9 @@ class ChatAdapter(
                     ViewGroup.LayoutParams.WRAP_CONTENT
                 ).apply {
                     if (isUser) {
-                        marginStart = dp(context, 8)
+                        marginStart = dp(context, 32)
                     } else {
-                        marginEnd = dp(context, 8)
+                        marginEnd = dp(context, 32)
                     }
                 }
             }
@@ -334,22 +350,33 @@ class ChatAdapter(
                 )
             }
 
-            val dynLayer = View(context).apply {
+            // 2a. card-dyn-layer (نمط ثابت حسب نوع الهوية)
+            val dynLayer = DynBackgroundView(context).apply {
                 tag = TAG_DYN_LAYER
                 layoutParams = FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT
                 )
+                isClickable = false
+                isFocusable = false
             }
 
+            // 2b. card-contrast-shield (58% شفاف)
             val shield = View(context).apply {
                 tag = TAG_SHIELD
+                background = GradientDrawable().apply {
+                    setColor(geminiShieldColor)
+                    cornerRadius = dp(context, 16).toFloat()
+                }
                 layoutParams = FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT
                 )
+                isClickable = false
+                isFocusable = false
             }
 
+            // 2c. content column (title + text)
             val contentColumn = LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
                 setPadding(
@@ -367,13 +394,13 @@ class ChatAdapter(
             val title = TextView(context).apply {
                 tag = TAG_TITLE
                 textSize = 12.5f
-                setTextColor(mutedColor)
+                setTextColor(geminiMsgTitle)
                 setTypeface(null, Typeface.BOLD)
                 setPadding(0, 0, 0, dp(context, 6))
             }
 
             val message = TextView(context).apply {
-                textSize = 15.5f
+                textSize = 13f
                 setTextColor(textColor)
                 setTextIsSelectable(true)
                 movementMethod = android.text.method.LinkMovementMethod.getInstance()
@@ -459,7 +486,7 @@ class ChatAdapter(
 
             addView(toolsContainer)
 
-            // 6. Code blocks interactive zones & contextual toolbars (hidden until interaction).
+            // 6. Code blocks interactive zones.
             val codeBlocksContainer = LinearLayout(context).apply {
                 tag = TAG_CODE_BLOCKS_CONTAINER
                 orientation = LinearLayout.VERTICAL
@@ -549,6 +576,118 @@ class ChatAdapter(
         }
     }
 
+    // =====================================================================
+    // card-dyn-layer: نمط ثابت (يُرسم مرة عند bind) حسب نوع الهوية.
+    // "ديناميكي" هنا بمعنى: يتغير مع نوع الرسالة (self/peer/ai)، وليس متحركًا.
+    // =====================================================================
+    private inner class DynBackgroundView(context: Context) : View(context) {
+        private var pattern: String = "pulse"
+        private var tone: Int = accentColor
+
+        fun configure(entityType: String) {
+            pattern = when (entityType) {
+                "peer" -> "grid"
+                "ai" -> "sheen"
+                else -> "pulse"
+            }
+            tone = when (entityType) {
+                "peer" -> identityPeerColor()
+                "ai" -> identityAiColor
+                else -> identitySelfColor
+            }
+            invalidate()
+        }
+
+        private fun identityPeerColor(): Int = Color.rgb(56, 189, 248)
+
+        override fun onDraw(canvas: Canvas) {
+            super.onDraw(canvas)
+            val w = width.toFloat()
+            val h = height.toFloat()
+            if (w <= 0f || h <= 0f) return
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+            val r = (Color.red(tone) )
+            val g = (Color.green(tone) )
+            val b = (Color.blue(tone) )
+            val intensity = 0.22f
+
+            when (pattern) {
+                "pulse" -> {
+                    val maxR = Math.hypot(w.toDouble(), h.toDouble()).toFloat() * 0.65f
+                    val gradient = android.graphics.RadialGradient(
+                        w / 2f, h / 2f, 4f, w / 2f, h / 2f, maxR,
+                        intArrayOf(
+                            Color.argb((intensity * 255 * 0.85f).toInt(), r, g, b),
+                            Color.argb(0, r, g, b)
+                        ),
+                        null,
+                        android.graphics.Shader.TileMode.CLAMP
+                    )
+                    paint.shader = gradient
+                    canvas.drawRect(0f, 0f, w, h, paint)
+                }
+                "grid" -> {
+                    val spacing = 22f
+                    val offsetX = 0f
+                    paint.color = Color.argb((intensity * 255).toInt(), r, g, b)
+                    paint.strokeWidth = 1f
+                    var x = offsetX
+                    while (x < w) {
+                        canvas.drawLine(x, 0f, x, h, paint)
+                        x += spacing
+                    }
+                    var y = 0f
+                    while (y < h) {
+                        canvas.drawLine(0f, y, w, y, paint)
+                        y += spacing
+                    }
+                }
+                "sheen" -> {
+                    val gradient = android.graphics.LinearGradient(
+                        0f, 0f, w, h,
+                        intArrayOf(
+                            Color.argb(0, 255, 255, 255),
+                            Color.argb((intensity * 255 * 0.6f).toInt(), 255, 255, 255),
+                            Color.argb(0, 255, 255, 255)
+                        ),
+                        floatArrayOf(0f, 0.5f, 1f),
+                        android.graphics.Shader.TileMode.CLAMP
+                    )
+                    paint.shader = gradient
+                    canvas.drawRect(0f, 0f, w, h, paint)
+                }
+            }
+        }
+    }
+
+    // =====================================================================
+    // applyCardBackground: خلفية Gemini (تدرج 160deg + حافة جانبية)
+    // =====================================================================
+    private fun applyCardBackground(card: CardView, isUser: Boolean) {
+        val sideColor = if (isUser) identitySelfColor else identityAiColor
+
+        val gradient = GradientDrawable(
+            GradientDrawable.Orientation.TL_BR,
+            intArrayOf(geminiCardBgTop, geminiCardBgBottom)
+        ).apply {
+            cornerRadius = dp(appContext, 16).toFloat()
+            setStroke(dp(appContext, 1), geminiCardBorder)
+        }
+
+        val sideStripe = GradientDrawable().apply {
+            setColor(sideColor)
+            cornerRadius = dp(appContext, 16).toFloat()
+        }
+
+        val layer = LayerDrawable(arrayOf(gradient, sideStripe)).apply {
+            setLayerInset(1, dp(appContext, 4), 0, 0, 0)
+        }
+
+        card.background = layer
+        card.setCardBackgroundColor(Color.TRANSPARENT)
+        card.cardElevation = dp(appContext, 5).toFloat()
+    }
+
     private fun createActionButton(
         context: Context,
         drawable: Int,
@@ -582,73 +721,6 @@ class ChatAdapter(
                 null,
                 null
             )
-        }
-    }
-
-    // =====================================================================
-    // تصميم Gemini: خلفية البطاقة (تدرج + حافة جانبية + ظل)
-    // =====================================================================
-    private fun applyCardBackground(card: CardView, isUser: Boolean) {
-        val baseColor = if (isUser) userColor else aiColor
-        val darkColor = shade(baseColor, 0.72f)
-        val sideColor = if (isUser) identitySelfColor else identityAiColor
-
-        val gradient = GradientDrawable(
-            GradientDrawable.Orientation.TL_BR,
-            intArrayOf(baseColor, darkColor)
-        ).apply {
-            cornerRadius = dp(appContext, 16).toFloat()
-            setStroke(dp(appContext, 1), borderColor)
-        }
-
-        val sideStripe = GradientDrawable().apply {
-            setColor(sideColor)
-            cornerRadius = dp(appContext, 16).toFloat()
-        }
-
-        val layer = LayerDrawable(arrayOf(gradient, sideStripe)).apply {
-            setLayerInset(1, dp(appContext, 4), 0, 0, 0)
-        }
-
-        card.background = layer
-        card.setCardBackgroundColor(Color.TRANSPARENT)
-        card.cardElevation = dp(appContext, 8).toFloat()
-    }
-
-    // =====================================================================
-    // تصميم Gemini: طبقة الخلفية الديناميكية (تدرج ثابت)
-    // =====================================================================
-    private fun applyDynBackground(dynView: View, isUser: Boolean) {
-        val top = if (isUser) userColor else aiColor
-        val bottom = shade(top, 0.55f)
-        val gradient = GradientDrawable(
-            GradientDrawable.Orientation.TOP_BOTTOM,
-            intArrayOf(top, bottom)
-        ).apply {
-            cornerRadius = dp(appContext, 16).toFloat()
-        }
-        dynView.background = gradient
-    }
-
-    // =====================================================================
-    // تصميم Gemini: ظل اللون لخلفية التدرج
-    // =====================================================================
-    private fun shade(color: Int, factor: Float): Int {
-        val a = Color.alpha(color)
-        val r = (Color.red(color) * factor).toInt().coerceIn(0, 255)
-        val g = (Color.green(color) * factor).toInt().coerceIn(0, 255)
-        val b = (Color.blue(color) * factor).toInt().coerceIn(0, 255)
-        return Color.argb(a, r, g, b)
-    }
-
-    // =====================================================================
-    // تصميم Gemini: أيقونة الهوية (بديل SVG)
-    // =====================================================================
-    private fun buildIdentityIcon(isUser: Boolean, color: Int): GradientDrawable {
-        return GradientDrawable().apply {
-            shape = GradientDrawable.OVAL
-            setColor(color)
-            setStroke(dp(appContext, 1), Color.argb(80, 255, 255, 255))
         }
     }
 
@@ -738,7 +810,6 @@ class ChatAdapter(
         if (count < 3) return null
 
         val infoString = line.substring(idx).trim()
-        // CommonMark backtick info strings cannot contain backticks.
         if (candidateChar == '`' && infoString.contains('`')) return null
 
         val language = infoString.split(Regex("\\s+")).firstOrNull()?.trim().orEmpty()
@@ -852,8 +923,8 @@ class ChatAdapter(
         private val cardInner = card.getChildAt(0) as FrameLayout
 
         private val dynLayer =
-            cardInner.findViewWithTag<View>(TAG_DYN_LAYER)
-                ?: (cardInner.getChildAt(0) as View)
+            cardInner.findViewWithTag<DynBackgroundView>(TAG_DYN_LAYER)
+                ?: (cardInner.getChildAt(0) as DynBackgroundView)
 
         private val shield =
             cardInner.findViewWithTag<View>(TAG_SHIELD)
@@ -928,28 +999,30 @@ class ChatAdapter(
             currentMessage = msg
 
             val isUser = msg.role == MessageRole.USER
+            val entityType = if (isUser) "self" else "ai"
 
             root.gravity = if (isUser) Gravity.END else Gravity.START
 
-            // تطبيق تصميم Gemini
+            // تطبيق التصميم
             applyCardBackground(card, isUser)
-            applyDynBackground(dynLayer, isUser)
 
-            // شارة الرقم (مشتقة من msg.id لضمان ثبات الهوية)
+            // شارة الرقم
             val badgeNumber = (msg.id.hashCode() and 0x7FFFFFFF) % 999 + 1
             badge.text = "#$badgeNumber"
-            badge.setTextColor(if (isUser) identitySelfColor else identityAiColor)
 
-            // أيقونة الهوية
+            // أيقونة الهوية (دائرة ملوّنة)
             identityIcon.setImageDrawable(
-                buildIdentityIcon(
-                    isUser,
-                    if (isUser) identitySelfColor else identityAiColor
+                roundedBackground(
+                    if (isUser) identitySelfColor else identityAiColor,
+                    dp(root.context, 14).toFloat()
                 )
             )
 
             // عنوان البطاقة
             titleText.text = if (isUser) "YOU" else "MONOLITH"
+
+            // dyn background pattern
+            dynLayer.configure(entityType)
 
             // Message rendering.
             if (renderedContent != msg.content) {
@@ -958,7 +1031,6 @@ class ChatAdapter(
                 } else {
                     markwon.setMarkdown(messageText, msg.content)
                 }
-
                 renderedContent = msg.content
             }
 
@@ -1069,7 +1141,6 @@ class ChatAdapter(
                     bottomMargin = dp(context, 6)
                 }
 
-                // Interaction trigger / compact preview zone (does not open Workspace directly).
                 val triggerRow = LinearLayout(context).apply {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
@@ -1139,7 +1210,6 @@ class ChatAdapter(
 
                 addView(triggerRow)
 
-                // Contextual toolbar remains strictly hidden until this specific block is interacted with.
                 if (isExpanded) {
                     addView(
                         createCodeBlockToolsPanel(
@@ -1277,7 +1347,6 @@ class ChatAdapter(
                 chipsRow.addView(chip)
             }
 
-            // 1. نسخ الكود كاملاً
             addToolChip("1. نسخ الكود كاملاً", accentColor) {
                 copyTextToClipboard(
                     context = context,
@@ -1287,7 +1356,6 @@ class ChatAdapter(
                 )
             }
 
-            // 2. تحرير الكود
             addToolChip("2. تحرير الكود") {
                 showEditCodeBlockDialog(
                     context = context,
@@ -1301,12 +1369,10 @@ class ChatAdapter(
                 )
             }
 
-            // 3. تحليل الكود
             addToolChip("3. تحليل الكود") {
                 showCodeAnalysisDialog(context, currentLanguage, currentCode)
             }
 
-            // 4. توسيع مساحة الكود
             addToolChip("4. توسيع مساحة الكود") {
                 isExpandedHeight = !isExpandedHeight
                 refreshCodePreview()
@@ -1317,7 +1383,6 @@ class ChatAdapter(
                 ).show()
             }
 
-            // 5. تغيير لغة البرمجة
             addToolChip("5. تغيير لغة البرمجة") {
                 showChangeLanguageDialog(
                     context = context,
@@ -1331,7 +1396,6 @@ class ChatAdapter(
                 )
             }
 
-            // 6. تخصيص حجم الخط والألوان
             addToolChip("6. حجم الخط والألوان") {
                 showAppearanceDialog(
                     context = context,
@@ -1347,7 +1411,6 @@ class ChatAdapter(
                 )
             }
 
-            // 7. إظهار أرقام الأسطر
             addToolChip("7. أرقام الأسطر") {
                 showLineNumbers = !showLineNumbers
                 refreshCodePreview()
@@ -1358,12 +1421,10 @@ class ChatAdapter(
                 ).show()
             }
 
-            // 8. تحديد جزء من الكود ونسخه
             addToolChip("8. تحديد ونسخ جزء") {
                 showSelectPartialCodeDialog(context, currentCode)
             }
 
-            // 9. مقارنة نسختين من الكود
             addToolChip("9. مقارنة نسختين") {
                 showCompareVersionsDialog(
                     context = context,
@@ -1372,7 +1433,6 @@ class ChatAdapter(
                 )
             }
 
-            // 10. حفظ الكود كمقتطف مستقل
             addToolChip("10. حفظ كمقتطف") {
                 val key = blockKey(msg.id, block.index)
                 savedSnippets[key] = ExtractedCodeBlock(
@@ -1384,7 +1444,6 @@ class ChatAdapter(
                 Toast.makeText(context, "تم حفظ الكود كمقتطف مستقل", Toast.LENGTH_SHORT).show()
             }
 
-            // AI 1. شرح الكود (غير مربوط بمحرك فعلي في المحول)
             addToolChip("AI: شرح الكود", purpleColor) {
                 showUnboundAiActionNotice(
                     context = context,
@@ -1394,7 +1453,6 @@ class ChatAdapter(
                 )
             }
 
-            // AI 2. إصلاح الأخطاء (غير مربوط بمحرك فعلي في المحول)
             addToolChip("AI: إصلاح الأخطاء", purpleColor) {
                 showUnboundAiActionNotice(
                     context = context,
@@ -1404,7 +1462,6 @@ class ChatAdapter(
                 )
             }
 
-            // AI 3. تحسين الكود وإعادة هيكلته (غير مربوط بمحرك فعلي في المحول)
             addToolChip("AI: تحسين وإعادة هيكلة", purpleColor) {
                 showUnboundAiActionNotice(
                     context = context,
@@ -1414,7 +1471,6 @@ class ChatAdapter(
                 )
             }
 
-            // فتح في CodeWorkspaceActivity
             addToolChip("فتح في Workspace", accentColor) {
                 openInCodeWorkspace(
                     context = context,
@@ -1425,7 +1481,6 @@ class ChatAdapter(
                 )
             }
 
-            // إغلاق الأدوات
             addToolChip("إغلاق", mutedColor) {
                 onCloseTools()
             }
@@ -1728,7 +1783,6 @@ class ChatAdapter(
                 )
             }
 
-            // Show legend only for kinds actually present.
             val kinds = visibleRelations
                 .map { it.kind }
                 .distinct()
