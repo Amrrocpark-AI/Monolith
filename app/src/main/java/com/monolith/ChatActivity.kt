@@ -1323,12 +1323,12 @@ class ChatActivity : AppCompatActivity() {
                         val nodesById = nodesList.associateBy { it["id"] ?: "" }
 
                         val seenThreadIds = mutableSetOf<String>()
-                        val rawThreads = mutableListOf>()
+                        val rawThreads = mutableListOf<Map<String, String>>()
                         messageIds.forEach { msgId ->
                             val rows = try {
                                 appDatabase.getThreadsForMessage(msgId)
                             } catch (_: Exception) {
-                                emptyList>()
+                                emptyList<Map<String, String>>()
                             }
                             rows.forEach { row ->
                                 val tid = row["id"] ?: return@forEach
