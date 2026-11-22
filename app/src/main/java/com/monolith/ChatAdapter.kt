@@ -8,6 +8,7 @@ import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.LayerDrawable
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.Gravity
@@ -15,6 +16,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -129,6 +131,10 @@ class ChatAdapter(
     private val accentColor = Color.rgb(0, 212, 255)
     private val purpleColor = Color.rgb(168, 85, 247)
 
+    // ألوان الهوية من Gemini
+    private val identitySelfColor = Color.rgb(248, 250, 252)
+    private val identityAiColor = Color.rgb(239, 68, 68)
+
     private val markwon: Markwon =
         Markwon.builder(appContext)
             .usePlugin(
@@ -175,6 +181,11 @@ class ChatAdapter(
         private const val TAG_CODE_BLOCKS_CONTAINER = "monolith_code_blocks_container"
         private const val TAG_ACTIONS = "monolith_actions"
         private const val TAG_LEGEND = "monolith_legend"
+        private const val TAG_BADGE = "monolith_badge"
+        private const val TAG_IDENTITY_ICON = "monolith_identity_icon"
+        private const val TAG_DYN_LAYER = "monolith_dyn_layer"
+        private const val TAG_SHIELD = "monolith_contrast_shield"
+        private const val TAG_TITLE = "monolith_title"
 
         private val DIFF_CALLBACK =
             object : DiffUtil.ItemCallback<ChatMessage>() {
@@ -246,7 +257,7 @@ class ChatAdapter(
                 dp(context, 8)
             )
 
-            // 1. Identity header.
+            // 1. Identity header + رقم الرسالة + أيقونة الهوية.
             val header = LinearLayout(context).apply {
                 tag = TAG_HEADER
                 orientation = LinearLayout.HORIZONTAL
@@ -259,81 +270,124 @@ class ChatAdapter(
                 }
             }
 
-            val identityDot = View(context).apply {
-                background = circleDrawable(
-                    if (isUser) accentColor else purpleColor
+            val badge = TextView(context).apply {
+                tag = TAG_BADGE
+                text = "#0"
+                textSize = 11f
+                setTypeface(Typeface.MONOSPACE, Typeface.BOLD)
+                setTextColor(accentColor)
+                background = roundedBackground(
+                    Color.argb(30, 56, 189, 248),
+                    dp(context, 6).toFloat(),
+                    Color.argb(76, 56, 189, 248),
+                    dp(context, 1)
                 )
+                setPadding(dp(context, 7), dp(context, 2), dp(context, 7), dp(context, 2))
+            }
+
+            val identityIcon = ImageView(context).apply {
+                tag = TAG_IDENTITY_ICON
+                scaleType = ImageView.ScaleType.CENTER_INSIDE
                 layoutParams = LinearLayout.LayoutParams(
-                    dp(context, 7),
-                    dp(context, 7)
+                    dp(context, 28),
+                    dp(context, 28)
+                ).apply {
+                    marginStart = dp(context, 8)
+                }
+                background = roundedBackground(
+                    Color.argb(8, 255, 255, 255),
+                    dp(context, 8).toFloat(),
+                    Color.argb(20, 255, 255, 255),
+                    dp(context, 1)
                 )
             }
 
-            val identity = TextView(context).apply {
-                text = if (isUser) "YOU" else "MONOLITH"
-                textSize = 10f
-                letterSpacing = 0.12f
-                setTextColor(mutedColor)
-                setTypeface(null, Typeface.BOLD)
-                setPadding(dp(context, 7), 0, 0, 0)
-            }
-
-            header.addView(identityDot)
-            header.addView(identity)
+            header.addView(badge)
+            header.addView(identityIcon)
             addView(header)
 
-            // 2. Message card.
+            // 2. Message card with dynamic background + contrast shield + title + text.
             val card = CardView(context).apply {
                 tag = TAG_CARD
-                radius = dp(context, 19).toFloat()
-                cardElevation = dp(context, 5).toFloat()
+                radius = dp(context, 16).toFloat()
+                cardElevation = dp(context, 8).toFloat()
                 useCompatPadding = false
                 preventCornerOverlap = true
-
-                setCardBackgroundColor(
-                    if (isUser) userColor else aiColor
-                )
+                setCardBackgroundColor(Color.TRANSPARENT)
 
                 layoutParams = LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT
                 ).apply {
                     if (isUser) {
-                        marginStart = dp(context, 32)
+                        marginStart = dp(context, 8)
                     } else {
-                        marginEnd = dp(context, 32)
+                        marginEnd = dp(context, 8)
                     }
                 }
-
-                val message = TextView(context).apply {
-                    textSize = 15.5f
-                    setTextColor(textColor)
-
-                    setPadding(
-                        dp(context, 17),
-                        dp(context, 14),
-                        dp(context, 17),
-                        dp(context, 14)
-                    )
-
-                    maxWidth = (
-                        context.resources.displayMetrics.widthPixels * 0.84f
-                    ).toInt()
-
-                    setTextIsSelectable(true)
-
-                    movementMethod =
-                        android.text.method.LinkMovementMethod.getInstance()
-
-                    layoutParams = android.widget.FrameLayout.LayoutParams(
-                        ViewGroup.LayoutParams.WRAP_CONTENT,
-                        ViewGroup.LayoutParams.WRAP_CONTENT
-                    )
-                }
-
-                addView(message)
             }
 
+            val cardInner = FrameLayout(context).apply {
+                layoutParams = FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            }
+
+            val dynLayer = View(context).apply {
+                tag = TAG_DYN_LAYER
+                layoutParams = FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            }
+
+            val shield = View(context).apply {
+                tag = TAG_SHIELD
+                layoutParams = FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            }
+
+            val contentColumn = LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(
+                    dp(context, 17),
+                    dp(context, 14),
+                    dp(context, 17),
+                    dp(context, 14)
+                )
+                layoutParams = FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            }
+
+            val title = TextView(context).apply {
+                tag = TAG_TITLE
+                textSize = 12.5f
+                setTextColor(mutedColor)
+                setTypeface(null, Typeface.BOLD)
+                setPadding(0, 0, 0, dp(context, 6))
+            }
+
+            val message = TextView(context).apply {
+                textSize = 15.5f
+                setTextColor(textColor)
+                setTextIsSelectable(true)
+                movementMethod = android.text.method.LinkMovementMethod.getInstance()
+                maxWidth = (
+                    context.resources.displayMetrics.widthPixels * 0.84f
+                ).toInt()
+            }
+
+            contentColumn.addView(title)
+            contentColumn.addView(message)
+            cardInner.addView(dynLayer)
+            cardInner.addView(shield)
+            cardInner.addView(contentColumn)
+            card.addView(cardInner)
             addView(card)
 
             // 3. Attachments.
@@ -531,6 +585,73 @@ class ChatAdapter(
         }
     }
 
+    // =====================================================================
+    // تصميم Gemini: خلفية البطاقة (تدرج + حافة جانبية + ظل)
+    // =====================================================================
+    private fun applyCardBackground(card: CardView, isUser: Boolean) {
+        val baseColor = if (isUser) userColor else aiColor
+        val darkColor = shade(baseColor, 0.72f)
+        val sideColor = if (isUser) identitySelfColor else identityAiColor
+
+        val gradient = GradientDrawable(
+            GradientDrawable.Orientation.TL_BR,
+            intArrayOf(baseColor, darkColor)
+        ).apply {
+            cornerRadius = dp(appContext, 16).toFloat()
+            setStroke(dp(appContext, 1), borderColor)
+        }
+
+        val sideStripe = GradientDrawable().apply {
+            setColor(sideColor)
+            cornerRadius = dp(appContext, 16).toFloat()
+        }
+
+        val layer = LayerDrawable(arrayOf(gradient, sideStripe)).apply {
+            setLayerInset(1, dp(appContext, 4), 0, 0, 0)
+        }
+
+        card.background = layer
+        card.setCardBackgroundColor(Color.TRANSPARENT)
+        card.cardElevation = dp(appContext, 8).toFloat()
+    }
+
+    // =====================================================================
+    // تصميم Gemini: طبقة الخلفية الديناميكية (تدرج ثابت)
+    // =====================================================================
+    private fun applyDynBackground(dynView: View, isUser: Boolean) {
+        val top = if (isUser) userColor else aiColor
+        val bottom = shade(top, 0.55f)
+        val gradient = GradientDrawable(
+            GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(top, bottom)
+        ).apply {
+            cornerRadius = dp(appContext, 16).toFloat()
+        }
+        dynView.background = gradient
+    }
+
+    // =====================================================================
+    // تصميم Gemini: ظل اللون لخلفية التدرج
+    // =====================================================================
+    private fun shade(color: Int, factor: Float): Int {
+        val a = Color.alpha(color)
+        val r = (Color.red(color) * factor).toInt().coerceIn(0, 255)
+        val g = (Color.green(color) * factor).toInt().coerceIn(0, 255)
+        val b = (Color.blue(color) * factor).toInt().coerceIn(0, 255)
+        return Color.argb(a, r, g, b)
+    }
+
+    // =====================================================================
+    // تصميم Gemini: أيقونة الهوية (بديل SVG)
+    // =====================================================================
+    private fun buildIdentityIcon(isUser: Boolean, color: Int): GradientDrawable {
+        return GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(color)
+            setStroke(dp(appContext, 1), Color.argb(80, 255, 255, 255))
+        }
+    }
+
     /**
      * Markdown fenced code block parser tracking fence character (` or ~),
      * opening fence length, matching closing fence (>= opening length),
@@ -716,12 +837,36 @@ class ChatAdapter(
             root.findViewWithTag<LinearLayout>(TAG_HEADER)
                 ?: (root.getChildAt(0) as LinearLayout)
 
+        private val badge =
+            header.findViewWithTag<TextView>(TAG_BADGE)
+                ?: (header.getChildAt(0) as TextView)
+
+        private val identityIcon =
+            header.findViewWithTag<ImageView>(TAG_IDENTITY_ICON)
+                ?: (header.getChildAt(1) as ImageView)
+
         private val card =
             root.findViewWithTag<CardView>(TAG_CARD)
                 ?: (root.getChildAt(1) as CardView)
 
+        private val cardInner = card.getChildAt(0) as FrameLayout
+
+        private val dynLayer =
+            cardInner.findViewWithTag<View>(TAG_DYN_LAYER)
+                ?: (cardInner.getChildAt(0) as View)
+
+        private val shield =
+            cardInner.findViewWithTag<View>(TAG_SHIELD)
+                ?: (cardInner.getChildAt(1) as View)
+
+        private val contentColumn = cardInner.getChildAt(2) as LinearLayout
+
+        private val titleText =
+            contentColumn.findViewWithTag<TextView>(TAG_TITLE)
+                ?: (contentColumn.getChildAt(0) as TextView)
+
         private val messageText =
-            card.getChildAt(0) as TextView
+            contentColumn.getChildAt(1) as TextView
 
         private val imageScroll =
             root.findViewWithTag<HorizontalScrollView>(TAG_IMAGE_SCROLL)
@@ -786,18 +931,25 @@ class ChatAdapter(
 
             root.gravity = if (isUser) Gravity.END else Gravity.START
 
-            val dot = header.getChildAt(0)
-            val identity = header.getChildAt(1) as TextView
+            // تطبيق تصميم Gemini
+            applyCardBackground(card, isUser)
+            applyDynBackground(dynLayer, isUser)
 
-            dot.background = circleDrawable(
-                if (isUser) accentColor else purpleColor
+            // شارة الرقم (مشتقة من msg.id لضمان ثبات الهوية)
+            val badgeNumber = (msg.id.hashCode() and 0x7FFFFFFF) % 999 + 1
+            badge.text = "#$badgeNumber"
+            badge.setTextColor(if (isUser) identitySelfColor else identityAiColor)
+
+            // أيقونة الهوية
+            identityIcon.setImageDrawable(
+                buildIdentityIcon(
+                    isUser,
+                    if (isUser) identitySelfColor else identityAiColor
+                )
             )
 
-            identity.text = if (isUser) "YOU" else "MONOLITH"
-
-            card.setCardBackgroundColor(
-                if (isUser) userColor else aiColor
-            )
+            // عنوان البطاقة
+            titleText.text = if (isUser) "YOU" else "MONOLITH"
 
             // Message rendering.
             if (renderedContent != msg.content) {
@@ -2077,6 +2229,7 @@ class ChatAdapter(
 
             renderedContent = null
             messageText.text = ""
+            titleText.text = ""
 
             imageScroll.visibility = View.GONE
             graphPanel.visibility = View.GONE
