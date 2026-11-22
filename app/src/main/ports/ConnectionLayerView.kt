@@ -4,13 +4,10 @@ import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PathMeasure
 import android.graphics.PointF
-import android.graphics.RadialGradient
-import android.graphics.Shader
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
@@ -170,7 +167,6 @@ class ConnectionLayerView @JvmOverloads constructor(
     private val neckPath = Path()
     private val gripPath = Path()
     private val pathMeasure = PathMeasure()
-    private val sheenPath = Path()
 
     // ---------------------------------------------------------------------
     // Drag / touch
@@ -528,32 +524,26 @@ class ConnectionLayerView @JvmOverloads constructor(
         super.onDraw(canvas)
 
         if (!wiresVisible) {
-            // إذا كانت الأسلاك مخفية، قد نرسم المنافذ فقط.
             if (socketsVisible) drawAllSockets(canvas)
             return
         }
 
-        // 1. الأسلاك
         connections.values.forEach { connection ->
             if (!connection.visible) return@forEach
             val path = paths[connection.id] ?: return@forEach
             drawWire(canvas, connection, path)
         }
 
-        // 2. الكابلات
         cables.values.forEach { cable ->
             if (!cable.visible) return@forEach
             val path = paths["cable:${cable.id}"] ?: return@forEach
             drawCableSpec(canvas, cable, path)
         }
 
-        // 3. المنافذ
         if (socketsVisible) drawAllSockets(canvas)
 
-        // 4. القوابس
         plugs.values.forEach { drawPlugHead(canvas, it) }
 
-        // 5. FX
         drawFxEvents(canvas)
     }
 
@@ -570,7 +560,6 @@ class ConnectionLayerView @JvmOverloads constructor(
         val rimW = dp(8f)
         val rimH = dp(22f)
 
-        // Rim (إطار المنفذ)
         socketRimPaint.color = Color.rgb(26, 34, 52)
         socketRimPaint.strokeWidth = dp(1.2f)
         canvas.drawRoundRect(
@@ -580,7 +569,6 @@ class ConnectionLayerView @JvmOverloads constructor(
             socketRimPaint
         )
 
-        // Hole (فتحة داكنة)
         socketHolePaint.color = Color.rgb(2, 3, 5)
         canvas.drawRoundRect(
             cx - dp(2f), cy - dp(8f),
@@ -589,7 +577,6 @@ class ConnectionLayerView @JvmOverloads constructor(
             socketHolePaint
         )
 
-        // LED (ملوّن لو القابس موصول)
         val attachedPlug = plugs.values.firstOrNull { it.attachedPortId == portId }
         val ledColor = attachedPlug?.color ?: Color.rgb(30, 41, 59)
         socketLedPaint.color = ledColor
@@ -600,14 +587,18 @@ class ConnectionLayerView @JvmOverloads constructor(
             socketLedPaint
         )
 
-        // Label (L1, R2, ...)
+        // تسمية المنفذ فقط إذا بدأ بـ L أو R
         if (plugFxConfig.showPortLabels) {
-            canvas.drawText(
-                portId.takeLast(2).uppercase(),
-                cx,
-                cy - dp(16f),
-                socketLabelPaint
-            )
+            val trimmed = portId.trim()
+            if (trimmed.length in 2..4 &&
+                (trimmed[0] == 'L' || trimmed[0] == 'R')) {
+                canvas.drawText(
+                    trimmed,
+                    cx,
+                    cy - dp(16f),
+                    socketLabelPaint
+                )
+            }
         }
     }
 
@@ -625,13 +616,11 @@ class ConnectionLayerView @JvmOverloads constructor(
             canvas.drawPath(path, glowPaint)
         }
 
-        // main
         wirePaint.color = cable.color
         wirePaint.alpha = 240
         wirePaint.strokeWidth = width
         canvas.drawPath(path, wirePaint)
 
-        // sheen highlight
         drawSheen(canvas, path, width)
     }
 
@@ -681,7 +670,7 @@ class ConnectionLayerView @JvmOverloads constructor(
         plugRimPaint.alpha = 110
         canvas.drawPath(plugPath, plugRimPaint)
 
-        // 4. Grip ridges (خطوط طولية)
+        // 4. Grip ridges
         gripPath.reset()
         val grips = floatArrayOf(-dp(6f), -dp(3f), 0f, dp(3f), dp(6f))
         grips.forEach { y ->
