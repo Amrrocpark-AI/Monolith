@@ -1616,7 +1616,7 @@ class CodeWorkspaceActivity : AppCompatActivity() {
             setText(value)
             setTextColor(textColor)
             textSize = 14f
-            singleLine = true
+            setSingleLine(true)
             setPadding(dp(12), dp(10), dp(12), dp(10))
             background = roundedBackground()
         }
@@ -1672,7 +1672,7 @@ class CodeWorkspaceActivity : AppCompatActivity() {
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = accentColor
             style = Paint.Style.STROKE
-            strokeWidth = dp(1.8).toFloat()
+            strokeWidth = dp(2).toFloat()
             strokeCap = Paint.Cap.ROUND
             strokeJoin = Paint.Join.ROUND
         }
