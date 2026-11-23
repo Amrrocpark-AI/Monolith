@@ -13,6 +13,9 @@ class PortEndpointRegistry {
     private val plugEndpoints =
         LinkedHashMap<String, PortEndpoint>()
 
+    private val overlayLocation = IntArray(2)
+    private val portLocation = IntArray(2)
+
     /**
      * Updates all fixed socket endpoints belonging to a cluster.
      *
@@ -33,38 +36,50 @@ class PortEndpointRegistry {
             return
         }
 
-        val overlayLocation = IntArray(2)
         overlay.getLocationOnScreen(overlayLocation)
 
-        cluster.getAllPorts().forEach { port ->
+        val currentPorts = cluster.getAllPorts()
+        val activeIds = HashSet<String>(currentPorts.size)
+
+        currentPorts.forEach { port ->
+            val id = port.portId
+            if (id.isBlank()) return@forEach
 
             if (
                 port.width <= 0 ||
-                port.height <= 0
+                port.height <= 0 ||
+                port.visibility != View.VISIBLE
             ) {
+                endpoints.remove(id)
                 return@forEach
             }
 
-            val portLocation = IntArray(2)
             port.getLocationOnScreen(portLocation)
 
             val localPoint = port.getSocketCenter()
 
             val x =
-                portLocation[0] -
-                    overlayLocation[0] +
-                    localPoint.x
+                (portLocation[0] - overlayLocation[0]).toFloat() +
+                    localPoint.x * port.scaleX
 
             val y =
-                portLocation[1] -
-                    overlayLocation[1] +
-                    localPoint.y
+                (portLocation[1] - overlayLocation[1]).toFloat() +
+                    localPoint.y * port.scaleY
 
-            endpoints[port.portId] = PortEndpoint(
-                port.portId,
+            activeIds.add(id)
+            endpoints[id] = PortEndpoint(
+                id,
                 x,
                 y
             )
+        }
+
+        val iterator = endpoints.keys.iterator()
+        while (iterator.hasNext()) {
+            val existingId = iterator.next()
+            if (!activeIds.contains(existingId)) {
+                iterator.remove()
+            }
         }
     }
 
@@ -100,10 +115,13 @@ class PortEndpointRegistry {
     fun getPlug(plugId: String): PortEndpoint? =
         plugEndpoints[plugId]
 
-    fun getPlugPoints(): Map<String, PointF> =
-        plugEndpoints.mapValues { (_, endpoint) ->
-            endpoint.toPointF()
+    fun getPlugPoints(): Map<String, PointF> {
+        val result = LinkedHashMap<String, PointF>(plugEndpoints.size)
+        for ((key, endpoint) in plugEndpoints) {
+            result[key] = endpoint.toPointF()
         }
+        return result
+    }
 
     fun removePlug(plugId: String) {
         plugEndpoints.remove(plugId)
@@ -117,12 +135,15 @@ class PortEndpointRegistry {
         endpoints[portId]
 
     fun getAll(): Map<String, PortEndpoint> =
-        endpoints.toMap()
+        LinkedHashMap(endpoints)
 
-    fun getPoints(): Map<String, PointF> =
-        endpoints.mapValues { (_, endpoint) ->
-            endpoint.toPointF()
+    fun getPoints(): Map<String, PointF> {
+        val result = LinkedHashMap<String, PointF>(endpoints.size)
+        for ((key, endpoint) in endpoints) {
+            result[key] = endpoint.toPointF()
         }
+        return result
+    }
 
     fun clear() {
         endpoints.clear()
