@@ -20,6 +20,7 @@ import android.text.TextUtils
 import android.text.TextWatcher
 import android.util.Base64
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewTreeObserver
@@ -526,14 +527,31 @@ class ChatActivity : AppCompatActivity() {
                     showToast(if (updated.isPinned) "تم تثبيت الرسالة" else "تم إلغاء تثبيت الرسالة")
                 }
             },
-                        themeColorHex = themeColorHex,
+            themeColorHex = themeColorHex,
             onPaletteClick = { _ -> showPlugsAndCablesToolDialog() }
         )
+        applyAdapterVisualConfig()
         recyclerViewChat.adapter = chatAdapter
         chatAdapter.updateMessages(messageList)
 
         setupAdapterObserver()
         schedulePortsUpdate()
+    }
+
+    private fun applyAdapterVisualConfig() {
+        if (!::chatAdapter.isInitialized) return
+        chatAdapter.applyVisualConfig(
+            selfColorHex = "#f8fafc",
+            peerColorHex = themeColorHex,
+            aiColorHex = "#ef4444",
+            bgPresetId = "default",
+            cardOpacity = 0.98f,
+            dynamicEnabled = true,
+            dynamicState = "on",
+            dynamicPattern = "pulse",
+            dynamicSpeedSec = 8f,
+            dynamicIntensityPercent = 20
+        )
     }
 
     private fun createTopBarButton(iconResource: Int, tint: Int): ImageButton {
@@ -635,7 +653,7 @@ class ChatActivity : AppCompatActivity() {
             isClickable = true
             isFocusable = false
 
-                        setGlowEnabled(true)
+            setGlowEnabled(true)
             setAnimationEnabled(true)
             setDirectionVisible(true)
             setPortsEnabled(messagePortsEnabled || plugsCableToolEnabled)
@@ -665,7 +683,7 @@ class ChatActivity : AppCompatActivity() {
         portsSystemReady = true
     }
 
-        private fun setMessagePortsEnabled(enabled: Boolean) {
+    private fun setMessagePortsEnabled(enabled: Boolean) {
         messagePortsEnabled = enabled
 
         if (::connectionLayerView.isInitialized) {
@@ -721,7 +739,7 @@ class ChatActivity : AppCompatActivity() {
         connectionNodeInfo.clear()
     }
 
-        private fun setPlugsAndCablesToolEnabled(enabled: Boolean) {
+    private fun setPlugsAndCablesToolEnabled(enabled: Boolean) {
         plugsCableToolEnabled = enabled
 
         if (::connectionLayerView.isInitialized) {
@@ -999,6 +1017,61 @@ class ChatActivity : AppCompatActivity() {
         activePlugs[plugId] = current.copy(x = position.x, y = position.y)
     }
 
+    private fun attachFreeDragToCard(cardView: CardView, messageId: String) {
+        var downRawX = 0f
+        var downRawY = 0f
+        var startTransX = 0f
+        var startTransY = 0f
+        var isDraggingCard = false
+        val touchSlop = dpToPx(8).toFloat()
+
+        cardView.setOnTouchListener { v, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downRawX = event.rawX
+                    downRawY = event.rawY
+                    startTransX = v.translationX
+                    startTransY = v.translationY
+                    isDraggingCard = false
+                    false
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = event.rawX - downRawX
+                    val dy = event.rawY - downRawY
+                    if (!isDraggingCard && (abs(dx) > touchSlop || abs(dy) > touchSlop)) {
+                        isDraggingCard = true
+                        recyclerViewChat.requestDisallowInterceptTouchEvent(true)
+                        v.bringToFront()
+                    }
+                    if (isDraggingCard) {
+                        v.translationX = startTransX + dx
+                        v.translationY = startTransY + dy
+                        portClusters[messageId]?.let { cluster ->
+                            positionCluster(cluster, cardView)
+                        }
+                        refreshEndpoints()
+                        true
+                    } else {
+                        false
+                    }
+                }
+                MotionEvent.ACTION_UP,
+                MotionEvent.ACTION_CANCEL -> {
+                    val wasDragging = isDraggingCard
+                    isDraggingCard = false
+                    recyclerViewChat.requestDisallowInterceptTouchEvent(false)
+                    if (wasDragging) {
+                        schedulePortsUpdate()
+                        true
+                    } else {
+                        false
+                    }
+                }
+                else -> false
+            }
+        }
+    }
+
     private fun setupRecyclerScrollListener() {
         recyclerViewChat.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
@@ -1149,6 +1222,7 @@ class ChatActivity : AppCompatActivity() {
             if (itemRoot.childCount < 2) continue
 
             val cardView = itemRoot.getChildAt(1) as? CardView ?: continue
+            attachFreeDragToCard(cardView, message.id)
 
             val cluster = ensureClusterForMessage(message.id)
             positionCluster(cluster, cardView)
@@ -1337,12 +1411,12 @@ class ChatActivity : AppCompatActivity() {
                         val nodesById = nodesList.associateBy { it["id"] ?: "" }
 
                         val seenThreadIds = mutableSetOf<String>()
-                        val rawThreads = mutableListOf<Map<String, String>>()
+                        val rawThreads = mutableListOf>()
                         messageIds.forEach { msgId ->
                             val rows = try {
                                 appDatabase.getThreadsForMessage(msgId)
                             } catch (_: Exception) {
-                                emptyList<Map<String, String>>()
+                                emptyList>()
                             }
                             rows.forEach { row ->
                                 val tid = row["id"] ?: return@forEach
@@ -1406,7 +1480,7 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-        private fun refreshPortStates() {
+    private fun refreshPortStates() {
         if (!messagePortsEnabled || !portsSystemReady) return
         portClusters.forEach { (messageId, cluster) ->
             val rightPortId = messageId + RIGHT_PORT_SUFFIX
@@ -1433,7 +1507,7 @@ class ChatActivity : AppCompatActivity() {
                 } catch (_: Exception) { }
             }
         }
-        }
+    }
 
     private fun clearPortsAndWires() {
         clearMessagePortsVisuals()
@@ -3662,6 +3736,8 @@ class ChatActivity : AppCompatActivity() {
         if (previousTheme != themeColorHex && ::chatAdapter.isInitialized) {
             initializeAdapter()
             if (isConversationHistoryVisible()) refreshConversationHistory()
+        } else if (::chatAdapter.isInitialized) {
+            applyAdapterVisualConfig()
         }
 
         val bgImagePath = settings.getString("AppBackgroundImage", null)
