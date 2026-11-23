@@ -1406,32 +1406,34 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    private fun refreshPortStates() {
+        private fun refreshPortStates() {
         if (!messagePortsEnabled || !portsSystemReady) return
         portClusters.forEach { (messageId, cluster) ->
             val rightPortId = messageId + RIGHT_PORT_SUFFIX
             val leftPortId = messageId + LEFT_PORT_SUFFIX
 
             if (selectedSourcePort?.id != rightPortId) {
-                val hasRight = loadedConnections.any { it.sourcePortId == rightPortId }
+                val rightConn = loadedConnections.firstOrNull { it.sourcePortId == rightPortId }
                 try {
                     cluster.setPortState(
                         rightPortId,
-                        if (hasRight) PortState.CONNECTED else PortState.AVAILABLE
+                        if (rightConn != null) PortState.CONNECTED else PortState.AVAILABLE
                     )
+                    cluster.getPort(rightPortId)?.plugColor = rightConn?.color
                 } catch (_: Exception) { }
             }
             if (selectedTargetPort?.id != leftPortId) {
-                val hasLeft = loadedConnections.any { it.targetPortId == leftPortId }
+                val leftConn = loadedConnections.firstOrNull { it.targetPortId == leftPortId }
                 try {
                     cluster.setPortState(
                         leftPortId,
-                        if (hasLeft) PortState.CONNECTED else PortState.AVAILABLE
+                        if (leftConn != null) PortState.CONNECTED else PortState.AVAILABLE
                     )
+                    cluster.getPort(leftPortId)?.plugColor = leftConn?.color
                 } catch (_: Exception) { }
             }
         }
-    }
+        }
 
     private fun clearPortsAndWires() {
         clearMessagePortsVisuals()
