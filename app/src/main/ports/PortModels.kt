@@ -3,26 +3,18 @@ package com.monolith.graph.ports.models
 import android.graphics.Color
 import android.graphics.PointF
 
-enum class PortSide {
-    LEFT, RIGHT, TOP, BOTTOM
-}
+enum class PortSide { LEFT, RIGHT, TOP, BOTTOM }
 
-enum class PortState {
-    IDLE, AVAILABLE, SELECTED, CONNECTED, ACTIVE, DISABLED
-}
+enum class PortState { IDLE, AVAILABLE, SELECTED, CONNECTED, ACTIVE, DISABLED }
 
 enum class PortKind {
     CONTEXT, REFERENCE, CAUSAL, DERIVATION,
     CONTRAST, DEPENDENCY, CONTINUATION, CUSTOM
 }
 
-enum class ConnectionDirection {
-    OUTGOING, INCOMING, BIDIRECTIONAL
-}
+enum class ConnectionDirection { OUTGOING, INCOMING, BIDIRECTIONAL }
 
-enum class PortShape {
-    USB, USB_C, COMPACT
-}
+enum class PortShape { USB, USB_C, COMPACT }
 
 data class PortSpec(
     val id: String,
@@ -36,11 +28,6 @@ data class PortSpec(
     val enabled: Boolean = true
 )
 
-/**
- * رأس قابس مستقل عن المأخذ الثابت (Socket):
- * يحتوي على 3 نقاط تماس معدنية، جسم، وعنق اتصال بالكابل،
- * ويمكن أن يكون متصلاً بمنفذ (attachedPortId != null) أو حراً/غير متصل (attachedPortId == null).
- */
 data class PlugSpec(
     val id: String,
     val x: Float,
@@ -54,8 +41,17 @@ data class PlugSpec(
 }
 
 /**
- * تمثيل جسم الكابل المرن بين نقطتي نهاية/قابس،
- * مع دعم تمثيل طرف غير متصل (targetPlugId == null أو disconnected = true).
+ * [Gemini: cable.detachedEnds[endKey]] — يحفظ موقع وزاوية الطرف
+ * عند فك القابس، ليُعاد رسمه في نفس المكان.
+ */
+data class DetachedEnd(
+    val x: Float,
+    val y: Float,
+    val angle: Float = 0f
+)
+
+/**
+ * [Gemini: CableSpec] — نُقل حرفياً مع detachedEnds و customPoints.
  */
 data class CableSpec(
     val id: String,
@@ -64,6 +60,8 @@ data class CableSpec(
     val color: Int = PortPalette.CYAN,
     val control1: PointF? = null,
     val control2: PointF? = null,
+    val customPoints: List<PointF> = emptyList(),
+    val detachedEnds: Map<String, DetachedEnd> = emptyMap(),
     val visible: Boolean = true,
     val animated: Boolean = true,
     val glowEnabled: Boolean = true,
@@ -75,6 +73,9 @@ data class CableSpec(
         get() = targetPlugId == null
 }
 
+/**
+ * [Gemini: WireConnection] — نُقل حرفياً مع customPoints.
+ */
 data class WireConnection(
     val id: String,
     val sourcePortId: String,
@@ -83,6 +84,7 @@ data class WireConnection(
     val direction: ConnectionDirection = ConnectionDirection.OUTGOING,
     val control1: PointF? = null,
     val control2: PointF? = null,
+    val customPoints: List<PointF> = emptyList(),
     val visible: Boolean = true,
     val animated: Boolean = true,
     val glowEnabled: Boolean = true,
