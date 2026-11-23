@@ -38,16 +38,6 @@ import io.noties.markwon.ext.tables.TablePlugin
 import io.noties.markwon.ext.tables.TableTheme
 import java.util.LinkedHashMap
 
-/**
- * Monolith Conversation Graph UI
- *
- * This file owns message presentation, relationship visualization,
- * tool cards and message actions.
- *
- * Relationship/tool data is supplied through optional providers.
- * The adapter does not invent database records.
- */
-
 enum class RelationKind(
     val label: String,
     val color: Int
@@ -104,7 +94,6 @@ class ChatAdapter(
     private val themeColorHex: String,
     private val onRegenerateClick: ((ChatMessage) -> Unit)? = null,
 
-    // Optional future graph integration.
     private val relationProvider:
         ((ChatMessage) -> List<MessageRelation>)? = null,
 
@@ -115,7 +104,9 @@ class ChatAdapter(
         ((MessageRelation) -> Unit)? = null,
 
     private val onToolClick:
-        ((ToolPresentation) -> Unit)? = null
+        ((ToolPresentation) -> Unit)? = null,
+
+    private val onPaletteClick: ((ChatMessage) -> Unit)? = null
 
 ) : ListAdapter<ChatMessage, ChatAdapter.ChatViewHolder>(DIFF_CALLBACK) {
 
@@ -135,11 +126,9 @@ class ChatAdapter(
     private val accentColor = Color.rgb(0, 212, 255)
     private val purpleColor = Color.rgb(168, 85, 247)
 
-    // ألوان الهوية من Gemini
-    private val identitySelfColor = Color.rgb(248, 250, 252) // #f8fafc
-    private val identityAiColor = Color.rgb(239, 68, 68)    // #ef4444
+    private val identitySelfColor = Color.rgb(248, 250, 252)
+    private val identityAiColor = Color.rgb(239, 68, 68)
 
-    // ثوابت تصميم Gemini
     private val geminiCardBgTop = Color.rgb(20, 25, 36)
     private val geminiCardBgBottom = Color.rgb(12, 15, 22)
     private val geminiCardBorder = Color.rgb(35, 45, 63)
@@ -149,7 +138,11 @@ class ChatAdapter(
     private val geminiBadgeText = Color.rgb(56, 189, 248)
     private val geminiIconBg = Color.argb(8, 255, 255, 255)
     private val geminiIconBorder = Color.argb(20, 255, 255, 255)
-    private val geminiShieldColor = Color.argb(148, 9, 12, 17) // 58%
+    private val geminiShieldColor = Color.argb(148, 9, 12, 17)
+
+    private val geminiPaletteBg = Color.argb(13, 255, 255, 255)
+    private val geminiPaletteBorder = Color.argb(31, 255, 255, 255)
+    private val geminiPaletteIconColor = Color.rgb(148, 163, 184)
 
     private val markwon: Markwon =
         Markwon.builder(appContext)
@@ -172,7 +165,7 @@ class ChatAdapter(
             )
             .build()
 
-    // Session-scoped working copies/snippets keyed by messageId + block index (never mutates msg.content).
+    // مهم: لا يعدل msg.content أبداً. النسخ المؤقتة محصورة في الجلسة الحالية.
     private val workingCodeOverrides = mutableMapOf<String, String>()
     private val workingLanguageOverrides = mutableMapOf<String, String>()
     private val savedSnippets = LinkedHashMap<String, ExtractedCodeBlock>()
@@ -202,6 +195,7 @@ class ChatAdapter(
         private const val TAG_DYN_LAYER = "monolith_dyn_layer"
         private const val TAG_SHIELD = "monolith_contrast_shield"
         private const val TAG_TITLE = "monolith_title"
+        private const val TAG_PALETTE = "monolith_palette_btn"
 
         private val DIFF_CALLBACK =
             object : DiffUtil.ItemCallback<ChatMessage>() {
@@ -273,7 +267,6 @@ class ChatAdapter(
                 dp(context, 8)
             )
 
-            // 1. Identity header + رقم الرسالة + أيقونة الهوية.
             val header = LinearLayout(context).apply {
                 tag = TAG_HEADER
                 orientation = LinearLayout.HORIZONTAL
@@ -318,11 +311,34 @@ class ChatAdapter(
                 )
             }
 
+            val paletteButton = ImageView(context).apply {
+                tag = TAG_PALETTE
+                setImageResource(R.drawable.ic_palette)
+                setColorFilter(geminiPaletteIconColor)
+                scaleType = ImageView.ScaleType.CENTER_INSIDE
+                contentDescription = "تخصيص الموصلات والبطاقة"
+                layoutParams = LinearLayout.LayoutParams(
+                    dp(context, 30),
+                    dp(context, 30)
+                ).apply {
+                    marginStart = dp(context, 6)
+                }
+                setPadding(dp(context, 6), dp(context, 6), dp(context, 6), dp(context, 6))
+                background = roundedBackground(
+                    geminiPaletteBg,
+                    dp(context, 9).toFloat(),
+                    geminiPaletteBorder,
+                    dp(context, 1)
+                )
+                isClickable = true
+                isFocusable = true
+            }
+
             header.addView(badge)
             header.addView(identityIcon)
+            header.addView(paletteButton)
             addView(header)
 
-            // 2. Message card: خلفية متدرجة + حافة جانبية + طبقة ديناميكية + shield + محتوى.
             val card = CardView(context).apply {
                 tag = TAG_CARD
                 radius = dp(context, 16).toFloat()
@@ -350,7 +366,6 @@ class ChatAdapter(
                 )
             }
 
-            // 2a. card-dyn-layer (نمط ثابت حسب نوع الهوية)
             val dynLayer = DynBackgroundView(context).apply {
                 tag = TAG_DYN_LAYER
                 layoutParams = FrameLayout.LayoutParams(
@@ -361,7 +376,6 @@ class ChatAdapter(
                 isFocusable = false
             }
 
-            // 2b. card-contrast-shield (58% شفاف)
             val shield = View(context).apply {
                 tag = TAG_SHIELD
                 background = GradientDrawable().apply {
@@ -376,7 +390,6 @@ class ChatAdapter(
                 isFocusable = false
             }
 
-            // 2c. content column (title + text)
             val contentColumn = LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
                 setPadding(
@@ -417,7 +430,6 @@ class ChatAdapter(
             card.addView(cardInner)
             addView(card)
 
-            // 3. Attachments.
             val imageScroll = HorizontalScrollView(context).apply {
                 tag = TAG_IMAGE_SCROLL
                 isHorizontalScrollBarEnabled = false
@@ -440,7 +452,6 @@ class ChatAdapter(
             imageScroll.addView(imageContainer)
             addView(imageScroll)
 
-            // 4. Graph node panel.
             val graphPanel = LinearLayout(context).apply {
                 tag = TAG_GRAPH_PANEL
                 orientation = LinearLayout.VERTICAL
@@ -470,7 +481,6 @@ class ChatAdapter(
 
             addView(graphPanel)
 
-            // 5. Tool execution cards.
             val toolsContainer = LinearLayout(context).apply {
                 tag = TAG_TOOLS_CONTAINER
                 orientation = LinearLayout.VERTICAL
@@ -486,7 +496,6 @@ class ChatAdapter(
 
             addView(toolsContainer)
 
-            // 6. Code blocks interactive zones.
             val codeBlocksContainer = LinearLayout(context).apply {
                 tag = TAG_CODE_BLOCKS_CONTAINER
                 orientation = LinearLayout.VERTICAL
@@ -502,7 +511,6 @@ class ChatAdapter(
 
             addView(codeBlocksContainer)
 
-            // 7. Action bar.
             val actions = LinearLayout(context).apply {
                 tag = TAG_ACTIONS
                 orientation = LinearLayout.HORIZONTAL
@@ -557,7 +565,6 @@ class ChatAdapter(
 
             addView(actions)
 
-            // 8. Relationship legend.
             val legend = LinearLayout(context).apply {
                 tag = TAG_LEGEND
                 orientation = LinearLayout.HORIZONTAL
@@ -576,10 +583,6 @@ class ChatAdapter(
         }
     }
 
-    // =====================================================================
-    // card-dyn-layer: نمط ثابت (يُرسم مرة عند bind) حسب نوع الهوية.
-    // "ديناميكي" هنا بمعنى: يتغير مع نوع الرسالة (self/peer/ai)، وليس متحركًا.
-    // =====================================================================
     private inner class DynBackgroundView(context: Context) : View(context) {
         private var pattern: String = "pulse"
         private var tone: Int = accentColor
@@ -606,9 +609,9 @@ class ChatAdapter(
             val h = height.toFloat()
             if (w <= 0f || h <= 0f) return
             val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-            val r = (Color.red(tone) )
-            val g = (Color.green(tone) )
-            val b = (Color.blue(tone) )
+            val r = Color.red(tone)
+            val g = Color.green(tone)
+            val b = Color.blue(tone)
             val intensity = 0.22f
 
             when (pattern) {
@@ -662,9 +665,6 @@ class ChatAdapter(
         }
     }
 
-    // =====================================================================
-    // applyCardBackground: خلفية Gemini (تدرج 160deg + حافة جانبية)
-    // =====================================================================
     private fun applyCardBackground(card: CardView, isUser: Boolean) {
         val sideColor = if (isUser) identitySelfColor else identityAiColor
 
@@ -726,12 +726,6 @@ class ChatAdapter(
         }
     }
 
-    /**
-     * Markdown fenced code block parser tracking fence character (` or ~),
-     * opening fence length, matching closing fence (>= opening length),
-     * optional language info string, full block content in order, and
-     * unclosed fences through the end of the message without mutating input.
-     */
     private fun extractCodeBlocks(content: String): List<ExtractedCodeBlock> {
         if (content.isEmpty() || (!content.contains("```") && !content.contains("~~~"))) {
             return emptyList()
@@ -918,6 +912,10 @@ class ChatAdapter(
             header.findViewWithTag<ImageView>(TAG_IDENTITY_ICON)
                 ?: (header.getChildAt(1) as ImageView)
 
+        private val paletteButton: ImageView =
+            header.findViewWithTag<ImageView>(TAG_PALETTE)
+                ?: (header.getChildAt(2) as ImageView)
+
         private val card =
             root.findViewWithTag<CardView>(TAG_CARD)
                 ?: (root.getChildAt(1) as CardView)
@@ -992,6 +990,10 @@ class ChatAdapter(
             moreButton.setOnClickListener {
                 showMenu()
             }
+
+            paletteButton.setOnClickListener {
+                currentMessage?.let { msg -> onPaletteClick?.invoke(msg) }
+            }
         }
 
         fun bind(msg: ChatMessage) {
@@ -1005,14 +1007,11 @@ class ChatAdapter(
 
             root.gravity = if (isUser) Gravity.END else Gravity.START
 
-            // تطبيق التصميم
             applyCardBackground(card, isUser)
 
-            // شارة الرقم
             val badgeNumber = (msg.id.hashCode() and 0x7FFFFFFF) % 999 + 1
             badge.text = "#$badgeNumber"
 
-            // أيقونة الهوية (دائرة ملوّنة)
             identityIcon.setImageDrawable(
                 roundedBackground(
                     if (isUser) identitySelfColor else identityAiColor,
@@ -1020,13 +1019,10 @@ class ChatAdapter(
                 )
             )
 
-            // عنوان البطاقة
             titleText.text = if (isUser) "YOU" else "MONOLITH"
 
-            // dyn background pattern
             dynLayer.configure(entityType)
 
-            // Message rendering.
             if (renderedContent != msg.content) {
                 if (msg.content.isEmpty()) {
                     messageText.text = ""
