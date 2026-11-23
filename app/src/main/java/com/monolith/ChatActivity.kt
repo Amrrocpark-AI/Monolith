@@ -664,10 +664,16 @@ class ChatActivity : AppCompatActivity() {
         portsSystemReady = true
     }
 
-    private fun setMessagePortsEnabled(enabled: Boolean) {
+        private fun setMessagePortsEnabled(enabled: Boolean) {
         messagePortsEnabled = enabled
-        saveMessagePortsPreference()
 
+        if (::connectionLayerView.isInitialized) {
+            connectionLayerView.setPortsEnabled(
+                messagePortsEnabled || plugsCableToolEnabled
+            )
+        }
+
+        saveMessagePortsPreference()
         if (enabled) {
             if (!portsSystemReady || !::portsOverlay.isInitialized || !::connectionLayerView.isInitialized) {
                 setupPortsOverlay()
