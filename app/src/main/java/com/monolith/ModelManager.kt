@@ -1,4 +1,3 @@
-
 package com.monolith
 
 import android.content.Context
@@ -7,6 +6,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -92,6 +92,19 @@ class ModelManager(context: Context) : AgentModel {
 
     val isEngineReady: Boolean
         get() = nativeEngineReady && !closed
+
+    fun reopenEngine() {
+        if (!nativeEngineReady) return
+        closed = false
+    }
+
+    fun shutdown() {
+        closed = true
+        try {
+            callbackScope.cancel()
+        } catch (_: Exception) {
+        }
+    }
 
     // =========================================================
     // File validation
@@ -672,8 +685,6 @@ class ModelManager(context: Context) : AgentModel {
                 )
             }
 
-            // Validate every tensor offset against the data
-            // section, not just against the absolute file size.
             input.seek(dataOffset)
 
             // -------------------------------------------------
@@ -824,8 +835,6 @@ class ModelManager(context: Context) : AgentModel {
                             )
                         )
 
-                    // Do not pass arbitrary files to the native
-                    // engine. Inspect GGUF before loading.
                     val inspection = try {
                         inspectGgufFile(file)
                     } catch (e: Exception) {
