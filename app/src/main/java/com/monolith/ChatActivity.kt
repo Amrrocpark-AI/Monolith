@@ -720,10 +720,16 @@ class ChatActivity : AppCompatActivity() {
         connectionNodeInfo.clear()
     }
 
-    private fun setPlugsAndCablesToolEnabled(enabled: Boolean) {
+        private fun setPlugsAndCablesToolEnabled(enabled: Boolean) {
         plugsCableToolEnabled = enabled
-        savePlugsCableToolPreferences()
 
+        if (::connectionLayerView.isInitialized) {
+            connectionLayerView.setPortsEnabled(
+                messagePortsEnabled || plugsCableToolEnabled
+            )
+        }
+
+        savePlugsCableToolPreferences()
         if (enabled && (!portsSystemReady || !::portsOverlay.isInitialized || !::connectionLayerView.isInitialized)) {
             setupPortsOverlay()
         }
