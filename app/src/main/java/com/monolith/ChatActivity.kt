@@ -634,9 +634,10 @@ class ChatActivity : AppCompatActivity() {
             isClickable = true
             isFocusable = false
 
-            setGlowEnabled(true)
+                        setGlowEnabled(true)
             setAnimationEnabled(true)
             setDirectionVisible(true)
+            setPortsEnabled(messagePortsEnabled || plugsCableToolEnabled)
 
             onConnectionSelected = { connection ->
                 handleConnectionSelected(connection)
