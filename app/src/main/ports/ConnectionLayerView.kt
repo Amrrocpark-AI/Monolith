@@ -2,6 +2,7 @@ package com.monolith.graph.ports.views
 
 import android.animation.ValueAnimator
 import android.content.Context
+import android.content.SharedPreferences
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -26,15 +27,22 @@ import com.monolith.graph.ports.models.*
  * تم نقل الشكل البصري من MONOLITH Canvas (Gemini) مع الحفاظ الكامل
  * على التوقيعات (signatures) والواجهات البرمجية (APIs) الحالية.
  *
- * ما تم نقله:
- *  - منافذ معدنية (Sockets) مع LED ملوّن حول كل endpoint.
- *  - قابس Gemini (4 prongs + body + tail + grip ridges + rim).
+ * نهج Gemini: نظام القوابس معطّل افتراضيًا.
+ * يُفعّل عبر setPortsEnabled(true) من ChatActivity.
+ * عند التعطيل، يختفي كل شيء ولا يؤثر على أداء الرسائل.
+ *
+ * الميزات المنقولة من Gemini:
+ *  - منافذ (Sockets) مع LED ملوّن.
+ *  - قابس (Plug) بأربعة أصابع + جسم + ذيل + grip ridges + rim.
  *  - سلك Bezier مع sag + sheen highlight.
  *  - FX: Snap Ring, Detach Release, Signal Flash.
+ *  - إعدادات FX قابلة للتخصيص (plugFxConfig).
+ *  - حفظ/تحميل الحالة (SharedPreferences).
  *
- * ما لم يُنقل (يحتاج ملفات أخرى):
- *  - PortSpec / PortOffsets (يأتي من الخارج).
- *  - Popover الألوان، الأصوات، Alarm، Undo (تُدار من ChatActivity).
+ * ما لم يُنقل (يُدار من ChatActivity):
+ *  - الأصوات (SoundPool).
+ *  - Popover الألوان (PopupWindow).
+ *  - Alarm / Undo.
  */
 class ConnectionLayerView @JvmOverloads constructor(
     context: Context,
@@ -42,11 +50,11 @@ class ConnectionLayerView @JvmOverloads constructor(
 ) : View(context, attrs) {
 
     // ---------------------------------------------------------------------
-    // إعدادات FX (مكانها الحقيقي في ChatActivity، لكن قيم افتراضية هنا)
+    // إعدادات FX (كما في Gemini: animEffect, attachSound, detachSound, ...)
     // ---------------------------------------------------------------------
     class PlugFxConfig {
-        var snapRadius: Float = 38f          // dp
-        var animEffect: String = "all"       // all | snap_ring | micro_recoil | signal_flash | detach_release | none
+        var snapRadius: Float = 38f
+        var animEffect: String = "all"
         var attachSound: String = "crisp_click"
         var detachSound: String = "soft_unplug"
         var soundVolume: Float = 0.70f
@@ -55,6 +63,27 @@ class ConnectionLayerView @JvmOverloads constructor(
     }
 
     var plugFxConfig: PlugFxConfig = PlugFxConfig()
+
+    // ---------------------------------------------------------------------
+    // حالة التفعيل (نهج Gemini: معطّل افتراضيًا)
+    // ---------------------------------------------------------------------
+    private var portsEnabled: Boolean = false
+
+    fun setPortsEnabled(enabled: Boolean) {
+        if (portsEnabled == enabled) return
+        portsEnabled = enabled
+        if (!enabled) {
+            draggingPlugId = null
+            pressedConnectionId = null
+            selectedId = null
+            fxList.clear()
+        }
+        updateAnimations()
+        invalidate()
+        saveState()
+    }
+
+    fun isPortsEnabled(): Boolean = portsEnabled
 
     // ---------------------------------------------------------------------
     // الحالة
@@ -71,6 +100,36 @@ class ConnectionLayerView @JvmOverloads constructor(
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
 
     private fun dp(value: Float): Float = value * density
+
+    // ---------------------------------------------------------------------
+    // تخزين الحالة (بديل localStorage)
+    // ---------------------------------------------------------------------
+    private val prefs: SharedPreferences =
+        context.getSharedPreferences("monolith_connection_layer", Context.MODE_PRIVATE)
+
+    private fun saveState() {
+        prefs.edit()
+            .putBoolean("portsEnabled", portsEnabled)
+            .putFloat("snapRadius", plugFxConfig.snapRadius)
+            .putString("animEffect", plugFxConfig.animEffect)
+            .putString("attachSound", plugFxConfig.attachSound)
+            .putString("detachSound", plugFxConfig.detachSound)
+            .putFloat("soundVolume", plugFxConfig.soundVolume)
+            .putBoolean("showPortLabels", plugFxConfig.showPortLabels)
+            .putBoolean("useIdentityLockColor", plugFxConfig.useIdentityLockColor)
+            .apply()
+    }
+
+    private fun loadState() {
+        portsEnabled = prefs.getBoolean("portsEnabled", false)
+        plugFxConfig.snapRadius = prefs.getFloat("snapRadius", 38f)
+        plugFxConfig.animEffect = prefs.getString("animEffect", "all") ?: "all"
+        plugFxConfig.attachSound = prefs.getString("attachSound", "crisp_click") ?: "crisp_click"
+        plugFxConfig.detachSound = prefs.getString("detachSound", "soft_unplug") ?: "soft_unplug"
+        plugFxConfig.soundVolume = prefs.getFloat("soundVolume", 0.70f)
+        plugFxConfig.showPortLabels = prefs.getBoolean("showPortLabels", true)
+        plugFxConfig.useIdentityLockColor = prefs.getBoolean("useIdentityLockColor", false)
+    }
 
     // ---------------------------------------------------------------------
     // Paints
@@ -120,7 +179,6 @@ class ConnectionLayerView @JvmOverloads constructor(
         strokeJoin = Paint.Join.ROUND
     }
 
-    // Sockets (المنافذ)
     private val socketRimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
@@ -138,7 +196,6 @@ class ConnectionLayerView @JvmOverloads constructor(
         color = Color.rgb(100, 116, 139)
     }
 
-    // FX (snap ring, detach ring, flash)
     private val fxRingPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
@@ -150,7 +207,7 @@ class ConnectionLayerView @JvmOverloads constructor(
     private val fxList = mutableListOf<FxEvent>()
 
     private data class FxEvent(
-        val type: String,          // "snap_ring" | "detach_release" | "signal_flash"
+        val type: String,
         val cx: Float,
         val cy: Float,
         val color: Int,
@@ -160,17 +217,11 @@ class ConnectionLayerView @JvmOverloads constructor(
         val toR: Float = 0f
     )
 
-    // ---------------------------------------------------------------------
-    // Paths
-    // ---------------------------------------------------------------------
     private val plugPath = Path()
     private val neckPath = Path()
     private val gripPath = Path()
     private val pathMeasure = PathMeasure()
 
-    // ---------------------------------------------------------------------
-    // Drag / touch
-    // ---------------------------------------------------------------------
     private var selectedId: String? = null
     private var pressedConnectionId: String? = null
     private var draggingPlugId: String? = null
@@ -181,17 +232,12 @@ class ConnectionLayerView @JvmOverloads constructor(
     private var glowEnabled = true
     private var animationEnabled = true
     private var directionVisible = true
-    private var socketsVisible = true
-
     private var controlPointsVisible = false
 
     private var downX = 0f
     private var downY = 0f
     private var touchMoved = false
 
-    // ---------------------------------------------------------------
-    // Callbacks
-    // ---------------------------------------------------------------
     var onConnectionSelected: ((WireConnection) -> Unit)? = null
     var onConnectionUpdated: ((WireConnection) -> Unit)? = null
     var onPlugMoved: ((plugId: String, position: PointF) -> Unit)? = null
@@ -201,10 +247,11 @@ class ConnectionLayerView @JvmOverloads constructor(
     init {
         setWillNotDraw(false)
         isClickable = true
+        loadState()
     }
 
     // ---------------------------------------------------------------
-    // Toggles (توقيعات عامة موجودة مسبقًا)
+    // Toggles
     // ---------------------------------------------------------------
     fun setGlowEnabled(enabled: Boolean) {
         glowEnabled = enabled
@@ -219,16 +266,6 @@ class ConnectionLayerView @JvmOverloads constructor(
 
     fun setDirectionVisible(visible: Boolean) {
         directionVisible = visible
-        invalidate()
-    }
-
-    fun setSocketsVisible(visible: Boolean) {
-        socketsVisible = visible
-        invalidate()
-    }
-
-    fun setWiresVisible(visible: Boolean) {
-        wiresVisible = visible
         invalidate()
     }
 
@@ -411,9 +448,6 @@ class ConnectionLayerView @JvmOverloads constructor(
         return best
     }
 
-    // ---------------------------------------------------------------
-    // Plug geometry
-    // ---------------------------------------------------------------
     private fun resolvePlugPosition(plug: PlugSpec): PointF {
         val attachedPortId = plug.attachedPortId
         if (attachedPortId != null) {
@@ -432,9 +466,6 @@ class ConnectionLayerView @JvmOverloads constructor(
         return resolvePlugPosition(plug)
     }
 
-    // ---------------------------------------------------------------
-    // Control points with sag (Gemini style)
-    // ---------------------------------------------------------------
     private fun getControlPoints(
         connection: WireConnection,
         start: PointF,
@@ -451,12 +482,10 @@ class ConnectionLayerView @JvmOverloads constructor(
             start.x + dx * 0.32f,
             start.y - offset + sag
         )
-
         val second = connection.control2 ?: PointF(
             start.x + dx * 0.68f,
             end.y - offset + sag
         )
-
         return Pair(first, second)
     }
 
@@ -476,18 +505,13 @@ class ConnectionLayerView @JvmOverloads constructor(
             start.x + dx * 0.32f,
             start.y - offset + sag
         )
-
         val second = cable.control2 ?: PointF(
             start.x + dx * 0.68f,
             end.y + offset * 0.4f + sag
         )
-
         return Pair(first, second)
     }
 
-    // ---------------------------------------------------------------
-    // Path rebuild
-    // ---------------------------------------------------------------
     private fun rebuildPaths() {
         paths.clear()
 
@@ -495,7 +519,6 @@ class ConnectionLayerView @JvmOverloads constructor(
             val start = resolveEndpointAnchor(connection.sourcePortId) ?: return@forEach
             val end = resolveEndpointAnchor(connection.targetPortId) ?: return@forEach
             val (first, second) = getControlPoints(connection, start, end)
-
             val path = Path().apply {
                 moveTo(start.x, start.y)
                 cubicTo(first.x, first.y, second.x, second.y, end.x, end.y)
@@ -508,7 +531,6 @@ class ConnectionLayerView @JvmOverloads constructor(
             val end = cable.targetPlugId?.let { resolveCableEndpointAnchor(it) }
                 ?: PointF(start.x + dp(46f), start.y + dp(28f))
             val (first, second) = getCableControlPoints(cable, start, end)
-
             val path = Path().apply {
                 moveTo(start.x, start.y)
                 cubicTo(first.x, first.y, second.x, second.y, end.x, end.y)
@@ -517,14 +539,12 @@ class ConnectionLayerView @JvmOverloads constructor(
         }
     }
 
-    // ---------------------------------------------------------------
-    // Drawing
-    // ---------------------------------------------------------------
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
 
+        if (!portsEnabled) return
         if (!wiresVisible) {
-            if (socketsVisible) drawAllSockets(canvas)
+            drawAllSockets(canvas)
             return
         }
 
@@ -540,16 +560,11 @@ class ConnectionLayerView @JvmOverloads constructor(
             drawCableSpec(canvas, cable, path)
         }
 
-        if (socketsVisible) drawAllSockets(canvas)
-
+        drawAllSockets(canvas)
         plugs.values.forEach { drawPlugHead(canvas, it) }
-
         drawFxEvents(canvas)
     }
 
-    // ---------------------------------------------------------------
-    // Sockets
-    // ---------------------------------------------------------------
     private fun drawAllSockets(canvas: Canvas) {
         endpoints.forEach { (portId, point) ->
             drawSocket(canvas, point.x, point.y, portId)
@@ -587,24 +602,15 @@ class ConnectionLayerView @JvmOverloads constructor(
             socketLedPaint
         )
 
-        // تسمية المنفذ فقط إذا بدأ بـ L أو R
         if (plugFxConfig.showPortLabels) {
             val trimmed = portId.trim()
             if (trimmed.length in 2..4 &&
                 (trimmed[0] == 'L' || trimmed[0] == 'R')) {
-                canvas.drawText(
-                    trimmed,
-                    cx,
-                    cy - dp(16f),
-                    socketLabelPaint
-                )
+                canvas.drawText(trimmed, cx, cy - dp(16f), socketLabelPaint)
             }
         }
     }
 
-    // ---------------------------------------------------------------
-    // Cables
-    // ---------------------------------------------------------------
     private fun drawCableSpec(canvas: Canvas, cable: CableSpec, path: Path) {
         val width = dp(cable.strokeWidthDp)
 
@@ -624,9 +630,6 @@ class ConnectionLayerView @JvmOverloads constructor(
         drawSheen(canvas, path, width)
     }
 
-    // ---------------------------------------------------------------
-    // Sheen
-    // ---------------------------------------------------------------
     private fun drawSheen(canvas: Canvas, path: Path, width: Float) {
         sheenPaint.color = Color.argb(90, 255, 255, 255)
         sheenPaint.strokeWidth = width * 0.28f
@@ -634,16 +637,12 @@ class ConnectionLayerView @JvmOverloads constructor(
         canvas.drawPath(path, sheenPaint)
     }
 
-    // ---------------------------------------------------------------
-    // Plug (Gemini style)
-    // ---------------------------------------------------------------
     private fun drawPlugHead(canvas: Canvas, plug: PlugSpec) {
         val pos = resolvePlugPosition(plug)
         val save = canvas.save()
         canvas.translate(pos.x, pos.y)
         canvas.rotate(plug.angleDeg)
 
-        // 1. Prongs (4 أصابع معدنية)
         val pinLen = dp(8f)
         val pinOffsets = floatArrayOf(-dp(5.2f), -dp(1.7f), dp(1.7f), dp(5.2f))
         plugPinPaint.color = Color.rgb(203, 213, 225)
@@ -652,7 +651,6 @@ class ConnectionLayerView @JvmOverloads constructor(
             canvas.drawLine(-dp(15f), y, -dp(15f) + pinLen, y, plugPinPaint)
         }
 
-        // 2. Body (جسم مستطيل)
         plugPath.reset()
         plugPath.moveTo(-dp(9f), -dp(10f))
         plugPath.lineTo(dp(6f), -dp(10f))
@@ -664,13 +662,11 @@ class ConnectionLayerView @JvmOverloads constructor(
         plugBodyPaint.alpha = 245
         canvas.drawPath(plugPath, plugBodyPaint)
 
-        // 3. Rim (لمعة داخلية)
         plugRimPaint.color = Color.WHITE
         plugRimPaint.strokeWidth = dp(0.9f)
         plugRimPaint.alpha = 110
         canvas.drawPath(plugPath, plugRimPaint)
 
-        // 4. Grip ridges
         gripPath.reset()
         val grips = floatArrayOf(-dp(6f), -dp(3f), 0f, dp(3f), dp(6f))
         grips.forEach { y ->
@@ -681,7 +677,6 @@ class ConnectionLayerView @JvmOverloads constructor(
         plugPinPaint.strokeWidth = dp(0.8f)
         canvas.drawPath(gripPath, plugPinPaint)
 
-        // 5. Neck (رقبة)
         neckPath.reset()
         neckPath.moveTo(dp(6f), -dp(3.5f))
         neckPath.lineTo(dp(12f), -dp(3.5f))
@@ -691,7 +686,6 @@ class ConnectionLayerView @JvmOverloads constructor(
         canvas.drawPath(neckPath, plugBodyPaint)
         canvas.drawPath(neckPath, plugRimPaint)
 
-        // 6. Tail (ذيل مدبب)
         val tailPath = Path()
         tailPath.moveTo(dp(12f), -dp(3.5f))
         tailPath.lineTo(dp(20f), -dp(1.5f))
@@ -703,9 +697,6 @@ class ConnectionLayerView @JvmOverloads constructor(
         canvas.restoreToCount(save)
     }
 
-    // ---------------------------------------------------------------
-    // Wire
-    // ---------------------------------------------------------------
     private fun drawWire(canvas: Canvas, connection: WireConnection, path: Path) {
         val selected = selectedId == connection.id
         val width = dp(connection.strokeWidthDp)
@@ -754,9 +745,6 @@ class ConnectionLayerView @JvmOverloads constructor(
         glowPaint.style = Paint.Style.STROKE
     }
 
-    // ---------------------------------------------------------------
-    // Direction arrows
-    // ---------------------------------------------------------------
     private fun drawDirection(canvas: Canvas, path: Path, connection: WireConnection) {
         when (connection.direction) {
             ConnectionDirection.BIDIRECTIONAL -> {
@@ -793,9 +781,6 @@ class ConnectionLayerView @JvmOverloads constructor(
         canvas.drawLine(position[0], position[1], rightX, rightY, arrowPaint)
     }
 
-    // ---------------------------------------------------------------
-    // Control points
-    // ---------------------------------------------------------------
     private fun drawControls(canvas: Canvas, connection: WireConnection) {
         val start = resolveEndpointAnchor(connection.sourcePortId) ?: return
         val end = resolveEndpointAnchor(connection.targetPortId) ?: return
@@ -816,10 +801,8 @@ class ConnectionLayerView @JvmOverloads constructor(
         canvas.drawCircle(second.x, second.y, dp(2.2f), pointPaint)
     }
 
-    // ---------------------------------------------------------------
-    // FX
-    // ---------------------------------------------------------------
     fun triggerSnapRing(cx: Float, cy: Float, color: Int) {
+        if (!portsEnabled) return
         if (plugFxConfig.animEffect != "all" &&
             plugFxConfig.animEffect != "snap_ring") return
         fxList.add(
@@ -835,6 +818,7 @@ class ConnectionLayerView @JvmOverloads constructor(
     }
 
     fun triggerDetachRelease(cx: Float, cy: Float, color: Int) {
+        if (!portsEnabled) return
         if (plugFxConfig.animEffect != "all" &&
             plugFxConfig.animEffect != "detach_release") return
         fxList.add(
@@ -850,6 +834,7 @@ class ConnectionLayerView @JvmOverloads constructor(
     }
 
     fun triggerSignalFlash(cx: Float, cy: Float, color: Int) {
+        if (!portsEnabled) return
         if (plugFxConfig.animEffect != "all" &&
             plugFxConfig.animEffect != "signal_flash") return
         fxList.add(
@@ -904,10 +889,14 @@ class ConnectionLayerView @JvmOverloads constructor(
         if (fxList.isNotEmpty()) postInvalidateOnAnimation()
     }
 
-    // ---------------------------------------------------------------
-    // Animation management
-    // ---------------------------------------------------------------
     private fun updateAnimations() {
+        if (!portsEnabled) {
+            animators.values.forEach { it.cancel() }
+            animators.clear()
+            progress.clear()
+            return
+        }
+
         connections.values.forEach { connection ->
             val shouldRun =
                 isAttachedToWindow &&
@@ -964,9 +953,6 @@ class ConnectionLayerView @JvmOverloads constructor(
         super.onDetachedFromWindow()
     }
 
-    // ---------------------------------------------------------------
-    // Touch
-    // ---------------------------------------------------------------
     private fun findPlugAt(x: Float, y: Float): PlugSpec? {
         val hitRadius = dp(18f)
         val candidates = plugs.values.toList().asReversed()
@@ -993,6 +979,8 @@ class ConnectionLayerView @JvmOverloads constructor(
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (!portsEnabled) return false
+
         when (event.actionMasked) {
 
             MotionEvent.ACTION_DOWN -> {
@@ -1125,9 +1113,6 @@ class ConnectionLayerView @JvmOverloads constructor(
         return true
     }
 
-    // ---------------------------------------------------------------
-    // Connection hit test
-    // ---------------------------------------------------------------
     private fun findConnectionAt(x: Float, y: Float): WireConnection? {
         val tolerance = dp(14f)
         val position = FloatArray(2)
