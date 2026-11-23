@@ -615,7 +615,9 @@ class ChatAdapter(
                 "pulse" -> {
                     val maxR = Math.hypot(w.toDouble(), h.toDouble()).toFloat() * 0.65f
                     val gradient = android.graphics.RadialGradient(
-                        w / 2f, h / 2f, 4f, w / 2f, h / 2f, maxR,
+                        w / 2f,
+                        h / 2f,
+                        maxR,
                         intArrayOf(
                             Color.argb((intensity * 255 * 0.85f).toInt(), r, g, b),
                             Color.argb(0, r, g, b)
