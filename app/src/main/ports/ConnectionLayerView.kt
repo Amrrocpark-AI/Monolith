@@ -10,7 +10,6 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PathMeasure
 import android.graphics.PointF
-import android.graphics.RectF
 import android.graphics.Shader
 import android.util.AttributeSet
 import android.view.MotionEvent
@@ -24,9 +23,14 @@ import kotlin.math.sin
 import com.monolith.graph.ports.models.*
 
 /**
- * ConnectionLayerView — نقل حرفي من MONOLITH Canvas (Gemini).
- * يشمل: plug geometry بالأبعاد الأصلية، lock badge، metal gradient،
- * shadow، plugAngles مع smooth interpolation، detachedEnds، path session.
+ * ConnectionLayerView — مسؤول عن:
+ * - الأسلاك (connections + cables)
+ * - القوابس (plugs) مع metal gradient + shadow
+ * - FX (snap / detach / flash)
+ * - Path session (pen / paint)
+ *
+ * PortView هو المسؤول عن رسم rim + hole + LED + label + lock badge.
+ * لا يرسم هذا الـ View أي socket.
  */
 class ConnectionLayerView @JvmOverloads constructor(
     context: Context,
@@ -96,8 +100,6 @@ class ConnectionLayerView @JvmOverloads constructor(
     private val paths = HashMap<String, Path>()
     private val progress = HashMap<String, Float>()
     private val animators = HashMap<String, ValueAnimator>()
-
-    // [Gemini: plugAngles]
     private val plugAngles = HashMap<String, Float>()
 
     private val density = resources.displayMetrics.density
@@ -131,7 +133,6 @@ class ConnectionLayerView @JvmOverloads constructor(
         plugFxConfig.useIdentityLockColor = prefs.getBoolean("useIdentityLockColor", false)
     }
 
-    // ---------- Paints ----------
     private val wirePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND
     }
@@ -144,7 +145,6 @@ class ConnectionLayerView @JvmOverloads constructor(
     }
     private val pointPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
 
-    // [Gemini: plug body paint + shadow]
     private val plugBodyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
         setShadowLayer(dp(3.5f), -dp(2f), dp(4f), Color.argb(204, 0, 0, 0))
@@ -154,7 +154,6 @@ class ConnectionLayerView @JvmOverloads constructor(
         strokeWidth = dp(1.4f)
         strokeJoin = Paint.Join.ROUND
     }
-    // [Gemini: metalProngGrad]
     private val plugPinPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = dp(2f)
@@ -182,31 +181,6 @@ class ConnectionLayerView @JvmOverloads constructor(
     private val sheenPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND
     }
-    private val socketRimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE; strokeWidth = dp(1.2f)
-    }
-    private val socketHolePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.FILL; color = Color.rgb(2, 3, 5)
-    }
-    private val socketLedPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-    private val socketLedRimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE; strokeWidth = dp(0.9f)
-    }
-    private val socketLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.FILL
-        textSize = dp(9f)
-        textAlign = Paint.Align.CENTER
-        color = Color.rgb(100, 116, 139)
-    }
-    // [Gemini: lock badge paints]
-    private val lockBodyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-    private val lockRimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE; strokeWidth = dp(1.35f)
-    }
-    private val lockShacklePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE; strokeWidth = dp(1.25f); strokeCap = Paint.Cap.ROUND
-    }
-    private val lockFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
 
     private val fxRingPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND
@@ -247,7 +221,6 @@ class ConnectionLayerView @JvmOverloads constructor(
     private var downY = 0f
     private var touchMoved = false
 
-    // [Gemini: plugClickTracker]
     private var plugClickLastKey: String? = null
     private var plugClickCount: Int = 0
     private var plugClickLastTime: Long = 0L
@@ -264,7 +237,7 @@ class ConnectionLayerView @JvmOverloads constructor(
     init {
         setWillNotDraw(false)
         isClickable = true
-        setLayerType(LAYER_TYPE_SOFTWARE, null) // [Gemini: plugShadow]
+        setLayerType(LAYER_TYPE_SOFTWARE, null)
         loadState()
     }
 
@@ -342,7 +315,6 @@ class ConnectionLayerView @JvmOverloads constructor(
     }
     fun clearEndpoints() { endpoints.clear(); rebuildPaths(); invalidate() }
 
-    // ---------- Path Session ----------
     fun enterPathSession(cableId: String, mode: String) {
         val cable = cables[cableId] ?: return
         val initial = cable.customPoints.map { PointF(it.x, it.y) }.toMutableList()
@@ -403,7 +375,6 @@ class ConnectionLayerView @JvmOverloads constructor(
         return out.take(7)
     }
 
-    // [Gemini: buildCablePathData]
     private fun buildCablePathInto(
         path: Path,
         x1: Float, y1: Float, dir1x: Float, dir1y: Float,
@@ -463,19 +434,13 @@ class ConnectionLayerView @JvmOverloads constructor(
         return PointF(plug.x, plug.y)
     }
 
-    /**
-     * [Gemini: resolvePlugPose] — يحسب موقع وزاوية القابس بناءً على:
-     * - إن كان ملتصقاً → زاوية المنفذ
-     * - إن كان يُسحب → velocity أو اتجاه الكابل الآخر مع smooth 0.28
-     * - إن كان مفكوكاً → القيمة المحفوظة في detachedEnds
-     */
     private fun resolvePlugPose(endKey: String, plug: PlugSpec): PlugPose {
         val cable = cables.values.firstOrNull {
             (endKey == "from" && it.sourcePlugId == plug.id) ||
                 (endKey == "to" && it.targetPlugId == plug.id)
         }
         val angleKey = "${cable?.id ?: plug.id}_$endKey"
-        val isDragging = dragStateIsActive() && draggingPlugId == plug.id
+        val isDragging = draggingPlugId == plug.id && touchMoved
 
         var x: Float
         var y: Float
@@ -498,8 +463,7 @@ class ConnectionLayerView @JvmOverloads constructor(
             var target = plugAngles[angleKey] ?: Math.toRadians(plug.angleDeg.toDouble()).toFloat()
             val nearest = findNearestSocketAnchor(pos)
             if (nearest != null) {
-                val nid = nearest.first
-                target = if (nid.contains(":left:", true)) 0f else Math.PI.toFloat()
+                target = if (nearest.first.contains(":left:", true)) 0f else Math.PI.toFloat()
             } else if (cable != null) {
                 val otherKey = if (endKey == "to") "from" else "to"
                 val otherPlugId = if (otherKey == "from") cable.sourcePlugId else cable.targetPlugId
@@ -530,9 +494,6 @@ class ConnectionLayerView @JvmOverloads constructor(
     }
 
     private fun normalizeAngle(a: Float): Float = atan2(sin(a), cos(a))
-
-    private fun dragStateIsActive(): Boolean =
-        draggingPlugId != null && touchMoved
 
     private fun rebuildPaths() {
         paths.clear()
@@ -584,7 +545,7 @@ class ConnectionLayerView @JvmOverloads constructor(
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         if (!portsEnabled) return
-        if (!wiresVisible) { drawAllSockets(canvas); return }
+        if (!wiresVisible) return
 
         connections.values.forEach { c ->
             if (!c.visible) return@forEach
@@ -594,107 +555,10 @@ class ConnectionLayerView @JvmOverloads constructor(
             if (!cab.visible) return@forEach
             paths["cable:${cab.id}"]?.let { drawCableSpec(canvas, cab, it) }
         }
-        drawAllSockets(canvas)
         plugs.values.forEach { drawPlugHead(canvas, it) }
         drawPaintPreview(canvas)
         drawPenNodes(canvas)
         drawFxEvents(canvas)
-    }
-
-    private fun drawAllSockets(canvas: Canvas) {
-        endpoints.forEach { (pid, pt) -> drawSocket(canvas, pt.x, pt.y, pid) }
-    }
-
-    private fun drawSocket(canvas: Canvas, cx: Float, cy: Float, portId: String) {
-        val isLeft = portId.contains(":left:", true)
-
-        socketRimPaint.color = Color.rgb(42, 53, 72)
-        canvas.drawRoundRect(cx - dp(4f), cy - dp(11f), cx + dp(4f), cy + dp(11f), dp(2f), dp(2f), socketRimPaint)
-        canvas.drawRoundRect(cx - dp(2f), cy - dp(8f), cx + dp(2f), cy + dp(8f), dp(1f), dp(1f), socketHolePaint)
-
-        // [Gemini] LED: left +11, right -15.5
-        val ledX = if (isLeft) cx + dp(11f) else cx - dp(15.5f)
-        val attached = plugs.values.firstOrNull { it.attachedPortId == portId }
-
-        if (attached != null) {
-            socketLedPaint.color = attached.color
-            canvas.drawRoundRect(ledX, cy - dp(9f), ledX + dp(4.5f), cy + dp(9f), dp(2f), dp(2f), socketLedPaint)
-            socketLedRimPaint.color = when (attached.color) {
-                0xFF11161f.toInt() -> Color.rgb(71, 85, 105)
-                0xFFf8fafc.toInt() -> Color.rgb(100, 116, 139)
-                else -> Color.argb(102, 255, 255, 255)
-            }
-            canvas.drawRoundRect(ledX, cy - dp(9f), ledX + dp(4.5f), cy + dp(9f), dp(2f), dp(2f), socketLedRimPaint)
-
-            // [Gemini: lock badge] — فقط إن كان الطرفان ليسا "mine"
-            val cable = cables.values.firstOrNull {
-                (it.sourcePlugId == portId || it.targetPlugId == portId)
-            }
-            if (cable != null) {
-                val cardOwner = attached.attachedPortId?.substringBefore(":") ?: ""
-                if (cardOwner != "mine" && cable.owner != "mine") {
-                    if (plugFxConfig.useIdentityLockColor || true) {
-                        val identityColor = getPortIdentityColor(portId)
-                        drawLockBadge(canvas, cx, cy, isLeft, identityColor)
-                    }
-                }
-            }
-        } else {
-            socketLedPaint.color = Color.rgb(30, 41, 59)
-            canvas.drawRoundRect(ledX, cy - dp(9f), ledX + dp(4.5f), cy + dp(9f), dp(2f), dp(2f), socketLedPaint)
-            socketLedRimPaint.color = Color.rgb(39, 53, 74)
-            canvas.drawRoundRect(ledX, cy - dp(9f), ledX + dp(4.5f), cy + dp(9f), dp(2f), dp(2f), socketLedRimPaint)
-        }
-
-        // [Gemini] label: left +22, right -26, y+3
-        if (plugFxConfig.showPortLabels) {
-            val idx = Regex(":(left|right):(\\d+)$").find(portId)?.groupValues?.getOrNull(2)?.toIntOrNull() ?: 0
-            val label = (if (isLeft) "L" else "R") + (idx + 1)
-            val tx = if (isLeft) cx + dp(22f) else cx - dp(26f)
-            canvas.drawText(label, tx, cy + dp(3f), socketLabelPaint)
-        }
-    }
-
-    // [Gemini: appendSocketLockBadge] — نسخ حرفي إلى Canvas
-    private fun drawLockBadge(canvas: Canvas, cx: Float, cy: Float, isLeft: Boolean, tone: Int) {
-        val lockCx = if (isLeft) cx - dp(14f) else cx + dp(14f)
-        val lockCy = cy - dp(14f)
-
-        // rect 12×12 rx=3
-        lockBodyPaint.color = Color.rgb(15, 23, 42)
-        val r = RectF(lockCx - dp(6f), lockCy - dp(6f), lockCx + dp(6f), lockCy + dp(6f))
-        canvas.drawRoundRect(r, dp(3f), dp(3f), lockBodyPaint)
-        lockRimPaint.color = tone
-        canvas.drawRoundRect(r, dp(3f), dp(3f), lockRimPaint)
-
-        // shackle path
-        val shackle = Path().apply {
-            moveTo(lockCx - dp(2.2f), lockCy - dp(1f))
-            lineTo(lockCx - dp(2.2f), lockCy - dp(2.6f))
-            arcTo(
-                RectF(lockCx - dp(4.4f), lockCy - dp(4.8f), lockCx + dp(0f), lockCy - dp(0.4f)),
-                180f, 180f, false
-            )
-            lineTo(lockCx + dp(2.2f), lockCy - dp(1f))
-        }
-        lockShacklePaint.color = tone
-        canvas.drawPath(shackle, lockShacklePaint)
-
-        // lock body rect 5.4×4 rx=1
-        lockFillPaint.color = tone
-        canvas.drawRoundRect(
-            lockCx - dp(2.7f), lockCy - dp(1f), lockCx + dp(2.7f), lockCy + dp(3f),
-            dp(1f), dp(1f), lockFillPaint
-        )
-    }
-
-    private fun getPortIdentityColor(portId: String): Int {
-        val owner = portId.substringBefore(":")
-        return when {
-            owner.contains("ai", true) || owner.startsWith("card-3") -> Color.rgb(239, 68, 68)
-            owner.startsWith("card-2") -> Color.rgb(56, 189, 248)
-            else -> Color.rgb(251, 191, 36)
-        }
     }
 
     private fun drawCableSpec(canvas: Canvas, cable: CableSpec, path: Path) {
@@ -717,10 +581,6 @@ class ConnectionLayerView @JvmOverloads constructor(
         canvas.drawPath(path, sheenPaint)
     }
 
-    /**
-     * [Gemini: createPlugSvgGroup → Canvas] — اتجاه صحيح:
-     * pins في +X (أمام)، body في -X (خلف)، tail في -X أكثر.
-     */
     private fun drawPlugHead(canvas: Canvas, plug: PlugSpec) {
         val endKey = when {
             cables.values.any { it.sourcePlugId == plug.id } -> "from"
@@ -732,15 +592,15 @@ class ConnectionLayerView @JvmOverloads constructor(
         canvas.translate(pose.x, pose.y)
         canvas.rotate(Math.toDegrees(pose.angle.toDouble()).toFloat())
 
-        // 1. Pins: x=0..8, y = ±5.2, ±1.7
+        // Pins: x=0..8
         floatArrayOf(-dp(5.2f), -dp(1.7f), dp(1.7f), dp(5.2f)).forEach { y ->
             canvas.drawLine(0f, y, dp(8f), y, plugPinPaint)
         }
 
-        // 2. Collar vertical line at x=0
+        // Collar at x=0
         canvas.drawLine(0f, -dp(9.5f), 0f, dp(9.5f), plugCollarPaint)
 
-        // 3. Body: (-8,-8.5) → (-22,-8.5) → (-22,8.5) → (-8,8.5)
+        // Body: -8..-22
         val body = Path().apply {
             moveTo(-dp(8f), -dp(8.5f)); lineTo(-dp(22f), -dp(8.5f))
             lineTo(-dp(22f), dp(8.5f)); lineTo(-dp(8f), dp(8.5f))
@@ -755,14 +615,14 @@ class ConnectionLayerView @JvmOverloads constructor(
         }
         canvas.drawPath(body, plugBodyRimPaint)
 
-        // 4. Grip ridges at x=-18,-15,-12
+        // Grips -18..-12
         gripRidgePaint.color = if (plug.color == 0xFF11161f.toInt())
             Color.argb(51, 255, 255, 255) else Color.argb(71, 0, 0, 0)
         floatArrayOf(-dp(18f), -dp(15f), -dp(12f)).forEach { x ->
             canvas.drawLine(x, -dp(6f), x, dp(6f), gripRidgePaint)
         }
 
-        // 5. Tail: (-22,-8.5) → (-32,-3.2) → (-32,3.2) → (-22,8.5)
+        // Tail -22..-32
         val tail = Path().apply {
             moveTo(-dp(22f), -dp(8.5f)); lineTo(-dp(32f), -dp(3.2f))
             lineTo(-dp(32f), dp(3.2f)); lineTo(-dp(22f), dp(8.5f))
@@ -1159,7 +1019,6 @@ class ConnectionLayerView @JvmOverloads constructor(
             val steps = (len / dp(8f)).toInt().coerceIn(24, 240)
             for (i in 0..steps) {
                 val d = len * i / steps.toFloat()
-                if (!pathMeasure.getPathSegment(i / steps.toFloat(), i / steps.toFloat() + 0.001f, null)) {}
                 if (!pathMeasure.getPosTan(d, pos, null)) continue
                 if (hypot(x - pos[0], y - pos[1]) <= tol) return@firstOrNull true
             }
