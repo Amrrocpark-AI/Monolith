@@ -7,10 +7,13 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
-import android.graphics.RectF
+import android.graphics.RadialGradient
+import android.graphics.Shader
 import android.graphics.Typeface
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.LayerDrawable
 import android.text.Editable
@@ -37,6 +40,10 @@ import io.noties.markwon.Markwon
 import io.noties.markwon.ext.tables.TablePlugin
 import io.noties.markwon.ext.tables.TableTheme
 import java.util.LinkedHashMap
+import kotlin.math.cos
+import kotlin.math.hypot
+import kotlin.math.min
+import kotlin.math.sin
 
 enum class RelationKind(
     val label: String,
@@ -85,6 +92,14 @@ data class ExtractedCodeBlock(
     val isClosed: Boolean = true
 )
 
+data class CardBgPreset(
+    val id: String,
+    val label: String,
+    val topColor: Int,
+    val bottomColor: Int,
+    val chipColor: Int
+)
+
 class ChatAdapter(
     context: Context,
     private val onEditClick: (ChatMessage) -> Unit,
@@ -121,14 +136,17 @@ class ChatAdapter(
     private val surfaceColor = Color.rgb(11, 15, 31)
     private val panelColor = Color.rgb(18, 23, 43)
     private val borderColor = Color.rgb(51, 65, 100)
-    private val textColor = Color.rgb(235, 241, 255)
-    private val mutedColor = Color.rgb(145, 160, 190)
-    private val accentColor = Color.rgb(0, 212, 255)
+    private val textColor = Color.rgb(241, 245, 249)
+    private val mutedColor = Color.rgb(142, 161, 189)
+    private val accentColor = Color.rgb(56, 189, 248)
     private val purpleColor = Color.rgb(168, 85, 247)
 
-    private val identitySelfColor = Color.rgb(248, 250, 252)
-    private val identityAiColor = Color.rgb(239, 68, 68)
+    // ألوان الهوية الأصلية في المعاينة: self = #f8fafc ، peer = #38bdf8 ، ai = #ef4444
+    private var identitySelfColor = Color.rgb(248, 250, 252)
+    private var identityPeerColor = Color.rgb(56, 189, 248)
+    private var identityAiColor = Color.rgb(239, 68, 68)
 
+    // ألوان البطاقة والهيدر والدرع من المعاينة
     private val geminiCardBgTop = Color.rgb(20, 25, 36)
     private val geminiCardBgBottom = Color.rgb(12, 15, 22)
     private val geminiCardBorder = Color.rgb(35, 45, 63)
@@ -143,6 +161,54 @@ class ChatAdapter(
     private val geminiPaletteBg = Color.argb(13, 255, 255, 255)
     private val geminiPaletteBorder = Color.argb(31, 255, 255, 255)
     private val geminiPaletteIconColor = Color.rgb(148, 163, 184)
+
+    // قوالب خلفيات البطاقة المنسوخة من CARD_BG_PRESETS
+    private val cardBgPresets = listOf(
+        CardBgPreset(
+            id = "default",
+            label = "افتراضي داكن",
+            topColor = Color.rgb(20, 25, 36),
+            bottomColor = Color.rgb(12, 15, 22),
+            chipColor = Color.rgb(20, 25, 36)
+        ),
+        CardBgPreset(
+            id = "obsidian",
+            label = "أسود خالص",
+            topColor = Color.rgb(17, 24, 39),
+            bottomColor = Color.rgb(3, 7, 18),
+            chipColor = Color.rgb(11, 14, 20)
+        ),
+        CardBgPreset(
+            id = "midnight",
+            label = "أزرق ليلي عميق",
+            topColor = Color.rgb(15, 23, 42),
+            bottomColor = Color.rgb(2, 6, 23),
+            chipColor = Color.rgb(15, 23, 42)
+        ),
+        CardBgPreset(
+            id = "slate",
+            label = "أردوازي صلب",
+            topColor = Color.rgb(30, 41, 59),
+            bottomColor = Color.rgb(15, 23, 42),
+            chipColor = Color.rgb(22, 32, 50)
+        ),
+        CardBgPreset(
+            id = "charcoal",
+            label = "فحمي نقي",
+            topColor = Color.rgb(28, 25, 23),
+            bottomColor = Color.rgb(15, 13, 14),
+            chipColor = Color.rgb(28, 25, 23)
+        )
+    )
+
+    // إعدادات الخلفية الديناميكية والشفافية المطابقة للمعاينة
+    private var activeBgPresetId: String = "default"
+    private var cardOpacityFloat: Float = 0.98f
+    private var dynEnabled: Boolean = true
+    private var dynStateMode: String = "on" // "off" | "on" | "locked"
+    private var dynPattern: String = "pulse" // "pulse" | "grid" | "sheen" | "chess" | "cyberpunk" | "organic"
+    private var dynSpeedSec: Float = 8f
+    private var dynIntensityPercent: Int = 20
 
     private val markwon: Markwon =
         Markwon.builder(appContext)
@@ -225,6 +291,31 @@ class ChatAdapter(
                 fallback
             }
         }
+    }
+
+    fun applyVisualConfig(
+        selfColorHex: String? = null,
+        peerColorHex: String? = null,
+        aiColorHex: String? = null,
+        bgPresetId: String? = null,
+        cardOpacity: Float? = null,
+        dynamicEnabled: Boolean? = null,
+        dynamicState: String? = null,
+        dynamicPattern: String? = null,
+        dynamicSpeedSec: Float? = null,
+        dynamicIntensityPercent: Int? = null
+    ) {
+        selfColorHex?.let { identitySelfColor = parseColor(it, identitySelfColor) }
+        peerColorHex?.let { identityPeerColor = parseColor(it, identityPeerColor) }
+        aiColorHex?.let { identityAiColor = parseColor(it, identityAiColor) }
+        bgPresetId?.let { activeBgPresetId = it }
+        cardOpacity?.let { cardOpacityFloat = it.coerceIn(0.25f, 1.0f) }
+        dynamicEnabled?.let { dynEnabled = it }
+        dynamicState?.let { dynStateMode = it }
+        dynamicPattern?.let { dynPattern = it }
+        dynamicSpeedSec?.let { dynSpeedSec = it.coerceIn(2f, 15f) }
+        dynamicIntensityPercent?.let { dynIntensityPercent = it.coerceIn(5, 100) }
+        notifyDataSetChanged()
     }
 
     override fun getItemViewType(position: Int): Int {
@@ -583,94 +674,276 @@ class ChatAdapter(
         }
     }
 
+    private fun buildIdentityVectorDrawable(entityType: String, color: Int): Drawable {
+        return object : Drawable() {
+            private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+
+            override fun draw(canvas: Canvas) {
+                val b = bounds
+                if (b.width() <= 0 || b.height() <= 0) return
+                val cx = b.exactCenterX()
+                val cy = b.exactCenterY()
+                val s = min(b.width(), b.height()).toFloat()
+
+                paint.reset()
+                paint.isAntiAlias = true
+                paint.color = color
+
+                when (entityType) {
+                    "peer" -> {
+                        paint.style = Paint.Style.STROKE
+                        paint.strokeWidth = s * 0.095f
+                        paint.strokeCap = Paint.Cap.ROUND
+                        canvas.drawCircle(cx, cy - s * 0.14f, s * 0.16f, paint)
+                        val shoulders = Path().apply {
+                            moveTo(cx - s * 0.30f, cy + s * 0.30f)
+                            quadTo(cx, cy + s * 0.04f, cx + s * 0.30f, cy + s * 0.30f)
+                        }
+                        canvas.drawPath(shoulders, paint)
+                    }
+                    "ai" -> {
+                        paint.style = Paint.Style.FILL
+                        paint.color = Color.argb(38, Color.red(color), Color.green(color), Color.blue(color))
+                        canvas.drawRoundRect(
+                            cx - s * 0.28f,
+                            cy - s * 0.14f,
+                            cx + s * 0.28f,
+                            cy + s * 0.28f,
+                            s * 0.10f,
+                            s * 0.10f,
+                            paint
+                        )
+                        paint.style = Paint.Style.STROKE
+                        paint.color = color
+                        paint.strokeWidth = s * 0.08f
+                        paint.strokeCap = Paint.Cap.ROUND
+                        canvas.drawRoundRect(
+                            cx - s * 0.28f,
+                            cy - s * 0.14f,
+                            cx + s * 0.28f,
+                            cy + s * 0.28f,
+                            s * 0.10f,
+                            s * 0.10f,
+                            paint
+                        )
+                        canvas.drawLine(cx, cy - s * 0.34f, cx, cy - s * 0.14f, paint)
+                        paint.style = Paint.Style.FILL
+                        canvas.drawCircle(cx, cy - s * 0.36f, s * 0.055f, paint)
+                        canvas.drawCircle(cx - s * 0.12f, cy + s * 0.04f, s * 0.055f, paint)
+                        canvas.drawCircle(cx + s * 0.12f, cy + s * 0.04f, s * 0.055f, paint)
+                        paint.style = Paint.Style.STROKE
+                        canvas.drawLine(cx - s * 0.12f, cy + s * 0.18f, cx + s * 0.12f, cy + s * 0.18f, paint)
+                    }
+                    else -> {
+                        paint.style = Paint.Style.FILL
+                        canvas.drawCircle(cx, cy - s * 0.14f, s * 0.16f, paint)
+                        val body = Path().apply {
+                            moveTo(cx - s * 0.30f, cy + s * 0.30f)
+                            quadTo(cx, cy + s * 0.04f, cx + s * 0.30f, cy + s * 0.30f)
+                            close()
+                        }
+                        canvas.drawPath(body, paint)
+                    }
+                }
+            }
+
+            override fun setAlpha(alpha: Int) {
+                paint.alpha = alpha
+                invalidateSelf()
+            }
+
+            override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) {
+                paint.colorFilter = colorFilter
+                invalidateSelf()
+            }
+
+            @Deprecated("Deprecated in Java")
+            override fun getOpacity(): Int = android.graphics.PixelFormat.TRANSLUCENT
+        }
+    }
+
     private inner class DynBackgroundView(context: Context) : View(context) {
-        private var pattern: String = "pulse"
-        private var tone: Int = accentColor
+        private var pattern: String = dynPattern
+        private var tone: Int = identitySelfColor
+        private var speedSec: Float = dynSpeedSec
+        private var intensity: Float = dynIntensityPercent / 100f
+        private var active: Boolean = dynEnabled && dynStateMode != "off"
 
         fun configure(entityType: String) {
-            pattern = when (entityType) {
-                "peer" -> "grid"
-                "ai" -> "sheen"
-                else -> "pulse"
-            }
+            pattern = dynPattern
             tone = when (entityType) {
-                "peer" -> identityPeerColor()
+                "peer" -> identityPeerColor
                 "ai" -> identityAiColor
                 else -> identitySelfColor
             }
+            speedSec = dynSpeedSec
+            intensity = dynIntensityPercent / 100f
+            active = dynEnabled && dynStateMode != "off"
             invalidate()
         }
 
-        private fun identityPeerColor(): Int = Color.rgb(56, 189, 248)
-
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
+            if (!active) return
             val w = width.toFloat()
             val h = height.toFloat()
             if (w <= 0f || h <= 0f) return
+
+            val elapsedSec = (android.os.SystemClock.uptimeMillis() % 600_000L) / 1000f
+            val cycle = (elapsedSec % speedSec.coerceAtLeast(0.5f)) / speedSec.coerceAtLeast(0.5f)
+            val phase = (cycle * Math.PI * 2.0).toFloat()
+
             val paint = Paint(Paint.ANTI_ALIAS_FLAG)
             val r = Color.red(tone)
             val g = Color.green(tone)
             val b = Color.blue(tone)
-            val intensity = 0.22f
 
             when (pattern) {
                 "pulse" -> {
-                    val maxR = Math.hypot(w.toDouble(), h.toDouble()).toFloat() * 0.65f
-                    val gradient = android.graphics.RadialGradient(
+                    val maxR = hypot(w.toDouble(), h.toDouble()).toFloat() * 0.65f
+                    val pulseFactor = 0.5f + 0.5f * sin(phase)
+                    val radius = (20f + pulseFactor * (maxR - 20f)).coerceAtLeast(16f)
+                    paint.shader = RadialGradient(
                         w / 2f,
                         h / 2f,
-                        maxR,
+                        radius,
                         intArrayOf(
-                            Color.argb((intensity * 255 * 0.85f).toInt(), r, g, b),
-                            Color.argb(0, r, g, b)
+                            Color.argb((intensity * 255f * 0.75f).toInt().coerceIn(0, 255), r, g, b),
+                            Color.argb((intensity * 255f * 0.25f).toInt().coerceIn(0, 255), r, g, b),
+                            Color.argb(0, 9, 12, 17)
                         ),
-                        null,
-                        android.graphics.Shader.TileMode.CLAMP
+                        floatArrayOf(0f, 0.5f, 1f),
+                        Shader.TileMode.CLAMP
                     )
-                    paint.shader = gradient
                     canvas.drawRect(0f, 0f, w, h, paint)
                 }
                 "grid" -> {
                     val spacing = 22f
-                    val offsetX = 0f
-                    paint.color = Color.argb((intensity * 255).toInt(), r, g, b)
+                    val offsetX = (cycle * spacing) % spacing
+                    val offsetY = (cycle * spacing * 0.5f) % spacing
+                    paint.color = Color.argb((intensity * 255f * 0.35f).toInt().coerceIn(0, 255), r, g, b)
                     paint.strokeWidth = 1f
                     var x = offsetX
                     while (x < w) {
                         canvas.drawLine(x, 0f, x, h, paint)
                         x += spacing
                     }
-                    var y = 0f
+                    var y = offsetY
                     while (y < h) {
                         canvas.drawLine(0f, y, w, y, paint)
                         y += spacing
                     }
                 }
                 "sheen" -> {
-                    val gradient = android.graphics.LinearGradient(
-                        0f, 0f, w, h,
+                    val pos = -w + cycle * (w * 2.5f)
+                    paint.shader = LinearGradient(
+                        pos,
+                        0f,
+                        pos + 110f,
+                        h,
                         intArrayOf(
                             Color.argb(0, 255, 255, 255),
-                            Color.argb((intensity * 255 * 0.6f).toInt(), 255, 255, 255),
+                            Color.argb((intensity * 255f * 0.4f).toInt().coerceIn(0, 255), 255, 255, 255),
                             Color.argb(0, 255, 255, 255)
                         ),
                         floatArrayOf(0f, 0.5f, 1f),
-                        android.graphics.Shader.TileMode.CLAMP
+                        Shader.TileMode.CLAMP
                     )
-                    paint.shader = gradient
+                    canvas.drawRect(0f, 0f, w, h, paint)
+                }
+                "chess" -> {
+                    val cols = 6
+                    val rows = 4
+                    val cw = w / cols
+                    val ch = h / rows
+                    paint.style = Paint.Style.FILL
+                    for (row in 0 until rows) {
+                        for (col in 0 until cols) {
+                            val isEven = (row + col) % 2 == 0
+                            val shift = 0.5f + 0.5f * sin(row * 0.4f + col * 0.3f + phase)
+                            val alpha = if (isEven) {
+                                intensity * 0.12f + shift * (intensity * 0.22f)
+                            } else {
+                                intensity * 0.04f
+                            }
+                            paint.color = Color.argb((alpha * 255f).toInt().coerceIn(0, 255), r, g, b)
+                            canvas.drawRect(col * cw, row * ch, (col + 1) * cw - 1f, (row + 1) * ch - 1f, paint)
+                        }
+                    }
+                }
+                "cyberpunk" -> {
+                    paint.color = Color.argb((intensity * 255f * 0.35f).toInt().coerceIn(0, 255), r, g, b)
+                    paint.strokeWidth = 1.2f
+                    paint.style = Paint.Style.STROKE
+                    val trace1 = Path().apply {
+                        moveTo(0f, h * 0.3f)
+                        lineTo(w * 0.5f, h * 0.3f)
+                        lineTo(w * 0.5f, h * 0.5f)
+                        lineTo(w, h * 0.5f)
+                    }
+                    val trace2 = Path().apply {
+                        moveTo(w, h * 0.7f)
+                        lineTo(w * 0.4f, h * 0.7f)
+                        lineTo(w * 0.4f, h * 0.5f)
+                        lineTo(0f, h * 0.5f)
+                    }
+                    canvas.drawPath(trace1, paint)
+                    canvas.drawPath(trace2, paint)
+                }
+                "organic" -> {
+                    val cx1 = w * 0.35f + sin(phase) * (w * 0.2f)
+                    val cy1 = h * 0.4f + cos(phase) * (h * 0.2f)
+                    paint.shader = RadialGradient(
+                        cx1,
+                        cy1,
+                        (w * 0.55f).coerceAtLeast(24f),
+                        intArrayOf(
+                            Color.argb((intensity * 255f * 0.45f).toInt().coerceIn(0, 255), r, g, b),
+                            Color.argb(0, 9, 12, 17)
+                        ),
+                        null,
+                        Shader.TileMode.CLAMP
+                    )
                     canvas.drawRect(0f, 0f, w, h, paint)
                 }
             }
+
+            if (active && dynStateMode == "on") {
+                postInvalidateOnAnimation()
+            }
+        }
+    }
+
+    private fun resolvePresetColors(presetId: String): Pair<Int, Int> {
+        val found = cardBgPresets.firstOrNull { it.id == presetId }
+        return if (found != null) {
+            found.topColor to found.bottomColor
+        } else {
+            geminiCardBgTop to geminiCardBgBottom
         }
     }
 
     private fun applyCardBackground(card: CardView, isUser: Boolean) {
         val sideColor = if (isUser) identitySelfColor else identityAiColor
+        val (baseTop, baseBottom) = resolvePresetColors(activeBgPresetId)
+        val alphaByte = (cardOpacityFloat * 255f).toInt().coerceIn(64, 255)
+
+        val topWithAlpha = Color.argb(
+            alphaByte,
+            Color.red(baseTop),
+            Color.green(baseTop),
+            Color.blue(baseTop)
+        )
+        val bottomWithAlpha = Color.argb(
+            alphaByte,
+            Color.red(baseBottom),
+            Color.green(baseBottom),
+            Color.blue(baseBottom)
+        )
 
         val gradient = GradientDrawable(
             GradientDrawable.Orientation.TL_BR,
-            intArrayOf(geminiCardBgTop, geminiCardBgBottom)
+            intArrayOf(topWithAlpha, bottomWithAlpha)
         ).apply {
             cornerRadius = dp(appContext, 16).toFloat()
             setStroke(dp(appContext, 1), geminiCardBorder)
@@ -1004,6 +1277,7 @@ class ChatAdapter(
 
             val isUser = msg.role == MessageRole.USER
             val entityType = if (isUser) "self" else "ai"
+            val idColor = if (isUser) identitySelfColor else identityAiColor
 
             root.gravity = if (isUser) Gravity.END else Gravity.START
 
@@ -1013,10 +1287,13 @@ class ChatAdapter(
             badge.text = "#$badgeNumber"
 
             identityIcon.setImageDrawable(
-                roundedBackground(
-                    if (isUser) identitySelfColor else identityAiColor,
-                    dp(root.context, 14).toFloat()
-                )
+                buildIdentityVectorDrawable(entityType, idColor)
+            )
+            identityIcon.background = roundedBackground(
+                Color.argb(34, Color.red(idColor), Color.green(idColor), Color.blue(idColor)),
+                dp(root.context, 8).toFloat(),
+                Color.argb(102, Color.red(idColor), Color.green(idColor), Color.blue(idColor)),
+                dp(root.context, 1)
             )
 
             titleText.text = if (isUser) "YOU" else "MONOLITH"
@@ -1163,7 +1440,7 @@ class ChatAdapter(
                         setTextColor(accentColor)
                         setTypeface(null, Typeface.BOLD)
                         background = roundedBackground(
-                            Color.argb(30, 0, 212, 255),
+                            Color.argb(30, 56, 189, 248),
                             dp(context, 6).toFloat()
                         )
                         setPadding(
@@ -1578,7 +1855,7 @@ class ChatAdapter(
             val sizes = arrayOf("11 sp", "12 sp", "14 sp", "16 sp")
             val sizeValues = floatArrayOf(11f, 12f, 14f, 16f)
             val themes = arrayOf(
-                "داكن أزرق (افتراضي)" to (Color.rgb(8, 12, 25) to Color.rgb(235, 241, 255)),
+                "داكن أزرق (افتراضي)" to (Color.rgb(8, 12, 25) to Color.rgb(241, 245, 249)),
                 "داكن محايد" to (Color.rgb(18, 18, 20) to Color.rgb(240, 240, 240)),
                 "تباين عالٍ" to (Color.BLACK to Color.WHITE)
             )
