@@ -526,7 +526,8 @@ class ChatActivity : AppCompatActivity() {
                     showToast(if (updated.isPinned) "تم تثبيت الرسالة" else "تم إلغاء تثبيت الرسالة")
                 }
             },
-            themeColorHex = themeColorHex
+                        themeColorHex = themeColorHex,
+            onPaletteClick = { _ -> showPlugsAndCablesToolDialog() }
         )
         recyclerViewChat.adapter = chatAdapter
         chatAdapter.updateMessages(messageList)
