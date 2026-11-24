@@ -2019,19 +2019,57 @@ let activeConversationId = null;
 
       // استقبال الرسائل الحقيقية من Android
       window.MonolithCards = {
-        setMessages(messages) {
-                    if (!Array.isArray(messages)) return;
+        setMessages(messages, conversationId) {
+    if (!Array.isArray(messages)) return;
 
-          for (let i = cables.length - 1; i >= 0; i--) {
-  if (['THR-01', 'THR-02'].includes(cables[i].id)) {
-    cables.splice(i, 1);
-  }
+    const nextConversationId = String(conversationId || 'default');
+
+    if (activeConversationId !== nextConversationId) {
+
+        if (activeConversationId !== null) {
+            saveCanvasState();
+        }
+
+        const nextStorageKey =
+            STORAGE_KEY + '_CONVERSATION_' +
+            encodeURIComponent(nextConversationId);
+
+        let savedConversationState = null;
+
+        try {
+            savedConversationState = localStorage.getItem(nextStorageKey);
+        } catch (_) {}
+
+        activeStorageKey = nextStorageKey;
+
+        if (activeConversationId === null && savedConversationState === null) {
+            saveCanvasState();
+        } else {
+            resetConversationCanvasState();
+            loadCanvasState();
+        }
+
+        activeConversationId = nextConversationId;
     }
 
-          const previousCards = new Map(
-            cards.map(card => [card.id, card])
-          );
+    for (let i = cables.length - 1; i >= 0; i--) {
+        const cable = cables[i];
 
+        const isDemoCable =
+            ['THR-01', 'THR-02'].includes(cable.id) &&
+            (
+                (cable.from && ['card-1', 'card-2', 'card-3'].includes(cable.from.cardId)) ||
+                (cable.to && ['card-1', 'card-2', 'card-3'].includes(cable.to.cardId))
+            );
+
+        if (isDemoCable) {
+            cables.splice(i, 1);
+        }
+    }
+
+    const previousCards = new Map(
+        cards.map(card => [card.id, card])
+    );
           cards = messages.map((message, index) => {
             const previous = previousCards.get(message.id) || {};
 
