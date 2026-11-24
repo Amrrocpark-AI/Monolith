@@ -1,3 +1,4 @@
+
 package com.monolith.canvas
 
 import android.content.ContentValues
@@ -7,7 +8,7 @@ import com.monolith.AppDatabase
 
 class CanvasRepository(context: Context) {
 
-        private val appDatabase =
+    private val appDatabase =
         AppDatabase(context.applicationContext)
 
     private val database: SQLiteDatabase =
@@ -103,12 +104,82 @@ class CanvasRepository(context: Context) {
         )
     }
 
-    fun deleteCard(cardId: String) {
-        database.delete(
+    fun loadCards(): List<Pair<CanvasCardModel, CanvasPoint>> {
+        val cards = mutableListOf<Pair<CanvasCardModel, CanvasPoint>>()
+
+        database.query(
             "canvas_cards",
-            "id = ?",
-            arrayOf(cardId)
-        )
+            arrayOf(
+                "id",
+                "conversation_id",
+                "source_message_id",
+                "title",
+                "content",
+                "color",
+                "position_x",
+                "position_y"
+            ),
+            null,
+            null,
+            null,
+            null,
+            "created_at ASC"
+        ).use { cursor ->
+
+            while (cursor.moveToNext()) {
+                val model = CanvasCardModel(
+                    id = cursor.getString(0),
+                    conversationId = if (cursor.isNull(1)) null else cursor.getString(1),
+                    sourceMessageId = if (cursor.isNull(2)) null else cursor.getString(2),
+                    title = cursor.getString(3),
+                    content = cursor.getString(4),
+                    color = cursor.getInt(5)
+                )
+
+                val position = CanvasPoint(
+                    x = cursor.getFloat(6),
+                    y = cursor.getFloat(7)
+                )
+
+                cards.add(model to position)
+            }
+        }
+
+        return cards
+    }
+
+    fun deleteCard(cardId: String) {
+        database.beginTransaction()
+
+        try {
+            database.delete(
+                "canvas_cables",
+                "source_card_id = ? OR target_card_id = ?",
+                arrayOf(cardId, cardId)
+            )
+
+            database.delete(
+                "canvas_thread_history",
+                "card_id = ?",
+                arrayOf(cardId)
+            )
+
+            database.delete(
+                "canvas_alarms",
+                "card_id = ?",
+                arrayOf(cardId)
+            )
+
+            database.delete(
+                "canvas_cards",
+                "id = ?",
+                arrayOf(cardId)
+            )
+
+            database.setTransactionSuccessful()
+        } finally {
+            database.endTransaction()
+        }
     }
 
     fun saveCable(
@@ -129,6 +200,33 @@ class CanvasRepository(context: Context) {
             values,
             SQLiteDatabase.CONFLICT_REPLACE
         )
+    }
+
+    fun loadCables(): List<CanvasCableModel> {
+        val cables = mutableListOf<CanvasCableModel>()
+
+        database.query(
+            "canvas_cables",
+            arrayOf("id", "source_card_id", "target_card_id"),
+            null,
+            null,
+            null,
+            null,
+            "created_at ASC"
+        ).use { cursor ->
+
+            while (cursor.moveToNext()) {
+                cables.add(
+                    CanvasCableModel(
+                        id = cursor.getString(0),
+                        sourceCardId = cursor.getString(1),
+                        targetCardId = cursor.getString(2)
+                    )
+                )
+            }
+        }
+
+        return cables
     }
 
     fun deleteCable(cableId: String) {
@@ -186,6 +284,34 @@ class CanvasRepository(context: Context) {
         )
     }
 
+    fun loadHistory(): List<CanvasHistoryEntry> {
+        val history = mutableListOf<CanvasHistoryEntry>()
+
+        database.query(
+            "canvas_thread_history",
+            arrayOf("id", "card_id", "action", "created_at"),
+            null,
+            null,
+            null,
+            null,
+            "created_at ASC"
+        ).use { cursor ->
+
+            while (cursor.moveToNext()) {
+                history.add(
+                    CanvasHistoryEntry(
+                        id = cursor.getString(0),
+                        cardId = cursor.getString(1),
+                        action = cursor.getString(2),
+                        createdAt = cursor.getLong(3)
+                    )
+                )
+            }
+        }
+
+        return history
+    }
+
     fun saveAlarm(
         id: String,
         cardId: String?,
@@ -206,5 +332,40 @@ class CanvasRepository(context: Context) {
             values,
             SQLiteDatabase.CONFLICT_REPLACE
         )
+    }
+
+    fun loadAlarms(): List<CanvasAlarm> {
+        val alarms = mutableListOf<CanvasAlarm>()
+
+        database.query(
+            "canvas_alarms",
+            arrayOf(
+                "id",
+                "card_id",
+                "title",
+                "trigger_at",
+                "is_active"
+            ),
+            null,
+            null,
+            null,
+            null,
+            "trigger_at ASC"
+        ).use { cursor ->
+
+            while (cursor.moveToNext()) {
+                alarms.add(
+                    CanvasAlarm(
+                        id = cursor.getString(0),
+                        cardId = if (cursor.isNull(1)) null else cursor.getString(1),
+                        title = cursor.getString(2),
+                        triggerAt = cursor.getLong(3),
+                        isActive = cursor.getInt(4) != 0
+                    )
+                )
+            }
+        }
+
+        return alarms
     }
 }
