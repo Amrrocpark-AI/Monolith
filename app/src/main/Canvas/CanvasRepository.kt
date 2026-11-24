@@ -7,8 +7,11 @@ import com.monolith.AppDatabase
 
 class CanvasRepository(context: Context) {
 
+        private val appDatabase =
+        AppDatabase(context.applicationContext)
+
     private val database: SQLiteDatabase =
-        AppDatabase.getInstance(context).writableDatabase
+        appDatabase.writableDatabase
 
     init {
         createTables()
