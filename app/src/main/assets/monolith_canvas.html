@@ -2021,7 +2021,11 @@
         setMessages(messages) {
                     if (!Array.isArray(messages)) return;
 
-          cables = cables.filter(cable => !['THR-01', 'THR-02'].includes(cable.id));
+          for (let i = cables.length - 1; i >= 0; i--) {
+  if (['THR-01', 'THR-02'].includes(cables[i].id)) {
+    cables.splice(i, 1);
+  }
+    }
 
           const previousCards = new Map(
             cards.map(card => [card.id, card])
