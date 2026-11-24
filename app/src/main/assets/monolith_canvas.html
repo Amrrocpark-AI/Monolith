@@ -1927,9 +1927,59 @@
           textEl.textContent = card.text || '';
           textEl.addEventListener('pointerdown', (e) => e.stopPropagation());
 
-          cardEl.appendChild(headerEl);
+                    cardEl.appendChild(headerEl);
           cardEl.appendChild(titleEl);
           cardEl.appendChild(textEl);
+
+          // أزرار التحكم بالرسالة الحقيقية
+          if (card.messageId !== undefined && card.messageId !== null) {
+            const toolbar = document.createElement('div');
+            toolbar.style.cssText =
+              'display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;position:relative;z-index:5;';
+
+            const actions = [
+              ['edit', 'تعديل'],
+              ['reaction', 'تفاعل'],
+              ['pin', card.isPinned ? 'إلغاء التثبيت' : 'تثبيت'],
+              ['speak', 'قراءة']
+            ];
+
+            actions.forEach(([action, label]) => {
+              const btn = document.createElement('button');
+              btn.type = 'button';
+              btn.textContent = label;
+              btn.style.cssText =
+                'background:rgba(56,189,248,.10);border:1px solid rgba(56,189,248,.3);color:#e2e8f0;border-radius:7px;padding:5px 9px;font:600 11px Cairo;cursor:pointer;';
+
+              btn.addEventListener('pointerdown', e => {
+                e.stopPropagation();
+              });
+
+              btn.addEventListener('click', e => {
+                e.preventDefault();
+                e.stopPropagation();
+
+                if (
+                  window.MonolithAndroid &&
+                  typeof window.MonolithAndroid.onCardAction === 'function'
+                ) {
+                  window.MonolithAndroid.onCardAction(
+                    action,
+                    String(card.messageId),
+                    ''
+                  );
+                }
+              });
+
+              toolbar.appendChild(btn);
+            });
+
+            toolbar.addEventListener('pointerdown', e => {
+              e.stopPropagation();
+            });
+
+            cardEl.appendChild(toolbar);
+          }
 
           cardEl.addEventListener('pointerdown', (e) => {
             if (e.target.closest('.palette-trigger-btn') || e.target.closest('.msg-text')) return;
