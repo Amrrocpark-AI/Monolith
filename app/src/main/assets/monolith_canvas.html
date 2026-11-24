@@ -2051,7 +2051,37 @@
             };
           });
 
-                    renderCards();
+                              renderCards();
+
+          let nextY = 20;
+
+          cards.forEach(card => {
+            const cardEl = document.getElementById(card.id);
+            if (!cardEl) return;
+
+            const previous = previousCards.get(card.id);
+
+            if (!previous || typeof previous.y !== 'number') {
+              card.y = nextY;
+              cardEl.style.top = `${card.y}px`;
+            }
+
+            nextY = Math.max(
+              nextY,
+              card.y + cardEl.offsetHeight + 20
+            );
+          });
+
+          cardsContainer.style.height = `${Math.max(
+            window.innerHeight,
+            nextY + 20
+          )}px`;
+
+          svgLayer.style.height = cardsContainer.style.height;
+
+          renderSocketsAndLeds();
+          renderCablesAndPlugs();
+
           applyGlobalEntityThemes();
           saveCanvasState();
         }
