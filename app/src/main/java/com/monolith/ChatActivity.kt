@@ -407,7 +407,13 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    private fun initializeAdapter() {
+        private fun initializeAdapter() {
+        messageCardBridge?.let { oldBridge ->
+            chatContentContainer.removeView(oldBridge.webView)
+            oldBridge.release()
+        }
+        messageCardBridge = null
+
         chatAdapter = ChatAdapter(
             context = this,
             onEditClick = { message -> showEditDialog(message) },
