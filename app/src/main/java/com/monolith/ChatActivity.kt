@@ -2347,7 +2347,10 @@ class ChatActivity : AppCompatActivity() {
         try {
             ttsManager?.shutdown()
         } catch (_: Exception) { }
-        ttsManager = null
+                ttsManager = null
+
+        messageCardBridge?.release()
+        messageCardBridge = null
 
         super.onDestroy()
     }
