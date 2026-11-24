@@ -1921,14 +1921,10 @@
           titleEl.className = 'msg-title';
           titleEl.textContent = card.title || '';
 
-          const textEl = document.createElement('div');
+                    const textEl = document.createElement('div');
           textEl.className = 'msg-text';
-          textEl.contentEditable = "true";
+          textEl.contentEditable = "false";
           textEl.textContent = card.text || '';
-          textEl.addEventListener('input', () => {
-            card.text = textEl.textContent;
-            saveCanvasState();
-          });
           textEl.addEventListener('pointerdown', (e) => e.stopPropagation());
 
           cardEl.appendChild(headerEl);
