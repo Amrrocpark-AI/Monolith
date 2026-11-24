@@ -20,6 +20,7 @@ class MessageCardBridge(
 
     private var pageReady = false
     private var pendingMessages: List<ChatMessage> = emptyList()
+    private var pendingConversationId: String = ""
 
     val webView: WebView = WebView(context)
 
@@ -58,8 +59,12 @@ class MessageCardBridge(
         }
     }
 
-    fun submitMessages(messages: List<ChatMessage>) {
+    fun submitMessages(
+        messages: List<ChatMessage>,
+        conversationId: String = ""
+    ) {
         pendingMessages = messages.toList()
+        pendingConversationId = conversationId
 
         webView.post {
             sendPendingMessages()
@@ -127,12 +132,13 @@ class MessageCardBridge(
 
         val json = cards.toString()
 
-                val javascript =
+        val javascript =
             "(function() {" +
             "if (window.MonolithCards && " +
             "typeof window.MonolithCards.setMessages === 'function') {" +
             "window.MonolithCards.setMessages(" +
-            "JSON.parse(${JSONObject.quote(json)})" +
+            "JSON.parse(${JSONObject.quote(json)})," +
+            "${JSONObject.quote(pendingConversationId)}" +
             ");" +
             "return true;" +
             "}" +
