@@ -121,10 +121,10 @@ class ChatAdapter(
     private val onToolClick:
         ((ToolPresentation) -> Unit)? = null,
 
-    private val onPaletteClick: ((ChatMessage) -> Unit)? = null
+        private val onPaletteClick: ((ChatMessage) -> Unit)? = null,
+    private val onMessagesChanged: ((List<ChatMessage>) -> Unit)? = null
 
 ) : ListAdapter<ChatMessage, ChatAdapter.ChatViewHolder>(DIFF_CALLBACK) {
-
     private val appContext = context.applicationContext
 
     private val userColor = parseColor(
