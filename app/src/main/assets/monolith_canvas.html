@@ -2000,10 +2000,17 @@
             if (workspace.setPointerCapture) workspace.setPointerCapture(e.pointerId);
           });
 
-          cardsContainer.appendChild(cardEl);
+                    cardsContainer.appendChild(cardEl);
         });
 
-                initCardCanvases();
+        cardsContainer.style.height = `${Math.max(
+          window.innerHeight,
+          ...Array.from(cardsContainer.children).map(
+            el => el.offsetTop + el.offsetHeight + 40
+          )
+        )}px`;
+
+        initCardCanvases();
         renderSocketsAndLeds();
       }
 
