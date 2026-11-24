@@ -482,9 +482,9 @@ class ChatActivity : AppCompatActivity() {
         messageCardBridge?.webView?.let { cardWebView ->
             cardWebView.visibility = View.INVISIBLE
 
-            chatContentContainer.addView(
+                        chatContentContainer.addView(
                 cardWebView,
-                0,
+                1,
                 FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT
