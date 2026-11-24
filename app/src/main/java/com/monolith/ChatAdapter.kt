@@ -2586,8 +2586,17 @@ class ChatAdapter(
         super.onViewRecycled(holder)
     }
 
-    fun updateMessages(messages: List<ChatMessage>) {
-        submitList(messages.toList())
+    override fun onCurrentListChanged(
+    previousList: List<ChatMessage>,
+    currentList: List<ChatMessage>
+) {
+    super.onCurrentListChanged(previousList, currentList)
+    onMessagesChanged?.invoke(currentList)
+}
+
+fun updateMessages(messages: List<ChatMessage>) {
+    submitList(messages.toList())
+}
     }
 
     private fun roundedBackground(
