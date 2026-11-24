@@ -2016,7 +2016,45 @@ let activeConversationId = null;
         initCardCanvases();
         renderSocketsAndLeds();
       }
+function resetConversationCanvasState() {
+    cards.length = 0;
+    cables.length = 0;
 
+    nextCableSeq = 1;
+    lockFeatureEnabled = true;
+    portsEnabled = false;
+    triggerPositionMode = 'header-inline';
+
+    Object.assign(ENTITY_COLOR_MAP, DEFAULT_ENTITY_COLOR_MAP);
+
+    Object.keys(plugAngles).forEach(key => {
+        delete plugAngles[key];
+    });
+
+    primaryDynEffect = {
+        pattern: 'pulse',
+        speed: 8,
+        intensity: 20
+    };
+
+    plugFxConfig = {
+        enabled: false,
+        snapAnim: 'snap_ring',
+        detachAnim: 'detach_release',
+        soundMode: 'crisp_click',
+        intensity: 65
+    };
+
+    activePlugPulses.length = 0;
+    pathSession = null;
+    dragState = null;
+
+    plugClickTracker = {
+        lastPlugKey: null,
+        count: 0,
+        lastTime: 0
+    };
+}
       // استقبال الرسائل الحقيقية من Android
       window.MonolithCards = {
         setMessages(messages, conversationId) {
