@@ -440,8 +440,45 @@ class ChatActivity : AppCompatActivity() {
         recyclerViewChat.adapter = chatAdapter
                 chatAdapter.updateMessages(messageList)
 
-        messageCardBridge = MessageCardBridge(this) { _, _, _ -> }
+                messageCardBridge = MessageCardBridge(this) { action, messageId, _ ->
+            findMessage(messageId)?.let { message ->
+                when (action) {
+                    "edit" -> showEditDialog(message)
 
+                    "reaction" -> {
+                        val newReaction = when (message.reactionType) {
+                            "LIKE" -> "DISLIKE"
+                            "DISLIKE" -> null
+                            else -> "LIKE"
+                        }
+                        updateMessageLocally(message.id) {
+                            it.copy(reactionType = newReaction)
+                        }
+                        findMessage(message.id)?.let {
+                            saveMessageToDb(it, touchConversation = false)
+                        }
+                    }
+
+                    "pin" -> {
+                        updateMessageLocally(message.id) {
+                            it.copy(isPinned = !it.isPinned)
+                        }
+                        findMessage(message.id)?.let {
+                            saveMessageToDb(it, touchConversation = false)
+                            showToast(
+                                if (it.isPinned) "تم تثبيت الرسالة"
+                                else "تم إلغاء تثبيت الرسالة"
+                            )
+                        }
+                    }
+
+                    "speak" -> {
+                        initTtsIfNeeded()
+                        ttsManager?.speak(message.content)
+                    }
+                }
+            }
+                }
         messageCardBridge?.webView?.let { cardWebView ->
             cardWebView.visibility = View.INVISIBLE
 
