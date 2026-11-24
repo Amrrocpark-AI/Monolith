@@ -127,15 +127,23 @@ class MessageCardBridge(
 
         val json = cards.toString()
 
-        val javascript =
+                val javascript =
+            "(function() {" +
             "if (window.MonolithCards && " +
             "typeof window.MonolithCards.setMessages === 'function') {" +
             "window.MonolithCards.setMessages(" +
             "JSON.parse(${JSONObject.quote(json)})" +
             ");" +
-            "}"
+            "return true;" +
+            "}" +
+            "return false;" +
+            "})();"
 
-        webView.evaluateJavascript(javascript, null)
+        webView.evaluateJavascript(javascript) { result ->
+            if (result == "true") {
+                webView.visibility = android.view.View.VISIBLE
+            }
+        }
     }
 
     private inner class AndroidCallbacks {
