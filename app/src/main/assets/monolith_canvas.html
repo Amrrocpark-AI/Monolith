@@ -1609,23 +1609,26 @@
         });
       }
 
-      function autoLayoutCards() {
+            function autoLayoutCards() {
         const vw = window.innerWidth || 360;
-        const vh = window.innerHeight || 640;
         const cardW = 320;
         const isMobile = vw < 768;
 
-        if (isMobile) {
-          const centerX = Math.max(15, Math.floor((vw - cardW) / 2));
-          cards[0].x = centerX; cards[0].y = 56;
-          cards[1].x = centerX; cards[1].y = 250;
-          cards[2].x = centerX; cards[2].y = 440;
-        } else {
-          cards[0].x = Math.floor(vw * 0.08); cards[0].y = Math.floor(vh * 0.12);
-          cards[1].x = Math.floor(vw * 0.58); cards[1].y = Math.floor(vh * 0.12);
-          cards[2].x = Math.floor(vw * 0.33); cards[2].y = Math.floor(vh * 0.55);
-        }
-      }
+        const columns = isMobile
+          ? 1
+          : Math.max(1, Math.floor((vw - 40) / 340));
+
+        cards.forEach((card, index) => {
+          const column = index % columns;
+          const row = Math.floor(index / columns);
+
+          card.x = isMobile
+            ? Math.max(15, Math.floor((vw - cardW) / 2))
+            : 20 + (column * 340);
+
+          card.y = 56 + (row * 190);
+        });
+    }
 
       function showAlarmToast(cableId, title, note) {
         const toast = document.createElement('div');
