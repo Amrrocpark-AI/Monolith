@@ -2019,7 +2019,9 @@
       // استقبال الرسائل الحقيقية من Android
       window.MonolithCards = {
         setMessages(messages) {
-          if (!Array.isArray(messages)) return;
+                    if (!Array.isArray(messages)) return;
+
+          cables = cables.filter(cable => !['THR-01', 'THR-02'].includes(cable.id));
 
           const previousCards = new Map(
             cards.map(card => [card.id, card])
