@@ -2008,7 +2008,9 @@
           ...Array.from(cardsContainer.children).map(
             el => el.offsetTop + el.offsetHeight + 40
           )
-        )}px`;
+                )}px`;
+
+        svgLayer.style.height = cardsContainer.style.height;
 
         initCardCanvases();
         renderSocketsAndLeds();
