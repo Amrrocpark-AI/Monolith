@@ -37,10 +37,11 @@ android {
     }
 
     // --- مجلدات مصادر Kotlin و Java ---
-    // إضافة مجلد ports دون نقل الملفات أو استبدال المسارات الافتراضية.
+    // إضافة مجلدي ports و Canvas دون نقل الملفات.
     sourceSets {
         main {
             java.srcDir 'src/main/ports'
+            java.srcDir 'src/main/Canvas'
         }
     }
 
