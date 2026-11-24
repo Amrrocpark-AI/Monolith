@@ -2080,13 +2080,11 @@ function resetConversationCanvasState() {
 
         activeStorageKey = nextStorageKey;
 
-        if (activeConversationId === null && savedConversationState === null) {
-            saveCanvasState();
-        } else {
-            resetConversationCanvasState();
+                resetConversationCanvasState();
+
+        if (savedConversationState !== null) {
             loadCanvasState();
         }
-
         activeConversationId = nextConversationId;
     }
 
