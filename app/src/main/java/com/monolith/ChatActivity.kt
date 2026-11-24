@@ -438,7 +438,24 @@ class ChatActivity : AppCompatActivity() {
         )
         applyAdapterVisualConfig()
         recyclerViewChat.adapter = chatAdapter
-        chatAdapter.updateMessages(messageList)
+                chatAdapter.updateMessages(messageList)
+
+        messageCardBridge = MessageCardBridge(this) { _, _, _ -> }
+
+        messageCardBridge?.webView?.let { cardWebView ->
+            cardWebView.visibility = View.INVISIBLE
+
+            chatContentContainer.addView(
+                cardWebView,
+                0,
+                FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            )
+        }
+
+        messageCardBridge?.submitMessages(messageList)
     }
 
     private fun applyAdapterVisualConfig() {
