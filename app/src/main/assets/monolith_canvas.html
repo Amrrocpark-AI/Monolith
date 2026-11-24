@@ -1923,9 +1923,43 @@
           cardsContainer.appendChild(cardEl);
         });
 
-        initCardCanvases();
+                initCardCanvases();
         renderSocketsAndLeds();
       }
+
+      // استقبال الرسائل الحقيقية من Android
+      window.MonolithCards = {
+        setMessages(messages) {
+          if (!Array.isArray(messages)) return;
+
+          const previousCards = new Map(
+            cards.map(card => [card.id, card])
+          );
+
+          cards = messages.map((message, index) => {
+            const previous = previousCards.get(message.id) || {};
+
+            return {
+              ...previous,
+              ...message,
+              x: typeof previous.x === 'number'
+                ? previous.x
+                : 20,
+              y: typeof previous.y === 'number'
+                ? previous.y
+                : 20 + (index * 175),
+              bgPreset: previous.bgPreset || message.bgPreset || 'default',
+              dynState: previous.dynState || message.dynState || 'off',
+              dynPattern: previous.dynPattern || message.dynPattern || 'pulse',
+              dynSpeed: previous.dynSpeed ?? message.dynSpeed ?? 8,
+              dynIntensity: previous.dynIntensity ?? message.dynIntensity ?? 20
+            };
+          });
+
+          renderCards();
+          applyGlobalEntityThemes();
+        }
+      };
 
       function initCardCanvases() {
         cards.forEach(card => {
