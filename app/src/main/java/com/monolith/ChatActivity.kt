@@ -431,7 +431,10 @@ class ChatActivity : AppCompatActivity() {
                     showToast(if (updated.isPinned) "تم تثبيت الرسالة" else "تم إلغاء تثبيت الرسالة")
                 }
             },
-            themeColorHex = themeColorHex
+                        themeColorHex = themeColorHex,
+            onMessagesChanged = { messages ->
+                messageCardBridge?.submitMessages(messages)
+            }
         )
         applyAdapterVisualConfig()
         recyclerViewChat.adapter = chatAdapter
