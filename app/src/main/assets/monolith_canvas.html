@@ -1455,7 +1455,7 @@ let activeConversationId = null;
 
       function loadCanvasState() {
         try {
-          const raw = localStorage.getItem(STORAGE_KEY);
+          const raw = localStorage.getItem(activeStorageKey);
           if (!raw) return false;
           const parsed = JSON.parse(raw);
           if (parsed && typeof parsed === 'object') {
