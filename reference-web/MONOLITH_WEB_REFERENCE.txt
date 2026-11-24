@@ -1,1 +1,3535 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>MONOLITH Canvas</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap');
 
+    :root {
+      --bg-color: #090c11;
+      --card-bg-start: rgba(20, 25, 36, 0.98);
+      --card-bg-end: rgba(12, 15, 22, 0.99);
+      --card-border: #232d3f;
+      --text-main: #f1f5f9;
+      --text-sub: #8ea1bd;
+      --accent-cyan: #38bdf8;
+      --accent-self: #f8fafc;
+      --accent-peer: #38bdf8;
+      --accent-ai: #ef4444;
+    }
+
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: var(--bg-color);
+      background-image:
+        radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.06) 1px, transparent 0),
+        linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+      background-size: 24px 24px, 72px 72px, 72px 72px;
+      font-family: 'Cairo', system-ui, -apple-system, sans-serif;
+      color: var(--text-main);
+      touch-action: none;
+    }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #090d16; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #38bdf8; }
+
+    #workspace {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    #svg-layer {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 10;
+      pointer-events: none;
+      display: none;
+    }
+
+    #cards-container {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 20;
+      pointer-events: none;
+    }
+
+    .msg-card {
+      position: absolute;
+      width: 320px;
+      min-height: 155px;
+      background: linear-gradient(160deg, var(--card-bg-start), var(--card-bg-end));
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 14px 16px;
+      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+      pointer-events: auto;
+      cursor: grab;
+      touch-action: none;
+      will-change: left, top;
+      overflow: hidden;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .msg-card.dragging {
+      cursor: grabbing;
+      box-shadow: 0 25px 55px rgba(0, 0, 0, 0.95), 0 0 22px color-mix(in srgb, var(--drag-accent, var(--accent-cyan)) 45%, transparent);
+    }
+
+    .msg-card.card-self { --drag-accent: var(--accent-self); border-right: 4px solid var(--accent-self); }
+    .msg-card.card-peer { --drag-accent: var(--accent-peer); border-right: 4px solid var(--accent-peer); }
+    .msg-card.card-ai   { --drag-accent: var(--accent-ai);   border-right: 4px solid var(--accent-ai); }
+
+    .card-dyn-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    .card-dyn-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .card-contrast-shield {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+      background-color: rgba(9, 12, 17, 0.58);
+      border-radius: 16px;
+      transition: background-color 0.2s ease;
+    }
+
+    .msg-header, .msg-title, .msg-text, .palette-trigger-btn {
+      position: relative;
+      z-index: 2;
+    }
+
+    .msg-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .msg-header-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .msg-badge-num {
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      color: #38bdf8;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 6px;
+      font-family: monospace;
+    }
+
+    .embedded-identity-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .msg-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-sub);
+      margin-bottom: 6px;
+    }
+
+    .msg-text {
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--text-main);
+      word-break: break-word;
+      outline: none;
+      min-height: 38px;
+      border-radius: 8px;
+      padding: 4px 6px;
+      background: rgba(0, 0, 0, 0.15);
+      border: 1px stroke transparent;
+    }
+
+    .msg-text:focus {
+      background: rgba(0, 0, 0, 0.35);
+      box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.4);
+    }
+
+    .palette-trigger-btn {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 8px;
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #94a3b8;
+      transition: all 0.2s ease;
+      backdrop-filter: blur(4px);
+    }
+
+    .palette-trigger-btn:hover {
+      background: rgba(56, 189, 248, 0.15);
+      color: #38bdf8;
+      border-color: rgba(56, 189, 248, 0.4);
+      transform: scale(1.06);
+    }
+
+    .palette-trigger-btn:active { transform: scale(0.95); }
+
+    .msg-card .palette-trigger-btn.top-left-floating {
+      position: absolute;
+      top: 10px;
+      left: 12px;
+      z-index: 5;
+    }
+
+    #plug-color-popover {
+      position: absolute;
+      z-index: 2000;
+      display: none;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 14px;
+      padding: 10px 14px;
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.85);
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: auto;
+      transform: translate(-50%, -100%) translateY(-14px);
+    }
+
+    #plug-color-popover.active { display: flex; }
+
+    .popover-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      font-size: 11px;
+      color: #94a3b8;
+      font-weight: 700;
+    }
+
+    .popover-title { display: flex; align-items: center; gap: 6px; }
+
+    .popover-plug-id {
+      color: #38bdf8;
+      font-family: monospace;
+      background: rgba(56, 189, 248, 0.1);
+      padding: 1px 6px;
+      border-radius: 4px;
+    }
+
+    .popover-swatches {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      max-width: 230px;
+    }
+
+    .popover-swatch {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: transform 0.15s ease, border-color 0.15s ease;
+    }
+
+    .popover-swatch:hover { transform: scale(1.2); }
+    .popover-swatch.black-swatch { border: 2px solid #475569 !important; }
+    .popover-swatch.white-swatch { border: 2px solid #64748b !important; }
+    .popover-swatch.selected {
+      border-color: #ffffff !important;
+      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.7);
+    }
+
+    #inspector-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(5, 7, 12, 0.78);
+      backdrop-filter: blur(6px);
+      z-index: 1000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      pointer-events: auto;
+    }
+
+    #inspector-overlay.active { display: flex; }
+
+    .inspector-panel {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 18px;
+      width: 560px;
+      max-width: 95vw;
+      padding: 20px;
+      box-shadow: 0 25px 65px rgba(0, 0, 0, 0.9);
+      color: #f1f5f9;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+
+    .inspector-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #1e293b;
+      padding-bottom: 10px;
+      margin-bottom: 14px;
+    }
+
+    .inspector-title {
+      font-size: 15px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .inspector-close {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid #334155;
+      color: #94a3b8;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+
+    .inspector-close:hover {
+      background: #ef4444;
+      color: #fff;
+      border-color: #ef4444;
+    }
+
+    .cable-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      max-height: 340px;
+      overflow-y: auto;
+    }
+
+    .cable-item {
+      background: #182238;
+      border: 1px solid #2a3854;
+      border-radius: 12px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .cable-item-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .plug-tag {
+      font-family: monospace;
+      font-size: 11px;
+      font-weight: 700;
+      background: #090d16;
+      border: 1px solid #334155;
+      padding: 2px 8px;
+      border-radius: 6px;
+      color: #38bdf8;
+    }
+
+    .cable-status-badge {
+      font-size: 10.5px;
+      padding: 2px 8px;
+      border-radius: 6px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .cable-status-badge.editable {
+      background: rgba(34, 197, 94, 0.15);
+      border: 1px solid rgba(34, 197, 94, 0.3);
+      color: #4ade80;
+    }
+
+    .cable-status-badge.locked {
+      background: rgba(245, 158, 11, 0.15);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      color: #fbbf24;
+    }
+
+    .color-swatches-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .swatch-circle {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: transform 0.15s ease;
+    }
+
+    .swatch-circle:hover { transform: scale(1.18); }
+    .swatch-circle.black-swatch { border: 2px solid #475569 !important; }
+    .swatch-circle.white-swatch { border: 2px solid #64748b !important; }
+    .swatch-circle.selected {
+      border-color: #ffffff !important;
+      box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.6);
+    }
+
+    .card-bg-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 6px;
+    }
+
+    .card-bg-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .card-bg-slider-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 11px;
+      color: #cbd5e1;
+    }
+
+    .card-bg-slider-row input[type="range"] {
+      flex: 1;
+      accent-color: #38bdf8;
+      cursor: pointer;
+    }
+
+    .card-bg-presets {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 4px;
+    }
+
+    .card-bg-chip {
+      width: 26px;
+      height: 26px;
+      border-radius: 8px;
+      border: 2px solid #334155;
+      cursor: pointer;
+      padding: 0;
+      transition: transform 0.15s ease, border-color 0.15s ease;
+    }
+
+    .card-bg-chip:hover { transform: scale(1.15); border-color: #38bdf8; }
+    .card-bg-chip.selected {
+      border-color: #ffffff !important;
+      box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.65);
+    }
+
+    .path-actions-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      padding-top: 8px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .path-action-btn {
+      background: rgba(56, 189, 248, 0.1);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      color: #e2e8f0;
+      border-radius: 8px;
+      padding: 5px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .path-action-btn:hover {
+      background: rgba(56, 189, 248, 0.2);
+      border-color: #38bdf8;
+      color: #ffffff;
+    }
+
+    .path-action-btn.active-mode {
+      background: rgba(34, 197, 94, 0.22);
+      border-color: #22c55e;
+      color: #4ade80;
+    }
+
+    .path-action-btn.paint-mode {
+      background: rgba(168, 85, 247, 0.22);
+      border-color: #a855f7;
+      color: #d8b4fe;
+    }
+
+    .path-action-btn.reset-btn {
+      background: rgba(239, 68, 68, 0.12);
+      border-color: rgba(239, 68, 68, 0.35);
+      color: #f87171;
+    }
+
+    #path-session-bar {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 2200;
+      display: none;
+      align-items: center;
+      gap: 8px;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 14px;
+      padding: 8px 12px;
+      box-shadow: 0 16px 38px rgba(0, 0, 0, 0.85);
+      pointer-events: auto;
+      flex-wrap: wrap;
+    }
+
+    #path-session-bar.active { display: flex; }
+
+    .session-cable-badge {
+      font-family: monospace;
+      font-size: 11px;
+      font-weight: 700;
+      color: #38bdf8;
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      padding: 3px 8px;
+      border-radius: 6px;
+    }
+
+    .session-hint { font-size: 11px; color: #cbd5e1; }
+
+    .session-btn {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid #334155;
+      color: #e2e8f0;
+      border-radius: 8px;
+      padding: 5px 10px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .session-btn.save { background: rgba(34, 197, 94, 0.2); border-color: #22c55e; color: #4ade80; }
+    .session-btn.cancel { background: rgba(245, 158, 11, 0.16); border-color: #f59e0b; color: #fbbf24; }
+    .session-btn.reset { background: rgba(239, 68, 68, 0.16); border-color: #ef4444; color: #f87171; }
+
+    .port-id-label {
+      font-size: 9px;
+      font-family: monospace;
+      font-weight: 700;
+      fill: #64748b;
+      pointer-events: none;
+    }
+
+    .interactive-element { pointer-events: auto; cursor: pointer; }
+    .plug-element { pointer-events: auto; cursor: grab; }
+    .plug-element:active { cursor: grabbing; }
+    .cable-hit-line { pointer-events: auto; }
+    .pen-node-handle { pointer-events: auto; cursor: move; }
+
+    #port-tooltip {
+      position: absolute;
+      z-index: 2500;
+      pointer-events: none;
+      background: #0f172a;
+      border: 1px solid #334155;
+      color: #cbd5e1;
+      font-size: 11px;
+      padding: 6px 12px;
+      border-radius: 8px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.7);
+      opacity: 0;
+      transform: translate(-50%, -100%) translateY(-8px);
+      transition: opacity 0.15s ease, transform 0.15s ease;
+      white-space: nowrap;
+    }
+
+    #port-tooltip.visible {
+      opacity: 1;
+      transform: translate(-50%, -100%) translateY(-12px);
+    }
+
+    #global-settings-btn {
+      position: fixed;
+      top: 14px;
+      right: 14px;
+      z-index: 2300;
+      background: rgba(15, 23, 42, 0.92);
+      border: 1px solid #334155;
+      color: #f1f5f9;
+      border-radius: 12px;
+      padding: 8px 14px;
+      font-size: 12.5px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.65);
+      backdrop-filter: blur(8px);
+    }
+
+    #global-settings-btn:hover {
+      border-color: #38bdf8;
+      background: rgba(30, 41, 59, 0.96);
+      color: #38bdf8;
+    }
+
+    .settings-section {
+      background: #182238;
+      border: 1px solid #2a3854;
+      border-radius: 12px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .settings-section-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .settings-color-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .pos-btn-group { display: flex; gap: 6px; flex-wrap: wrap; }
+
+    .pos-btn {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid #334155;
+      color: #cbd5e1;
+      font-size: 10.5px;
+      padding: 4px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .pos-btn.active {
+      background: rgba(56, 189, 248, 0.18);
+      border-color: #38bdf8;
+      color: #38bdf8;
+      font-weight: 700;
+    }
+
+    .dyn-toggle-pill {
+      width: 48px;
+      height: 24px;
+      border-radius: 999px;
+      padding: 2px;
+      position: relative;
+      cursor: pointer;
+      transition: background-color 0.2s ease, border-color 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid #334155;
+    }
+
+    .dyn-toggle-pill.state-off { background-color: #1e293b; border-color: #334155; }
+    .dyn-toggle-pill.state-off .dyn-toggle-thumb { transform: translateX(0px); background-color: #f8fafc; }
+    .dyn-toggle-pill.state-on { background-color: #3b82f6; border-color: #60a5fa; }
+    .dyn-toggle-pill.state-on .dyn-toggle-thumb {
+      transform: translateX(-24px);
+      background-color: #ffffff;
+      box-shadow: 0 0 8px rgba(59, 130, 246, 0.8);
+    }
+    .dyn-toggle-pill.state-locked { background-color: #171c26; border-color: #262e3d; cursor: not-allowed; }
+    .dyn-toggle-pill.state-locked .dyn-toggle-thumb { transform: translateX(-12px); background-color: #525c6e; }
+
+    .dyn-toggle-thumb {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      transition: transform 0.2s ease, background-color 0.2s ease;
+    }
+
+    .dyn-state-btn-group {
+      display: flex;
+      gap: 4px;
+      background: #090d16;
+      padding: 2px;
+      border-radius: 8px;
+      border: 1px solid #2a3854;
+    }
+
+    .dyn-state-btn {
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      font-size: 10.5px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .dyn-state-btn.active-state[data-state="off"] { background: #334155; color: #f8fafc; }
+    .dyn-state-btn.active-state[data-state="on"] { background: #3b82f6; color: #ffffff; }
+    .dyn-state-btn.active-state[data-state="locked"] { background: #f59e0b; color: #0f172a; }
+
+    .dyn-patterns-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    @media (min-width: 480px) {
+      .dyn-patterns-grid { grid-template-columns: repeat(3, 1fr); }
+    }
+
+    .dyn-pattern-card {
+      background: #0b1120;
+      border: 1px solid #26334d;
+      border-radius: 10px;
+      padding: 8px 10px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 64px;
+      transition: all 0.15s ease;
+      position: relative;
+    }
+
+    .dyn-pattern-card:hover { border-color: #38bdf8; background: #0f182e; }
+    .dyn-pattern-card.selected {
+      border-color: #38bdf8;
+      background: rgba(56, 189, 248, 0.12);
+      box-shadow: 0 0 0 1px #38bdf8;
+    }
+
+    .dyn-pattern-head { display: flex; justify-content: space-between; align-items: center; }
+    .dyn-pattern-name { font-size: 11.5px; font-weight: 700; color: #e2e8f0; }
+    .dyn-pattern-card.selected .dyn-pattern-name { color: #38bdf8; }
+
+    .dyn-primary-badge {
+      background: rgba(56, 189, 248, 0.2);
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      color: #38bdf8;
+      font-size: 9.5px;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-family: monospace;
+    }
+
+    .dyn-status-badge { font-size: 10.5px; padding: 2px 7px; border-radius: 6px; font-weight: 700; }
+    .dyn-status-badge.off { background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.3); }
+    .dyn-status-badge.on { background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.4); }
+    .dyn-status-badge.locked { background: rgba(245, 158, 11, 0.18); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); }
+
+    .thread-form-group { display: flex; flex-direction: column; gap: 4px; }
+    .thread-form-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #cbd5e1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .thread-input, .thread-textarea, .thread-select {
+      background: #090d16;
+      border: 1px solid #2a3854;
+      border-radius: 8px;
+      padding: 6px 10px;
+      color: #f1f5f9;
+      font-size: 12px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.15s ease;
+    }
+
+    .thread-input:focus, .thread-textarea:focus, .thread-select:focus { border-color: #38bdf8; }
+    .thread-textarea { resize: vertical; min-height: 52px; }
+
+    .sensitivity-swatch {
+      width: 20px;
+      height: 20px;
+      border-radius: 6px;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: transform 0.15s ease;
+    }
+
+    .sensitivity-swatch:hover { transform: scale(1.18); }
+    .sensitivity-swatch.selected {
+      border-color: #ffffff;
+      box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.7);
+    }
+
+    .history-log-list {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      max-height: 120px;
+      overflow-y: auto;
+      font-size: 10.5px;
+      font-family: monospace;
+      color: #94a3b8;
+    }
+
+    .history-item {
+      background: #090d16;
+      border-right: 3px solid #38bdf8;
+      padding: 4px 8px;
+      border-radius: 4px;
+    }
+
+    #alarm-toast-container {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      z-index: 3000;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      pointer-events: none;
+    }
+
+    .alarm-toast {
+      background: #0f172a;
+      border: 1px solid #f59e0b;
+      border-right: 4px solid #f59e0b;
+      color: #f1f5f9;
+      border-radius: 12px;
+      padding: 10px 14px;
+      box-shadow: 0 12px 35px rgba(0, 0, 0, 0.8);
+      pointer-events: auto;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 280px;
+      max-width: 380px;
+    }
+
+    .alarm-toast-close {
+      background: rgba(255, 255, 255, 0.08);
+      border: none;
+      color: #cbd5e1;
+      border-radius: 6px;
+      padding: 2px 6px;
+      cursor: pointer;
+      font-size: 11px;
+    }
+
+    .alarm-toast-close:hover { background: #ef4444; color: #fff; }
+  </style>
+</head>
+<body>
+  <div id="workspace">
+    <button id="global-settings-btn" type="button" aria-label="لوحة التحكم والتخصيص">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"></circle>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+      </svg>
+      <span>لوحة التحكم والتخصيص</span>
+    </button>
+
+    <svg id="svg-layer">
+      <defs>
+        <linearGradient id="metalProngGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#f8fafc" />
+          <stop offset="50%" stop-color="#cbd5e1" />
+          <stop offset="100%" stop-color="#64748b" />
+        </linearGradient>
+        <filter id="plugShadow" x="-50%" y="-50%" width="200%" height="200%">
+          <feDropShadow dx="-2" dy="4" stdDeviation="3.5" flood-color="#000000" flood-opacity="0.8" />
+        </filter>
+      </defs>
+
+      <g id="cables-group"></g>
+      <g id="paint-stroke-group"></g>
+      <g id="sockets-group"></g>
+      <g id="plugs-group"></g>
+      <g id="effects-group"></g>
+      <g id="pen-nodes-group"></g>
+    </svg>
+
+    <div id="cards-container"></div>
+    <div id="port-tooltip"></div>
+    <div id="alarm-toast-container"></div>
+
+    <div id="path-session-bar">
+      <span class="session-cable-badge" id="session-cable-id">THR-01</span>
+      <span class="session-hint" id="session-mode-hint"></span>
+      <button class="session-btn save" id="session-save-btn">حفظ المسار</button>
+      <button class="session-btn cancel" id="session-cancel-btn">إلغاء</button>
+      <button class="session-btn reset" id="session-reset-btn">إعادة ضبط</button>
+    </div>
+
+    <div id="plug-color-popover">
+      <div class="popover-header">
+        <div class="popover-title">
+          <span>تغيير لون الموصل</span>
+          <span class="popover-plug-id" id="popover-plug-id-text">THR-01</span>
+        </div>
+      </div>
+      <div class="popover-swatches" id="popover-swatches-container"></div>
+    </div>
+
+    <div id="inspector-overlay">
+      <div class="inspector-panel">
+        <div class="inspector-header">
+          <div class="inspector-title" id="inspector-card-title">تخصيص البطاقات والسياق</div>
+          <button class="inspector-close" id="inspector-close-btn">&times;</button>
+        </div>
+
+        <div class="settings-section" id="inspector-trigger-pos-box" style="margin-bottom:10px;">
+          <div class="settings-section-head">
+            <span>تموضع أيقونة التخصيص</span>
+            <div class="pos-btn-group" id="trigger-pos-selector">
+              <button class="pos-btn" data-pos="top-left" type="button">أعلى اليسار</button>
+              <button class="pos-btn" data-pos="header-inline" type="button">في الهيدر</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section" id="inspector-card-bg-box" style="margin-bottom:10px;">
+          <div class="settings-section-head">
+            <span>تخصيص خلفية بطاقة الرسالة</span>
+          </div>
+          <div class="card-bg-presets" id="card-bg-presets-row"></div>
+          <div class="card-bg-controls">
+            <div class="card-bg-actions">
+              <label class="path-action-btn" for="card-bg-image-input" style="cursor:pointer;">اختيار صورة من الجهاز</label>
+              <input type="file" id="card-bg-image-input" accept="image/*" style="display:none;" />
+              <button type="button" class="path-action-btn reset-btn" id="card-bg-remove-btn">إزالة الصورة</button>
+            </div>
+            <div class="card-bg-slider-row">
+              <span>تعتيم الصورة / وضوح النص</span>
+              <input type="range" id="card-bg-shade-range" min="0" max="90" step="5" value="65" />
+              <span id="card-bg-shade-val">65%</span>
+            </div>
+            <div class="card-bg-slider-row">
+              <span>شفافية البطاقة</span>
+              <input type="range" id="card-bg-opacity-range" min="25" max="100" step="5" value="98" />
+              <span id="card-bg-opacity-val">98%</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section" id="inspector-dyn-bg-box" style="margin-bottom:10px;">
+          <div class="settings-section-head">
+            <span style="display:inline-flex; align-items:center; gap:6px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="3"/>
+                <path d="M7 12h10M12 7v10"/>
+              </svg>
+              <span>نظام الخلفيات الديناميكية للبطاقة</span>
+            </span>
+            <span class="dyn-status-badge off" id="dyn-status-badge">متوقف</span>
+          </div>
+
+          <div class="dyn-tristate-row" style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:#0b1120; padding:8px 10px; border-radius:10px; border:1px solid #1e293b;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <div class="dyn-toggle-pill state-off" id="dyn-toggle-pill">
+                <div class="dyn-toggle-thumb" id="dyn-toggle-thumb"></div>
+              </div>
+              <span style="font-size:11.5px; font-weight:700; color:#cbd5e1;" id="dyn-tristate-label">الحالة الحالية: متوقف</span>
+            </div>
+            <div class="dyn-state-btn-group" id="dyn-state-btn-group">
+              <button class="dyn-state-btn" data-state="off" type="button">متوقف</button>
+              <button class="dyn-state-btn" data-state="on" type="button">مفعّل</button>
+              <button class="dyn-state-btn" data-state="locked" type="button">مقفل</button>
+            </div>
+          </div>
+
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:8px; flex-wrap:wrap;">
+            <button type="button" class="path-action-btn" id="dyn-set-primary-btn">تعيين النمط الحالي كأساسي</button>
+            <button type="button" class="path-action-btn active-mode" id="dyn-apply-primary-btn">تطبيق الأساسي على غير المقفلة</button>
+          </div>
+
+          <div class="dyn-patterns-grid" id="dyn-patterns-grid"></div>
+
+          <div class="card-bg-controls" id="dyn-sliders-box">
+            <div class="card-bg-slider-row">
+              <span>سرعة الحركة (زمن الدورة)</span>
+              <input type="range" id="dyn-speed-range" min="2" max="15" step="0.5" value="8" />
+              <span id="dyn-speed-val">8.0ث</span>
+            </div>
+            <div class="card-bg-slider-row">
+              <span>شدة ووضوح الحركة</span>
+              <input type="range" id="dyn-intensity-range" min="5" max="100" step="1" value="20" />
+              <span id="dyn-intensity-val">20%</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section" id="inspector-plug-fx-box" style="margin-bottom:10px;">
+          <div class="settings-section-head">
+            <span>تخصيص تأثير توصيل وفك القابس</span>
+            <button class="path-action-btn" id="toggle-plug-fx-btn" type="button">متوقف (تشغيل)</button>
+          </div>
+
+          <div class="thread-form-group">
+            <label class="thread-form-label">أنيميشن الربط (Snap)</label>
+            <div class="pos-btn-group" id="snap-anim-group">
+              <button class="pos-btn" data-anim="snap_ring" type="button">Snap Ring</button>
+              <button class="pos-btn" data-anim="micro_recoil" type="button">Micro-Recoil</button>
+              <button class="pos-btn" data-anim="signal_flash" type="button">Signal Flash</button>
+              <button class="pos-btn" data-anim="none" type="button">بدون</button>
+            </div>
+          </div>
+
+          <div class="thread-form-group">
+            <label class="thread-form-label">أنيميشن الفك (Detach)</label>
+            <div class="pos-btn-group" id="detach-anim-group">
+              <button class="pos-btn" data-anim="detach_release" type="button">Detach Release</button>
+              <button class="pos-btn" data-anim="micro_recoil" type="button">Micro-Recoil</button>
+              <button class="pos-btn" data-anim="none" type="button">بدون</button>
+            </div>
+          </div>
+
+          <div class="thread-form-group">
+            <label class="thread-form-label">النمط الصوتي</label>
+            <div class="pos-btn-group" id="sound-mode-group">
+              <button class="pos-btn" data-sound="crisp_click" type="button">نقرة معدنية</button>
+              <button class="pos-btn" data-sound="subtle_pulse" type="button">نبضة هادئة</button>
+              <button class="pos-btn" data-sound="silent" type="button">صامت</button>
+            </div>
+          </div>
+
+          <div class="card-bg-slider-row">
+            <span>شدة التأثير والصوت</span>
+            <input type="range" id="plug-fx-intensity-range" min="10" max="100" step="5" value="65" />
+            <span id="plug-fx-intensity-val">65%</span>
+          </div>
+        </div>
+
+        <div class="settings-section" id="inspector-ports-toggle-box" style="margin-bottom:10px;">
+          <div class="settings-section-head">
+            <span>ميزة المنافذ والموصلات (الأسلاك والقوابس)</span>
+            <button class="path-action-btn" id="toggle-ports-feature-btn" type="button">متوقفة (تشغيل)</button>
+          </div>
+        </div>
+
+        <div class="settings-section" id="inspector-lock-toggle-box" style="margin-bottom:10px;">
+          <div class="settings-section-head">
+            <span>خاصية القفل على المنافذ</span>
+            <button class="path-action-btn" id="toggle-lock-feature-btn" type="button">مفعّلة (إيقاف)</button>
+          </div>
+        </div>
+
+        <div class="settings-section" id="inspector-identity-colors-box" style="margin-bottom:10px;">
+          <div class="settings-section-head">
+            <span>تخصيص ألوان الهويات والحدود والرموز</span>
+            <button class="path-action-btn reset-btn" id="settings-reset-btn" type="button">استعادة الافتراضي</button>
+          </div>
+          <div id="settings-sections-container" style="display:flex; flex-direction:column; gap:8px;"></div>
+        </div>
+
+        <div class="settings-section" id="inspector-threads-header-box" style="margin-bottom:6px;">
+          <div class="settings-section-head">
+            <span>إدارة ووحدات سياق الخيوط القائمة</span>
+            <button class="path-action-btn" id="ai-context-summary-btn" type="button">تصدير ملخص JSON الذكي</button>
+          </div>
+        </div>
+
+        <div class="cable-list" id="inspector-cable-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      const SVG_NS = 'http://www.w3.org/2000/svg';
+      const STORAGE_KEY = 'MONOLITH_CANVAS_SAVED_STATE_V6';
+
+      const LOCK_ICON_HTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:middle;"><rect x="5" y="11" width="14" height="10" rx="2" fill="rgba(251, 191, 36, 0.16)"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/><circle cx="12" cy="16" r="1.4" fill="currentColor" stroke="none"/></svg>';
+
+      const VECTOR_PALETTE_SVG = `
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10c.92 0 1.76-.29 2.45-.78.77-.55 1.55-.83 2.55-.83H18a4 4 0 0 0 4-4 4 4 0 0 0-4-4h-1.5c-1 0-1.87-.46-2.45-1.18C13.43 6.42 12.78 6 12 6"/>
+          <circle cx="7.5" cy="11.5" r="1.5" fill="currentColor" stroke="none"/>
+          <circle cx="10.5" cy="7.5" r="1.5" fill="currentColor" stroke="none"/>
+          <circle cx="15.5" cy="7.5" r="1.5" fill="currentColor" stroke="none"/>
+          <circle cx="17.5" cy="11.5" r="1.5" fill="currentColor" stroke="none"/>
+        </svg>
+      `;
+
+      const DYN_PATTERNS = [
+        { id: 'pulse', name: 'نبض الهوية', iconSvg: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/></svg>` },
+        { id: 'grid', name: 'شبكة تفاعلية', iconSvg: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg>` },
+        { id: 'sheen', name: 'موجة ضوئية', iconSvg: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 19L19 5M12 19L19 12M5 12L12 5"/></svg>` },
+        { id: 'chess', name: 'شطرنج هندسي', iconSvg: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 12h18M12 3v18"/></svg>` },
+        { id: 'cyberpunk', name: 'سايبربانك', iconSvg: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v3m8-3v3M8 18v3m8-3v3M3 8h3m-3 8h3m15-8h3m-3 8h3"/><rect x="6" y="6" width="12" height="12" rx="2"/></svg>` },
+        { id: 'organic', name: 'طبيعي هادئ', iconSvg: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12c3-4 6-4 9 0s6 4 9 0M2 17c3-4 6-4 9 0s6 4 9 0"/></svg>` }
+      ];
+
+      const THREAD_CONCEPTS = [
+        { id: 'constraints', label: 'القيود والاستبعادات' },
+        { id: 'code', label: 'البرمجة والبناء' },
+        { id: 'planning', label: 'التخطيط والخطوات' },
+        { id: 'custom', label: 'مخصص' }
+      ];
+
+      const SENSITIVITY_COLORS = [
+        { hex: '#ef4444', name: 'قيد حرج' },
+        { hex: '#f59e0b', name: 'حذر وتحذير' },
+        { hex: '#38bdf8', name: 'معلومات سياقية' },
+        { hex: '#2ee58a', name: 'تأكيد وإكتمال' },
+        { hex: '#a855f7', name: 'معمارية هامة' }
+      ];
+
+      let primaryDynEffect = { pattern: 'pulse', speed: 8, intensity: 20 };
+
+      let plugFxConfig = {
+        enabled: false,
+        snapAnim: 'snap_ring',
+        detachAnim: 'detach_release',
+        soundMode: 'crisp_click',
+        intensity: 65
+      };
+
+      const activePlugPulses = [];
+
+      const PLUG_COLORS = [
+        { hex: '#2ee58a', name: 'أخضر' },
+        { hex: '#29b6f6', name: 'أزرق' },
+        { hex: '#a855f7', name: 'بنفسجي' },
+        { hex: '#11161f', name: 'أسود', isBlack: true },
+        { hex: '#f97316', name: 'برتقالي' },
+        { hex: '#ef4444', name: 'أحمر' },
+        { hex: '#f8fafc', name: 'أبيض', isWhite: true },
+        { hex: '#8b5a2b', name: 'بني' },
+        { hex: '#facc15', name: 'أصفر' },
+        { hex: '#ec4899', name: 'وردي' },
+        { hex: '#94a3b8', name: 'رمادي معدني' }
+      ];
+
+      const CARD_BG_PRESETS = [
+        { id: 'default', label: 'افتراضي داكن', cssBg: 'linear-gradient(160deg, rgba(20, 25, 36, 0.98), rgba(12, 15, 22, 0.99))', chipColor: '#141924' },
+        { id: 'obsidian', label: 'أسود خالص', cssBg: 'linear-gradient(160deg, #111827, #030712)', chipColor: '#0b0e14' },
+        { id: 'midnight', label: 'أزرق ليلي عميق', cssBg: 'linear-gradient(160deg, #0f172a, #020617)', chipColor: '#0f172a' },
+        { id: 'slate', label: 'أردوازي صلب', cssBg: 'linear-gradient(160deg, #1e293b, #0f172a)', chipColor: '#162032' },
+        { id: 'charcoal', label: 'فحمي نقي', cssBg: 'linear-gradient(160deg, #1c1917, #0f0d0e)', chipColor: '#1c1917' }
+      ];
+
+      const EMBEDDED_IDENTITY_SVGS = {
+        self: `<svg width="18" height="18" viewBox="0 0 24 24" fill="#f8fafc"><circle cx="12" cy="7" r="4.5"/><path d="M4 19c0-3.5 3.5-6 8-6s8 2.5 8 6v1H4v-1z"/></svg>`,
+        peer: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="4.5"/><path d="M4 20c0-3.5 3.5-6 8-6s8 2.5 8 6"/></svg>`,
+        ai:   `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="8" width="14" height="11" rx="3" fill="rgba(239,68,68,0.15)"/><line x1="12" y1="2" x2="12" y2="8"/><circle cx="12" cy="2" r="1.5" fill="#ef4444"/><circle cx="9" cy="13" r="1.5" fill="#ef4444"/><circle cx="15" cy="13" r="1.5" fill="#ef4444"/><line x1="9" y1="16.5" x2="15" y2="16.5"/><path d="M2 12h3M19 12h3"/></svg>`
+      };
+
+      const PORT_OFFSETS = [30, 60, 90, 120];
+      const PORT_SIDES = ['left', 'right'];
+
+      const cards = [
+        {
+          id: 'card-1',
+          entityType: 'self',
+          owner: 'mine',
+          x: 120,
+          y: 70,
+          title: 'رسالة النظام (حسابي)',
+          text: 'قم بإعداد السياق البرمجي العام للمشروع وتوجيه الاستجابات باللغة العربية.',
+          bgPreset: 'default',
+          dynState: 'off',
+          dynLockedActive: false,
+          dynPattern: 'pulse',
+          dynSpeed: 8,
+          dynIntensity: 20,
+          hasCustomDyn: false
+        },
+        {
+          id: 'card-2',
+          entityType: 'peer',
+          owner: 'peer',
+          x: 520,
+          y: 70,
+          title: 'رسالة مستخدم آخر',
+          text: 'هل تم الاعتماد على تصميم واجهة الكانفاس المتفاعلة ثلاثية الأبعاد؟',
+          bgPreset: 'default',
+          dynState: 'off',
+          dynLockedActive: false,
+          dynPattern: 'cyberpunk',
+          dynSpeed: 6,
+          dynIntensity: 25,
+          hasCustomDyn: false
+        },
+        {
+          id: 'card-3',
+          entityType: 'ai',
+          owner: 'ai',
+          x: 320,
+          y: 360,
+          title: 'مخرجات الذكاء الاصطناعي',
+          text: 'تم إنشاء وهيكلة الكود كاملاً بدعم المؤثرات الحركية والتفاعل التام مع المنافذ.',
+          bgPreset: 'default',
+          dynState: 'off',
+          dynLockedActive: false,
+          dynPattern: 'organic',
+          dynSpeed: 10,
+          dynIntensity: 20,
+          hasCustomDyn: false
+        }
+      ];
+
+      const cables = [
+        {
+          id: 'THR-01',
+          title: 'خيط القيود والتصاميم',
+          concept: 'constraints',
+          hiddenNote: 'تأكيد الحفاظ على نظام التلوين والأحجام النسبية.',
+          sensitivityColor: '#ef4444',
+          owner: 'mine',
+          color: '#29b6f6',
+          from: { cardId: 'card-1', side: 'right', portIdx: 0 },
+          to: { cardId: 'card-3', side: 'left', portIdx: 0 },
+          customPoints: [],
+          detachedEnds: {},
+          relations: [],
+          alarm: { enabled: false, timestamp: null, note: '', triggered: false },
+          history: [{ timestamp: new Date().toLocaleTimeString('ar-EG'), action: 'إنشاء الخيط', details: 'تم إنشاء خيط سياقي جديد' }],
+          undoStack: []
+        },
+        {
+          id: 'THR-02',
+          title: 'خيط بناء المعمارية والكود',
+          concept: 'code',
+          hiddenNote: 'تنفيذ خوارزميات التوصيل البيزييه مع دعم تعديل المسار.',
+          sensitivityColor: '#38bdf8',
+          owner: 'peer',
+          color: '#f97316',
+          from: { cardId: 'card-2', side: 'left', portIdx: 1 },
+          to: { cardId: 'card-3', side: 'right', portIdx: 1 },
+          customPoints: [],
+          detachedEnds: {},
+          relations: [],
+          alarm: { enabled: false, timestamp: null, note: '', triggered: false },
+          history: [{ timestamp: new Date().toLocaleTimeString('ar-EG'), action: 'إنشاء الخيط', details: 'تم إنشاء خيط سياقي جديد' }],
+          undoStack: []
+        }
+      ];
+
+      let dragState = null;
+      let nextCableSeq = cables.length + 1;
+      let lockFeatureEnabled = true;
+      let portsEnabled = false;
+      let triggerPositionMode = 'header-inline';
+
+      const ENTITY_COLOR_MAP = { self: '#f8fafc', peer: '#38bdf8', ai: '#ef4444' };
+      const DEFAULT_ENTITY_COLOR_MAP = { self: '#f8fafc', peer: '#38bdf8', ai: '#ef4444' };
+      const ENTITY_LABELS = {
+        self: 'الرسائل الخاصة بي (Self)',
+        peer: 'شخص بشري آخر (Peer)',
+        ai: 'وكيل الذكاء الاصطناعي (AI)'
+      };
+
+      const PALETTE_CHOICES = [
+        '#f8fafc', '#38bdf8', '#ef4444', '#2ee58a',
+        '#f59e0b', '#a855f7', '#ec4899', '#facc15', '#94a3b8'
+      ];
+
+      const plugAngles = {};
+      let pathSession = null;
+      let plugClickTracker = { lastPlugKey: null, count: 0, lastTime: 0 };
+
+      let audioCtx = null;
+      function playPlugSound(kind) {
+        if (!plugFxConfig.enabled || plugFxConfig.soundMode === 'silent') return;
+        try {
+          const Ctx = window.AudioContext || window.webkitAudioContext;
+          if (!Ctx) return;
+          if (!audioCtx) audioCtx = new Ctx();
+          if (audioCtx.state === 'suspended') audioCtx.resume();
+
+          const gainScale = Math.max(0.05, (plugFxConfig.intensity || 65) / 100) * 0.14;
+          const now = audioCtx.currentTime;
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+
+          if (plugFxConfig.soundMode === 'crisp_click') {
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(kind === 'snap' ? 760 : 420, now);
+            osc.frequency.exponentialRampToValueAtTime(kind === 'snap' ? 220 : 140, now + 0.045);
+          } else {
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(kind === 'snap' ? 520 : 310, now);
+            osc.frequency.exponentialRampToValueAtTime(kind === 'snap' ? 260 : 180, now + 0.065);
+          }
+
+          gain.gain.setValueAtTime(gainScale, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.065);
+
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start(now);
+          osc.stop(now + 0.07);
+        } catch (_) {}
+      }
+
+      function triggerPlugEffect(kind, x, y, color) {
+        if (!plugFxConfig.enabled || !portsEnabled) return;
+        const animType = kind === 'snap' ? plugFxConfig.snapAnim : plugFxConfig.detachAnim;
+        if (!animType || animType === 'none') return;
+
+        activePlugPulses.push({
+          kind,
+          animType,
+          x,
+          y,
+          color: color || '#38bdf8',
+          startTime: performance.now(),
+          duration: kind === 'snap' ? 280 : 240,
+          strength: (plugFxConfig.intensity || 65) / 100
+        });
+        playPlugSound(kind);
+      }
+
+      function clonePoints(pts) {
+        return Array.isArray(pts) ? pts.map(p => ({ x: p.x, y: p.y })) : [];
+      }
+
+      function logThreadHistory(thread, action, details) {
+        if (!thread.history) thread.history = [];
+        const timeStr = new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        thread.history.unshift({ timestamp: timeStr, action, details });
+        if (thread.history.length > 20) thread.history.pop();
+      }
+
+      function pushThreadUndoState(thread) {
+        if (!thread.undoStack) thread.undoStack = [];
+        const snapshot = {
+          title: thread.title,
+          concept: thread.concept,
+          hiddenNote: thread.hiddenNote,
+          sensitivityColor: thread.sensitivityColor,
+          color: thread.color,
+          alarm: JSON.parse(JSON.stringify(thread.alarm || { enabled: false, timestamp: null, note: '', triggered: false }))
+        };
+        thread.undoStack.push(snapshot);
+        if (thread.undoStack.length > 10) thread.undoStack.shift();
+      }
+
+      function undoThreadLastChange(thread) {
+        if (!thread.undoStack || thread.undoStack.length === 0) return false;
+        const prev = thread.undoStack.pop();
+        thread.title = prev.title;
+        thread.concept = prev.concept;
+        thread.hiddenNote = prev.hiddenNote;
+        thread.sensitivityColor = prev.sensitivityColor;
+        thread.color = prev.color;
+        thread.alarm = prev.alarm;
+        logThreadHistory(thread, 'تراجع', 'تم التراجع عن آخر تعديل على الخيط');
+        return true;
+      }
+
+      function saveCanvasState() {
+        try {
+          const stateData = {
+            version: 6,
+            cards,
+            cables,
+            nextCableSeq,
+            lockFeatureEnabled,
+            portsEnabled,
+            triggerPositionMode,
+            ENTITY_COLOR_MAP,
+            plugAngles,
+            primaryDynEffect,
+            plugFxConfig
+          };
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(stateData));
+        } catch (_) {}
+      }
+
+      function loadCanvasState() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (!raw) return false;
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === 'object') {
+            if (Array.isArray(parsed.cards) && parsed.cards.length > 0) {
+              cards.length = 0;
+              parsed.cards.forEach(c => {
+                cards.push({
+                  id: c.id,
+                  entityType: c.entityType || 'self',
+                  owner: c.owner || 'mine',
+                  x: typeof c.x === 'number' ? c.x : 100,
+                  y: typeof c.y === 'number' ? c.y : 100,
+                  title: c.title || '',
+                  text: c.text || '',
+                  bgPreset: c.bgPreset || 'default',
+                  bgImageData: c.bgImageData || undefined,
+                  bgImageShade: typeof c.bgImageShade === 'number' ? c.bgImageShade : 0.65,
+                  bgOpacity: typeof c.bgOpacity === 'number' ? c.bgOpacity : 0.98,
+                  dynState: c.dynState || 'off',
+                  dynLockedActive: Boolean(c.dynLockedActive),
+                  dynPattern: c.dynPattern || 'pulse',
+                  dynSpeed: typeof c.dynSpeed === 'number' ? c.dynSpeed : 8,
+                  dynIntensity: typeof c.dynIntensity === 'number' ? c.dynIntensity : 20,
+                  hasCustomDyn: Boolean(c.hasCustomDyn)
+                });
+              });
+            }
+            if (Array.isArray(parsed.cables)) {
+              cables.length = 0;
+              parsed.cables.forEach(cb => {
+                cables.push({
+                  id: cb.id,
+                  title: cb.title || `خيط ${cb.id}`,
+                  concept: cb.concept || 'custom',
+                  hiddenNote: cb.hiddenNote || '',
+                  sensitivityColor: cb.sensitivityColor || '#38bdf8',
+                  owner: cb.owner || 'mine',
+                  color: cb.color || '#29b6f6',
+                  from: cb.from || null,
+                  to: cb.to || null,
+                  customPoints: cb.customPoints || [],
+                  detachedEnds: cb.detachedEnds || {},
+                  relations: Array.isArray(cb.relations) ? cb.relations : [],
+                  alarm: cb.alarm || { enabled: false, timestamp: null, note: '', triggered: false },
+                  history: Array.isArray(cb.history) ? cb.history : [],
+                  undoStack: Array.isArray(cb.undoStack) ? cb.undoStack : []
+                });
+              });
+            }
+            if (typeof parsed.nextCableSeq === 'number') nextCableSeq = parsed.nextCableSeq;
+            if (typeof parsed.lockFeatureEnabled === 'boolean') lockFeatureEnabled = parsed.lockFeatureEnabled;
+            portsEnabled = (typeof parsed.portsEnabled === 'boolean') ? parsed.portsEnabled : false;
+            if (parsed.triggerPositionMode) triggerPositionMode = parsed.triggerPositionMode;
+            if (parsed.ENTITY_COLOR_MAP) Object.assign(ENTITY_COLOR_MAP, parsed.ENTITY_COLOR_MAP);
+            if (parsed.plugAngles) Object.assign(plugAngles, parsed.plugAngles);
+            if (parsed.primaryDynEffect) Object.assign(primaryDynEffect, parsed.primaryDynEffect);
+            if (parsed.plugFxConfig) Object.assign(plugFxConfig, parsed.plugFxConfig);
+            return true;
+          }
+        } catch (_) {}
+        return false;
+      }
+
+      function generateNextCableId() {
+        const idStr = 'THR-' + String(nextCableSeq).padStart(2, '0');
+        nextCableSeq += 1;
+        saveCanvasState();
+        return idStr;
+      }
+
+      const workspace = document.getElementById('workspace');
+      const svgLayer = document.getElementById('svg-layer');
+      const cablesGroup = document.getElementById('cables-group');
+      const paintStrokeGroup = document.getElementById('paint-stroke-group');
+      const socketsGroup = document.getElementById('sockets-group');
+      const plugsGroup = document.getElementById('plugs-group');
+      const effectsGroup = document.getElementById('effects-group');
+      const penNodesGroup = document.getElementById('pen-nodes-group');
+      const cardsContainer = document.getElementById('cards-container');
+      const tooltipEl = document.getElementById('port-tooltip');
+      const alarmToastContainer = document.getElementById('alarm-toast-container');
+      const plugColorPopover = document.getElementById('plug-color-popover');
+      const popoverPlugIdText = document.getElementById('popover-plug-id-text');
+      const popoverSwatchesContainer = document.getElementById('popover-swatches-container');
+      const inspectorOverlay = document.getElementById('inspector-overlay');
+      const inspectorCloseBtn = document.getElementById('inspector-close-btn');
+
+      const pathSessionBar = document.getElementById('path-session-bar');
+      const sessionCableIdEl = document.getElementById('session-cable-id');
+      const sessionModeHintEl = document.getElementById('session-mode-hint');
+      const sessionSaveBtn = document.getElementById('session-save-btn');
+      const sessionCancelBtn = document.getElementById('session-cancel-btn');
+      const sessionResetBtn = document.getElementById('session-reset-btn');
+
+      const globalSettingsBtn = document.getElementById('global-settings-btn');
+      const settingsSectionsContainer = document.getElementById('settings-sections-container');
+      const togglePortsFeatureBtn = document.getElementById('toggle-ports-feature-btn');
+      const toggleLockFeatureBtn = document.getElementById('toggle-lock-feature-btn');
+      const togglePlugFxBtn = document.getElementById('toggle-plug-fx-btn');
+      const plugFxIntensityRange = document.getElementById('plug-fx-intensity-range');
+      const plugFxIntensityVal = document.getElementById('plug-fx-intensity-val');
+      const settingsResetBtn = document.getElementById('settings-reset-btn');
+      const aiContextSummaryBtn = document.getElementById('ai-context-summary-btn');
+
+      const dynStatusBadge = document.getElementById('dyn-status-badge');
+      const dynTogglePill = document.getElementById('dyn-toggle-pill');
+      const dynTristateLabel = document.getElementById('dyn-tristate-label');
+      const dynStateBtnGroup = document.getElementById('dyn-state-btn-group');
+      const dynSetPrimaryBtn = document.getElementById('dyn-set-primary-btn');
+      const dynApplyPrimaryBtn = document.getElementById('dyn-apply-primary-btn');
+      const dynPatternsGrid = document.getElementById('dyn-patterns-grid');
+      const dynSpeedRange = document.getElementById('dyn-speed-range');
+      const dynSpeedVal = document.getElementById('dyn-speed-val');
+      const dynIntensityRange = document.getElementById('dyn-intensity-range');
+      const dynIntensityVal = document.getElementById('dyn-intensity-val');
+
+      function createSvgEl(tag, attrs) {
+        const el = document.createElementNS(SVG_NS, tag);
+        if (attrs) {
+          for (const [k, v] of Object.entries(attrs)) {
+            el.setAttribute(k, String(v));
+          }
+        }
+        return el;
+      }
+
+      function getCardWidth(cardId) {
+        const el = document.getElementById(cardId);
+        return el ? el.offsetWidth : 320;
+      }
+
+      function getPortAnchor(cardId, side, portIdx) {
+        const card = cards.find(c => c.id === cardId);
+        if (!card) return { x: 0, y: 0, angle: 0, side: 'left' };
+        const validSide = side === 'right' ? 'right' : 'left';
+        const cardW = getCardWidth(card.id);
+        const x = validSide === 'left' ? card.x : card.x + cardW;
+        const y = card.y + (PORT_OFFSETS[portIdx] !== undefined ? PORT_OFFSETS[portIdx] : 30);
+        const angle = validSide === 'left' ? 0 : Math.PI;
+        return { x, y, angle, side: validSide };
+      }
+
+      function clampCardsIntoViewport() {
+        const vw = window.innerWidth || 360;
+        const vh = window.innerHeight || 640;
+        const cardW = 320;
+        const cardH = 160;
+        cards.forEach(card => {
+          if (typeof card.x !== 'number' || isNaN(card.x)) card.x = 20;
+          if (typeof card.y !== 'number' || isNaN(card.y)) card.y = 20;
+          card.x = Math.max(10, Math.min(vw - cardW - 10, card.x));
+          card.y = Math.max(10, Math.min(vh - cardH - 10, card.y));
+        });
+      }
+
+      function autoLayoutCards() {
+        const vw = window.innerWidth || 360;
+        const vh = window.innerHeight || 640;
+        const cardW = 320;
+        const isMobile = vw < 768;
+
+        if (isMobile) {
+          const centerX = Math.max(15, Math.floor((vw - cardW) / 2));
+          cards[0].x = centerX; cards[0].y = 56;
+          cards[1].x = centerX; cards[1].y = 250;
+          cards[2].x = centerX; cards[2].y = 440;
+        } else {
+          cards[0].x = Math.floor(vw * 0.08); cards[0].y = Math.floor(vh * 0.12);
+          cards[1].x = Math.floor(vw * 0.58); cards[1].y = Math.floor(vh * 0.12);
+          cards[2].x = Math.floor(vw * 0.33); cards[2].y = Math.floor(vh * 0.55);
+        }
+      }
+
+      function showAlarmToast(cableId, title, note) {
+        const toast = document.createElement('div');
+        toast.className = 'alarm-toast';
+        toast.innerHTML = `
+          <div style="flex:1;">
+            <div style="font-size:11px; font-weight:700; color:#fbbf24; font-family:monospace;">[${cableId}]</div>
+            <div style="font-size:12.5px; font-weight:700; color:#f1f5f9; margin-top:2px;">${title}</div>
+            ${note ? `<div style="font-size:11.5px; color:#cbd5e1; margin-top:4px;">${note}</div>` : ''}
+          </div>
+          <button class="alarm-toast-close" type="button">&times;</button>
+        `;
+        toast.querySelector('.alarm-toast-close').onclick = () => toast.remove();
+        alarmToastContainer.appendChild(toast);
+        setTimeout(() => { if (toast.parentNode) toast.remove(); }, 8000);
+      }
+
+      function checkSmartAlarms() {
+        const nowMs = Date.now();
+        cables.forEach(c => {
+          if (c.alarm && c.alarm.enabled && c.alarm.timestamp && !c.alarm.triggered) {
+            const targetMs = new Date(c.alarm.timestamp).getTime();
+            if (!isNaN(targetMs) && nowMs >= targetMs) {
+              c.alarm.triggered = true;
+              showAlarmToast(c.id, c.title || c.id, c.alarm.note || c.hiddenNote);
+              logThreadHistory(c, 'إطلاق المنبه', 'تم إطلاق منبه الخيط');
+              saveCanvasState();
+            }
+          }
+        });
+      }
+
+      setInterval(checkSmartAlarms, 5000);
+
+      function getActivePointsForCable(cable) {
+        if (pathSession && pathSession.cableId === cable.id) return pathSession.draftPoints;
+        return cable.customPoints || [];
+      }
+
+      function simplifyPaintStrokeToControlPoints(samples, startPt, endPt) {
+        if (!samples || samples.length < 3) return [];
+        const filtered = samples.filter(pt => {
+          const dStart = Math.hypot(pt.x - startPt.x, pt.y - startPt.y);
+          const dEnd = Math.hypot(pt.x - endPt.x, pt.y - endPt.y);
+          return dStart > 36 && dEnd > 36;
+        });
+        if (filtered.length === 0) return [];
+
+        const resampled = [filtered[0]];
+        let accum = 0;
+        const step = 36;
+        for (let i = 1; i < filtered.length; i++) {
+          const prev = filtered[i - 1];
+          const curr = filtered[i];
+          accum += Math.hypot(curr.x - prev.x, curr.y - prev.y);
+          if (accum >= step) {
+            resampled.push({ x: curr.x, y: curr.y });
+            accum = 0;
+          }
+        }
+        const last = filtered[filtered.length - 1];
+        const tail = resampled[resampled.length - 1];
+        if (Math.hypot(last.x - tail.x, last.y - tail.y) > 16) {
+          resampled.push({ x: last.x, y: last.y });
+        }
+        const maxNodes = 7;
+        if (resampled.length <= maxNodes) return resampled;
+
+        const reduced = [];
+        for (let i = 0; i < maxNodes; i++) {
+          const idx = Math.round((i * (resampled.length - 1)) / (maxNodes - 1));
+          reduced.push({ x: resampled[idx].x, y: resampled[idx].y });
+        }
+        return reduced;
+      }
+
+      function buildCablePathData(x1, y1, dir1x, dir1y, x2, y2, dir2x, dir2y, customPoints) {
+        if (!customPoints || customPoints.length === 0) {
+          const dist = Math.hypot(x2 - x1, y2 - y1);
+          const pull = Math.min(220, Math.max(50, dist * 0.45));
+          const sag = Math.min(90, dist * 0.15);
+          const c1x = x1 + dir1x * pull;
+          const c1y = y1 + dir1y * pull + sag;
+          const c2x = x2 + dir2x * pull;
+          const c2y = y2 + dir2y * pull + sag;
+          return `M ${x1} ${y1} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${x2} ${y2}`;
+        }
+
+        const pts = [{ x: x1, y: y1 }, ...customPoints, { x: x2, y: y2 }];
+        let d = `M ${pts[0].x} ${pts[0].y}`;
+        for (let i = 0; i < pts.length - 1; i++) {
+          const p0 = pts[i === 0 ? i : i - 1];
+          const p1 = pts[i];
+          const p2 = pts[i + 1];
+          const p3 = pts[i + 2 < pts.length ? i + 2 : i + 1];
+          const cp1x = p1.x + (p2.x - p0.x) / 6;
+          const cp1y = p1.y + (p2.y - p0.y) / 6;
+          const cp2x = p2.x - (p3.x - p1.x) / 6;
+          const cp2y = p2.y - (p3.y - p1.y) / 6;
+          d += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y}`;
+        }
+        return d;
+      }
+
+      function updatePathSessionBar() {
+        if (!pathSession) {
+          pathSessionBar.classList.remove('active');
+          return;
+        }
+        const cable = cables.find(c => c.id === pathSession.cableId);
+        if (!cable) {
+          pathSessionBar.classList.remove('active');
+          return;
+        }
+        sessionCableIdEl.textContent = cable.id;
+        sessionModeHintEl.textContent = pathSession.mode === 'paint'
+          ? 'اسحب لرسم المسار بحرية'
+          : 'انقر لإضافة نقطة أو اسحبها أو انقر مرتين لحذفها';
+        pathSessionBar.classList.add('active');
+      }
+
+      function enterPathSession(cableId, mode) {
+        const cable = cables.find(c => c.id === cableId);
+        if (!cable || cable.owner !== 'mine') return;
+
+        if (!pathSession || pathSession.cableId !== cableId) {
+          const initialPts = clonePoints(cable.customPoints);
+          pathSession = {
+            cableId,
+            mode,
+            snapshotPoints: clonePoints(cable.customPoints),
+            draftPoints: initialPts,
+            selectedNodeIdx: initialPts.length > 0 ? 0 : null,
+            isPainting: false,
+            rawPaintSamples: []
+          };
+        } else {
+          pathSession.mode = mode;
+          pathSession.isPainting = false;
+          pathSession.rawPaintSamples = [];
+        }
+        inspectorOverlay.classList.remove('active');
+        updatePathSessionBar();
+        renderCablesAndPlugs();
+      }
+
+      function savePathSession() {
+        if (!pathSession) return;
+        const cable = cables.find(c => c.id === pathSession.cableId);
+        if (cable) cable.customPoints = clonePoints(pathSession.draftPoints);
+        pathSession = null;
+        paintStrokeGroup.innerHTML = '';
+        updatePathSessionBar();
+        renderCablesAndPlugs();
+        saveCanvasState();
+      }
+
+      function cancelPathSession() {
+        if (!pathSession) return;
+        const cable = cables.find(c => c.id === pathSession.cableId);
+        if (cable) cable.customPoints = clonePoints(pathSession.snapshotPoints);
+        pathSession = null;
+        paintStrokeGroup.innerHTML = '';
+        updatePathSessionBar();
+        renderCablesAndPlugs();
+      }
+
+      function resetCablePath(cableId) {
+        const cable = cables.find(c => c.id === cableId);
+        if (!cable || cable.owner !== 'mine') return;
+        cable.customPoints = [];
+        if (pathSession && pathSession.cableId === cableId) {
+          pathSession.draftPoints = [];
+          pathSession.snapshotPoints = [];
+          pathSession.rawPaintSamples = [];
+          pathSession.isPainting = false;
+          paintStrokeGroup.innerHTML = '';
+        }
+        renderCablesAndPlugs();
+        saveCanvasState();
+      }
+
+      sessionSaveBtn.addEventListener('click', (e) => { e.stopPropagation(); savePathSession(); });
+      sessionCancelBtn.addEventListener('click', (e) => { e.stopPropagation(); cancelPathSession(); });
+      sessionResetBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (pathSession) resetCablePath(pathSession.cableId);
+      });
+
+      function hexToRgba(hex, alpha) {
+        const clean = (hex || '#141924').replace('#', '');
+        const full = clean.length === 3 ? clean.split('').map(c => c + c).join('') : clean;
+        const num = parseInt(full, 16);
+        if (isNaN(num)) return `rgba(20, 25, 36, ${alpha})`;
+        const r = (num >> 16) & 255;
+        const g = (num >> 8) & 255;
+        const b = num & 255;
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+      }
+
+      function hexToRgbObj(hex) {
+        const clean = (hex || '#38bdf8').replace('#', '');
+        const full = clean.length === 3 ? clean.split('').map(c => c + c).join('') : clean;
+        const num = parseInt(full, 16);
+        if (isNaN(num)) return { r: 56, g: 189, b: 248 };
+        return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
+      }
+
+      function getCardBackgroundCss(card) {
+        const presetId = card && card.bgPreset ? card.bgPreset : 'default';
+        const found = CARD_BG_PRESETS.find(p => p.id === presetId) || CARD_BG_PRESETS[0];
+        const cardOpacity = typeof card.bgOpacity === 'number' ? card.bgOpacity : 0.98;
+        const shadeAlpha = typeof card.bgImageShade === 'number' ? card.bgImageShade : 0.65;
+
+        if (card && card.bgImageData) {
+          const overlayColor = `rgba(9, 12, 17, ${shadeAlpha.toFixed(2)})`;
+          return `linear-gradient(${overlayColor}, ${overlayColor}), url("${card.bgImageData}") center / cover no-repeat`;
+        }
+
+        if (presetId === 'default') {
+          return `linear-gradient(160deg, ${hexToRgba('#141924', cardOpacity)}, ${hexToRgba('#0c0f16', cardOpacity)})`;
+        }
+        return found.cssBg;
+      }
+
+      function renderCards() {
+        cardsContainer.innerHTML = '';
+        cards.forEach((card, cardIdx) => {
+          const cardClassMap = { self: 'card-self', peer: 'card-peer', ai: 'card-ai' };
+          const cardEl = document.createElement('div');
+          cardEl.className = `msg-card ${cardClassMap[card.entityType] || 'card-self'}`;
+          cardEl.id = card.id;
+          if (dragState && dragState.type === 'card' && dragState.cardId === card.id) {
+            cardEl.classList.add('dragging');
+          }
+          cardEl.style.left = `${card.x}px`;
+          cardEl.style.top = `${card.y}px`;
+          cardEl.style.background = getCardBackgroundCss(card);
+
+          const dynLayer = document.createElement('div');
+          dynLayer.className = 'card-dyn-layer';
+          dynLayer.id = `dyn-layer-${card.id}`;
+
+          const dynCanvas = document.createElement('canvas');
+          dynCanvas.className = 'card-dyn-canvas';
+          dynCanvas.id = `dyn-canvas-${card.id}`;
+          dynLayer.appendChild(dynCanvas);
+          cardEl.appendChild(dynLayer);
+
+          const shield = document.createElement('div');
+          shield.className = 'card-contrast-shield';
+          shield.id = `dyn-shield-${card.id}`;
+          cardEl.appendChild(shield);
+
+          const headerEl = document.createElement('div');
+          headerEl.className = 'msg-header';
+
+          const headerRight = document.createElement('div');
+          headerRight.className = 'msg-header-right';
+
+          const badgeNum = document.createElement('div');
+          badgeNum.className = 'msg-badge-num';
+          badgeNum.textContent = `#${cardIdx + 1}`;
+
+          const embeddedIcon = document.createElement('div');
+          embeddedIcon.className = 'embedded-identity-icon';
+          embeddedIcon.innerHTML = EMBEDDED_IDENTITY_SVGS[card.entityType] || EMBEDDED_IDENTITY_SVGS.self;
+
+          headerRight.appendChild(badgeNum);
+          headerRight.appendChild(embeddedIcon);
+          headerEl.appendChild(headerRight);
+
+          const paletteBtn = document.createElement('button');
+          paletteBtn.type = 'button';
+          paletteBtn.title = 'تخصيص البطاقة';
+          paletteBtn.innerHTML = VECTOR_PALETTE_SVG;
+
+          if (triggerPositionMode === 'top-left') {
+            paletteBtn.className = 'palette-trigger-btn top-left-floating';
+            cardEl.appendChild(paletteBtn);
+          } else {
+            paletteBtn.className = 'palette-trigger-btn header-inline';
+            headerEl.appendChild(paletteBtn);
+          }
+
+          paletteBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            closePlugPopover();
+            openInspector(card.id);
+          });
+
+          const titleEl = document.createElement('div');
+          titleEl.className = 'msg-title';
+          titleEl.textContent = card.title || '';
+
+          const textEl = document.createElement('div');
+          textEl.className = 'msg-text';
+          textEl.contentEditable = "true";
+          textEl.textContent = card.text || '';
+          textEl.addEventListener('input', () => {
+            card.text = textEl.textContent;
+            saveCanvasState();
+          });
+          textEl.addEventListener('pointerdown', (e) => e.stopPropagation());
+
+          cardEl.appendChild(headerEl);
+          cardEl.appendChild(titleEl);
+          cardEl.appendChild(textEl);
+
+          cardEl.addEventListener('pointerdown', (e) => {
+            if (e.target.closest('.palette-trigger-btn') || e.target.closest('.msg-text')) return;
+            e.preventDefault();
+            closePlugPopover();
+            dragState = {
+              type: 'card',
+              cardId: card.id,
+              cardEl,
+              startX: e.clientX,
+              startY: e.clientY,
+              origX: card.x,
+              origY: card.y
+            };
+            cardEl.classList.add('dragging');
+            if (workspace.setPointerCapture) workspace.setPointerCapture(e.pointerId);
+          });
+
+          cardsContainer.appendChild(cardEl);
+        });
+
+        initCardCanvases();
+        renderSocketsAndLeds();
+      }
+
+      function initCardCanvases() {
+        cards.forEach(card => {
+          const cvs = document.getElementById(`dyn-canvas-${card.id}`);
+          if (!cvs) return;
+          const rect = cvs.getBoundingClientRect();
+          cvs.width = rect.width || 320;
+          cvs.height = rect.height || 160;
+        });
+      }
+
+      function renderPlugEffects(now) {
+        effectsGroup.innerHTML = '';
+        if (!portsEnabled) {
+          activePlugPulses.length = 0;
+          return;
+        }
+
+        for (let i = activePlugPulses.length - 1; i >= 0; i--) {
+          const fx = activePlugPulses[i];
+          const p = (now - fx.startTime) / fx.duration;
+          if (p >= 1) {
+            activePlugPulses.splice(i, 1);
+            continue;
+          }
+
+          const alpha = Math.max(0, (1 - p) * fx.strength);
+
+          if (fx.animType === 'snap_ring') {
+            const radius = 26 * (1 - p) + 5;
+            effectsGroup.appendChild(createSvgEl('circle', {
+              cx: fx.x, cy: fx.y, r: radius.toFixed(1),
+              fill: 'none', stroke: fx.color,
+              'stroke-width': 2, opacity: alpha.toFixed(2)
+            }));
+          } else if (fx.animType === 'detach_release') {
+            const radius = 7 + 18 * p;
+            effectsGroup.appendChild(createSvgEl('circle', {
+              cx: fx.x, cy: fx.y, r: radius.toFixed(1),
+              fill: 'none', stroke: fx.color,
+              'stroke-width': 1.6, opacity: alpha.toFixed(2)
+            }));
+          } else if (fx.animType === 'micro_recoil') {
+            const offset = Math.sin(p * Math.PI) * 5;
+            effectsGroup.appendChild(createSvgEl('line', {
+              x1: fx.x - offset, y1: fx.y - 8,
+              x2: fx.x - offset, y2: fx.y + 8,
+              stroke: fx.color, 'stroke-width': 2.2,
+              'stroke-linecap': 'round', opacity: alpha.toFixed(2)
+            }));
+          } else if (fx.animType === 'signal_flash') {
+            const r = 10 + 6 * Math.sin(p * Math.PI);
+            effectsGroup.appendChild(createSvgEl('circle', {
+              cx: fx.x, cy: fx.y, r: r.toFixed(1),
+              fill: fx.color, opacity: (alpha * 0.45).toFixed(2)
+            }));
+          }
+        }
+      }
+
+      let animFrameId = null;
+      let animStartTime = performance.now();
+
+      function animateFrame(now) {
+        const elapsed = (now - animStartTime) / 1000;
+
+        cards.forEach(card => {
+          const cvs = document.getElementById(`dyn-canvas-${card.id}`);
+          if (!cvs) return;
+          const ctx = cvs.getContext('2d');
+          const w = cvs.width;
+          const h = cvs.height;
+
+          ctx.clearRect(0, 0, w, h);
+
+          const isCurrentlyActive = (card.dynState === 'on') || (card.dynState === 'locked' && card.dynLockedActive);
+          if (!isCurrentlyActive) return;
+
+          const speed = card.dynSpeed || 8;
+          const intensity = (card.dynIntensity || 20) / 100;
+          const accentHex = ENTITY_COLOR_MAP[card.entityType] || '#38bdf8';
+          const rgb = hexToRgbObj(accentHex);
+          const t = (elapsed % speed) / speed;
+
+          ctx.save();
+
+          switch (card.dynPattern) {
+            case 'pulse': {
+              const maxR = Math.hypot(w, h) * 0.65;
+              const pulse = 0.5 + 0.5 * Math.sin(t * Math.PI * 2);
+              const r = 20 + pulse * (maxR - 20);
+              const grad = ctx.createRadialGradient(w / 2, h / 2, 4, w / 2, h / 2, r);
+              grad.addColorStop(0, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${intensity * 0.75})`);
+              grad.addColorStop(0.5, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${intensity * 0.25})`);
+              grad.addColorStop(1, 'rgba(9, 12, 17, 0)');
+              ctx.fillStyle = grad;
+              ctx.fillRect(0, 0, w, h);
+              break;
+            }
+            case 'grid': {
+              const spacing = 22;
+              const offsetX = (t * spacing) % spacing;
+              const offsetY = (t * spacing * 0.5) % spacing;
+              ctx.strokeStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${intensity * 0.35})`;
+              ctx.lineWidth = 1;
+              ctx.beginPath();
+              for (let x = offsetX; x < w; x += spacing) { ctx.moveTo(x, 0); ctx.lineTo(x, h); }
+              for (let y = offsetY; y < h; y += spacing) { ctx.moveTo(0, y); ctx.lineTo(w, y); }
+              ctx.stroke();
+              break;
+            }
+            case 'sheen': {
+              const pos = -w + t * (w * 2.5);
+              const grad = ctx.createLinearGradient(pos, 0, pos + 110, h);
+              grad.addColorStop(0, 'rgba(255, 255, 255, 0)');
+              grad.addColorStop(0.5, `rgba(255, 255, 255, ${intensity * 0.4})`);
+              grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+              ctx.fillStyle = grad;
+              ctx.fillRect(0, 0, w, h);
+              break;
+            }
+            case 'chess': {
+              const cols = 6;
+              const rows = 4;
+              const cw = w / cols;
+              const ch = h / rows;
+              for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                  const isEven = (r + c) % 2 === 0;
+                  const shift = 0.5 + 0.5 * Math.sin(r * 0.4 + c * 0.3 + t * Math.PI * 2);
+                  const alpha = isEven ? intensity * 0.12 + shift * (intensity * 0.22) : intensity * 0.04;
+                  ctx.fillStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+                  ctx.fillRect(c * cw, r * ch, cw - 1, ch - 1);
+                }
+              }
+              break;
+            }
+            case 'cyberpunk': {
+              ctx.strokeStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${intensity * 0.35})`;
+              ctx.lineWidth = 1.2;
+              const traces = [
+                { y: h * 0.3, startX: 0, midX: w * 0.5, turnY: h * 0.5, endX: w },
+                { y: h * 0.7, startX: w, midX: w * 0.4, turnY: h * 0.5, endX: 0 }
+              ];
+              traces.forEach(tr => {
+                ctx.beginPath();
+                ctx.moveTo(tr.startX, tr.y);
+                ctx.lineTo(tr.midX, tr.y);
+                ctx.lineTo(tr.midX, tr.turnY);
+                ctx.lineTo(tr.endX, tr.turnY);
+                ctx.stroke();
+              });
+              break;
+            }
+            case 'organic': {
+              const cx1 = w * 0.35 + Math.sin(t * Math.PI * 2) * (w * 0.2);
+              const cy1 = h * 0.4 + Math.cos(t * Math.PI * 2) * (h * 0.2);
+              const g1 = ctx.createRadialGradient(cx1, cy1, 8, cx1, cy1, w * 0.55);
+              g1.addColorStop(0, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${intensity * 0.45})`);
+              g1.addColorStop(1, 'rgba(9, 12, 17, 0)');
+              ctx.fillStyle = g1;
+              ctx.fillRect(0, 0, w, h);
+              break;
+            }
+          }
+
+          ctx.restore();
+        });
+
+        renderPlugEffects(now);
+        animFrameId = requestAnimationFrame(animateFrame);
+      }
+
+      function openPlugColorPopover(cable, clickX, clickY) {
+        popoverPlugIdText.textContent = cable.id;
+        popoverSwatchesContainer.innerHTML = '';
+        PLUG_COLORS.forEach(col => {
+          const swatch = document.createElement('div');
+          swatch.className = `popover-swatch ${col.isBlack ? 'black-swatch' : ''} ${col.isWhite ? 'white-swatch' : ''} ${cable.color === col.hex ? 'selected' : ''}`;
+          swatch.style.backgroundColor = col.hex;
+          swatch.title = col.name;
+          swatch.addEventListener('click', (e) => {
+            e.stopPropagation();
+            cable.color = col.hex;
+            closePlugPopover();
+            renderSocketsAndLeds();
+            renderCablesAndPlugs();
+            saveCanvasState();
+          });
+          popoverSwatchesContainer.appendChild(swatch);
+        });
+        plugColorPopover.style.left = `${clickX}px`;
+        plugColorPopover.style.top = `${clickY}px`;
+        plugColorPopover.classList.add('active');
+      }
+
+      function closePlugPopover() {
+        plugColorPopover.classList.remove('active');
+      }
+
+      function renderDynamicBackgroundInspectorControls(cardId) {
+        const card = cards.find(c => c.id === cardId);
+        if (!card) return;
+
+        dynStatusBadge.className = `dyn-status-badge ${card.dynState}`;
+        dynStatusBadge.textContent = card.dynState === 'on' ? 'مفعّل' : (card.dynState === 'off' ? 'متوقف' : 'مقفل');
+
+        dynTogglePill.className = `dyn-toggle-pill state-${card.dynState}`;
+        dynTristateLabel.textContent = `الحالة الحالية: ${card.dynState === 'on' ? 'مفعّل' : (card.dynState === 'off' ? 'متوقف' : 'مقفل')}`;
+
+        dynStateBtnGroup.querySelectorAll('.dyn-state-btn').forEach(btn => {
+          const st = btn.getAttribute('data-state');
+          btn.classList.toggle('active-state', st === card.dynState);
+          btn.onclick = (e) => {
+            e.stopPropagation();
+            setCardDynState(card, st);
+            renderDynamicBackgroundInspectorControls(cardId);
+            saveCanvasState();
+          };
+        });
+
+        dynTogglePill.onclick = (e) => {
+          e.stopPropagation();
+          const stateCycle = { off: 'on', on: 'locked', locked: 'off' };
+          const nextState = stateCycle[card.dynState] || 'off';
+          setCardDynState(card, nextState);
+          renderDynamicBackgroundInspectorControls(cardId);
+          saveCanvasState();
+        };
+
+        dynPatternsGrid.innerHTML = '';
+        DYN_PATTERNS.forEach(pat => {
+          const isSelected = card.dynPattern === pat.id;
+          const isPrimary = primaryDynEffect.pattern === pat.id;
+
+          const pCard = document.createElement('div');
+          pCard.className = `dyn-pattern-card ${isSelected ? 'selected' : ''}`;
+          pCard.innerHTML = `
+            <div class="dyn-pattern-head">
+              <span style="color:${isSelected ? '#38bdf8' : '#94a3b8'};">${pat.iconSvg}</span>
+              ${isPrimary ? '<span class="dyn-primary-badge">أساسي</span>' : ''}
+            </div>
+            <div class="dyn-pattern-name">${pat.name}</div>
+          `;
+
+          if (card.dynState === 'locked') {
+            pCard.style.opacity = '0.5';
+            pCard.style.cursor = 'not-allowed';
+          } else {
+            pCard.onclick = (e) => {
+              e.stopPropagation();
+              card.dynPattern = pat.id;
+              card.hasCustomDyn = true;
+              renderDynamicBackgroundInspectorControls(cardId);
+              saveCanvasState();
+            };
+          }
+
+          dynPatternsGrid.appendChild(pCard);
+        });
+
+        dynSpeedRange.value = String(card.dynSpeed || 8);
+        dynSpeedVal.textContent = `${parseFloat(card.dynSpeed || 8).toFixed(1)}ث`;
+        dynSpeedRange.disabled = (card.dynState === 'locked');
+
+        dynSpeedRange.oninput = () => {
+          const val = parseFloat(dynSpeedRange.value);
+          card.dynSpeed = val;
+          card.hasCustomDyn = true;
+          dynSpeedVal.textContent = `${val.toFixed(1)}ث`;
+          saveCanvasState();
+        };
+
+        dynIntensityRange.value = String(card.dynIntensity || 20);
+        dynIntensityVal.textContent = `${card.dynIntensity || 20}%`;
+        dynIntensityRange.disabled = (card.dynState === 'locked');
+
+        dynIntensityRange.oninput = () => {
+          const val = parseInt(dynIntensityRange.value, 10);
+          card.dynIntensity = val;
+          card.hasCustomDyn = true;
+          dynIntensityVal.textContent = `${val}%`;
+          saveCanvasState();
+        };
+
+        const isCurrentPrimary = (primaryDynEffect.pattern === card.dynPattern && primaryDynEffect.speed === card.dynSpeed && primaryDynEffect.intensity === card.dynIntensity);
+        dynSetPrimaryBtn.textContent = isCurrentPrimary ? 'هذا هو التأثير الأساسي' : 'تعيين النمط الحالي كأساسي';
+        dynSetPrimaryBtn.onclick = (e) => {
+          e.stopPropagation();
+          primaryDynEffect = { pattern: card.dynPattern, speed: card.dynSpeed, intensity: card.dynIntensity };
+          renderDynamicBackgroundInspectorControls(cardId);
+          saveCanvasState();
+        };
+
+        dynApplyPrimaryBtn.onclick = (e) => {
+          e.stopPropagation();
+          cards.forEach(c => {
+            if (c.dynState !== 'locked') {
+              c.dynPattern = primaryDynEffect.pattern;
+              c.dynSpeed = primaryDynEffect.speed;
+              c.dynIntensity = primaryDynEffect.intensity;
+              c.dynState = 'on';
+            }
+          });
+          renderDynamicBackgroundInspectorControls(cardId);
+          saveCanvasState();
+        };
+      }
+
+      function setCardDynState(card, newState) {
+        if (newState === 'on' && card.dynState === 'off' && !card.hasCustomDyn) {
+          card.dynPattern = primaryDynEffect.pattern;
+          card.dynSpeed = primaryDynEffect.speed;
+          card.dynIntensity = primaryDynEffect.intensity;
+        }
+        if (newState === 'locked') {
+          card.dynLockedActive = (card.dynState === 'on');
+        }
+        card.dynState = newState;
+      }
+
+      function syncPlugFxControls() {
+        if (togglePlugFxBtn) {
+          togglePlugFxBtn.textContent = plugFxConfig.enabled ? 'مفعّل (إيقاف)' : 'متوقف (تشغيل)';
+          togglePlugFxBtn.classList.toggle('active-mode', plugFxConfig.enabled);
+        }
+
+        document.querySelectorAll('#snap-anim-group .pos-btn').forEach(btn => {
+          btn.classList.toggle('active', btn.getAttribute('data-anim') === plugFxConfig.snapAnim);
+        });
+
+        document.querySelectorAll('#detach-anim-group .pos-btn').forEach(btn => {
+          btn.classList.toggle('active', btn.getAttribute('data-anim') === plugFxConfig.detachAnim);
+        });
+
+        document.querySelectorAll('#sound-mode-group .pos-btn').forEach(btn => {
+          btn.classList.toggle('active', btn.getAttribute('data-sound') === plugFxConfig.soundMode);
+        });
+
+        if (plugFxIntensityRange && plugFxIntensityVal) {
+          plugFxIntensityRange.value = String(plugFxConfig.intensity || 65);
+          plugFxIntensityVal.textContent = `${plugFxConfig.intensity || 65}%`;
+        }
+      }
+
+      if (togglePlugFxBtn) {
+        togglePlugFxBtn.addEventListener('click', () => {
+          plugFxConfig.enabled = !plugFxConfig.enabled;
+          syncPlugFxControls();
+          saveCanvasState();
+        });
+      }
+
+      document.querySelectorAll('#snap-anim-group .pos-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          plugFxConfig.snapAnim = btn.getAttribute('data-anim');
+          syncPlugFxControls();
+          saveCanvasState();
+        });
+      });
+
+      document.querySelectorAll('#detach-anim-group .pos-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          plugFxConfig.detachAnim = btn.getAttribute('data-anim');
+          syncPlugFxControls();
+          saveCanvasState();
+        });
+      });
+
+      document.querySelectorAll('#sound-mode-group .pos-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          plugFxConfig.soundMode = btn.getAttribute('data-sound');
+          syncPlugFxControls();
+          playPlugSound('snap');
+          saveCanvasState();
+        });
+      });
+
+      if (plugFxIntensityRange && plugFxIntensityVal) {
+        plugFxIntensityRange.addEventListener('input', () => {
+          plugFxConfig.intensity = parseInt(plugFxIntensityRange.value, 10);
+          plugFxIntensityVal.textContent = `${plugFxConfig.intensity}%`;
+          saveCanvasState();
+        });
+      }
+
+      function exportAIContextSummary() {
+        const summaryData = {
+          system: 'MONOLITH Canvas Architecture Context Dump',
+          timestamp: new Date().toISOString(),
+          portsEnabled,
+          lockFeatureEnabled,
+          plugFxConfig,
+          primaryDynEffect,
+          cards: cards.map(c => ({
+            id: c.id,
+            entityType: c.entityType,
+            owner: c.owner,
+            title: c.title,
+            text: c.text,
+            backgroundPreset: c.bgPreset,
+            dynamicState: c.dynState,
+            dynamicPattern: c.dynPattern
+          })),
+          threads: cables.map(c => ({
+            id: c.id,
+            title: c.title || c.id,
+            concept: c.concept || 'custom',
+            hiddenNote: c.hiddenNote || '',
+            sensitivityColor: c.sensitivityColor || '#38bdf8',
+            color: c.color,
+            from: c.from,
+            to: c.to,
+            alarm: c.alarm || { enabled: false },
+            history: c.history || []
+          }))
+        };
+
+        const jsonStr = JSON.stringify(summaryData, null, 2);
+        const blob = new Blob([jsonStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `MONOLITH_Context_Summary_${Date.now()}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+
+      if (aiContextSummaryBtn) {
+        aiContextSummaryBtn.onclick = (e) => {
+          e.stopPropagation();
+          exportAIContextSummary();
+        };
+      }
+
+      function openInspector(cardId) {
+        const card = cards.find(c => c.id === cardId);
+        if (!card) return;
+        const cardIdx = cards.findIndex(c => c.id === cardId);
+        const titleEl = document.getElementById('inspector-card-title');
+        titleEl.innerHTML = `<span>تخصيص البطاقة #${cardIdx + 1} (${card.title})</span>`;
+
+        const posBtns = document.querySelectorAll('#trigger-pos-selector .pos-btn');
+        posBtns.forEach(btn => {
+          const posMode = btn.getAttribute('data-pos');
+          btn.classList.toggle('active', posMode === triggerPositionMode);
+          btn.onclick = (e) => {
+            e.stopPropagation();
+            triggerPositionMode = posMode;
+            posBtns.forEach(b => b.classList.toggle('active', b.getAttribute('data-pos') === triggerPositionMode));
+            renderCards();
+            saveCanvasState();
+          };
+        });
+
+        const presetsRow = document.getElementById('card-bg-presets-row');
+        presetsRow.innerHTML = '';
+        const activePreset = card.bgPreset || 'default';
+        CARD_BG_PRESETS.forEach(p => {
+          const chip = document.createElement('button');
+          chip.type = 'button';
+          chip.className = `card-bg-chip ${activePreset === p.id ? 'selected' : ''}`;
+          chip.style.background = p.chipColor;
+          chip.title = p.label;
+          chip.addEventListener('click', (e) => {
+            e.stopPropagation();
+            card.bgPreset = p.id;
+            renderCards();
+            applyGlobalEntityThemes();
+            saveCanvasState();
+            openInspector(cardId);
+          });
+          presetsRow.appendChild(chip);
+        });
+
+        const bgFileInput = document.getElementById('card-bg-image-input');
+        const bgRemoveBtn = document.getElementById('card-bg-remove-btn');
+        const bgShadeRange = document.getElementById('card-bg-shade-range');
+        const bgShadeVal = document.getElementById('card-bg-shade-val');
+        const bgOpacityRange = document.getElementById('card-bg-opacity-range');
+        const bgOpacityVal = document.getElementById('card-bg-opacity-val');
+
+        const curShadePct = Math.round(((typeof card.bgImageShade === 'number' ? card.bgImageShade : 0.65)) * 100);
+        const curOpacityPct = Math.round(((typeof card.bgOpacity === 'number' ? card.bgOpacity : 0.98)) * 100);
+
+        if (bgShadeRange && bgShadeVal) {
+          bgShadeRange.value = String(curShadePct);
+          bgShadeVal.textContent = `${curShadePct}%`;
+          bgShadeRange.oninput = () => {
+            const pct = Number(bgShadeRange.value);
+            card.bgImageShade = pct / 100;
+            bgShadeVal.textContent = `${pct}%`;
+            renderCards();
+            applyGlobalEntityThemes();
+            saveCanvasState();
+          };
+        }
+
+        if (bgOpacityRange && bgOpacityVal) {
+          bgOpacityRange.value = String(curOpacityPct);
+          bgOpacityVal.textContent = `${curOpacityPct}%`;
+          bgOpacityRange.oninput = () => {
+            const pct = Number(bgOpacityRange.value);
+            card.bgOpacity = pct / 100;
+            bgOpacityVal.textContent = `${pct}%`;
+            renderCards();
+            applyGlobalEntityThemes();
+            saveCanvasState();
+          };
+        }
+
+        if (bgFileInput) {
+          bgFileInput.value = '';
+          bgFileInput.onchange = (e) => {
+            const file = e.target.files && e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = () => {
+              if (typeof reader.result !== 'string') return;
+              const img = new Image();
+              img.onload = () => {
+                const maxDim = 900;
+                let w = img.width;
+                let h = img.height;
+                if (w > maxDim || h > maxDim) {
+                  const scale = Math.min(maxDim / w, maxDim / h);
+                  w = Math.round(w * scale);
+                  h = Math.round(h * scale);
+                }
+                const canvas = document.createElement('canvas');
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext('2d');
+                if (ctx) {
+                  ctx.drawImage(img, 0, 0, w, h);
+                  card.bgImageData = canvas.toDataURL('image/jpeg', 0.82);
+                } else {
+                  card.bgImageData = reader.result;
+                }
+                if (typeof card.bgImageShade !== 'number') card.bgImageShade = 0.65;
+                renderCards();
+                applyGlobalEntityThemes();
+                saveCanvasState();
+              };
+              img.src = reader.result;
+            };
+            reader.readAsDataURL(file);
+          };
+        }
+
+        if (bgRemoveBtn) {
+          bgRemoveBtn.onclick = (e) => {
+            e.stopPropagation();
+            delete card.bgImageData;
+            renderCards();
+            applyGlobalEntityThemes();
+            saveCanvasState();
+          };
+        }
+
+        syncPlugFxControls();
+        renderDynamicBackgroundInspectorControls(cardId);
+
+        const listEl = document.getElementById('inspector-cable-list');
+        listEl.innerHTML = '';
+
+        const connectedCables = cables.filter(
+          c => (c.from && c.from.cardId === cardId) || (c.to && c.to.cardId === cardId)
+        );
+
+        if (connectedCables.length === 0) {
+          listEl.innerHTML = `<div style="font-size:12px; color:#64748b; text-align:center; padding:12px;">لا توجد خيوط سياقية مرتبطة بهذه البطاقة حالياً</div>`;
+        } else {
+          connectedCables.forEach(cable => {
+            const item = document.createElement('div');
+            item.className = 'cable-item';
+
+            const fromPortStr = cable.from ? `${cable.from.side === 'left' ? 'L' : 'R'}${cable.from.portIdx + 1}` : 'مفكوك';
+            const toPortStr = cable.to ? `${cable.to.side === 'left' ? 'L' : 'R'}${cable.to.portIdx + 1}` : 'مفكوك';
+            const isEditable = cable.owner === 'mine';
+
+            const itemTop = document.createElement('div');
+            itemTop.className = 'cable-item-top';
+            itemTop.innerHTML = `
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span class="plug-tag" style="border-color:${cable.sensitivityColor || '#38bdf8'}; color:${cable.sensitivityColor || '#38bdf8'};">${cable.id}</span>
+                <span style="font-size:12.5px; font-weight:700; color:#f1f5f9;">${cable.title || cable.id}</span>
+                <span style="font-size:11px; color:#cbd5e1;">(${fromPortStr} ↔ ${toPortStr})</span>
+              </div>
+              <span class="cable-status-badge ${isEditable ? 'editable' : 'locked'}">
+                ${isEditable ? 'قابل للتعديل' : LOCK_ICON_HTML}
+              </span>
+            `;
+            item.appendChild(itemTop);
+
+            const contextBox = document.createElement('div');
+            contextBox.style.display = 'flex';
+            contextBox.style.flexDirection = 'column';
+            contextBox.style.gap = '8px';
+            contextBox.style.background = '#0d1322';
+            contextBox.style.padding = '10px';
+            contextBox.style.borderRadius = '10px';
+            contextBox.style.border = '1px solid #1e2d4a';
+
+            contextBox.innerHTML = `
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+                <div class="thread-form-group">
+                  <label class="thread-form-label">عنوان الخيط</label>
+                  <input type="text" class="thread-input thread-title-input" value="${cable.title || ''}" ${!isEditable ? 'disabled' : ''} />
+                </div>
+                <div class="thread-form-group">
+                  <label class="thread-form-label">المفهوم</label>
+                  <select class="thread-select thread-concept-select" ${!isEditable ? 'disabled' : ''}>
+                    ${THREAD_CONCEPTS.map(tc => `<option value="${tc.id}" ${cable.concept === tc.id ? 'selected' : ''}>${tc.label}</option>`).join('')}
+                  </select>
+                </div>
+              </div>
+
+              <div class="thread-form-group">
+                <label class="thread-form-label">الرسالة الخفية للسياق</label>
+                <textarea class="thread-textarea thread-note-input" ${!isEditable ? 'disabled' : ''}>${cable.hiddenNote || ''}</textarea>
+              </div>
+
+              <div class="thread-form-group">
+                <label class="thread-form-label">دلالة اللون الحساسة</label>
+                <div class="color-swatches-row sensitivity-row"></div>
+              </div>
+            `;
+
+            const sensitivityRow = contextBox.querySelector('.sensitivity-row');
+            SENSITIVITY_COLORS.forEach(sc => {
+              const swatch = document.createElement('div');
+              swatch.className = `sensitivity-swatch ${cable.sensitivityColor === sc.hex ? 'selected' : ''}`;
+              swatch.style.backgroundColor = sc.hex;
+              swatch.title = sc.name;
+              if (isEditable) {
+                swatch.onclick = () => {
+                  pushThreadUndoState(cable);
+                  cable.sensitivityColor = sc.hex;
+                  logThreadHistory(cable, 'تغيير اللون', sc.name);
+                  saveCanvasState();
+                  openInspector(cardId);
+                };
+              }
+              sensitivityRow.appendChild(swatch);
+            });
+
+            const titleInput = contextBox.querySelector('.thread-title-input');
+            const conceptSelect = contextBox.querySelector('.thread-concept-select');
+            const noteInput = contextBox.querySelector('.thread-note-input');
+
+            if (isEditable) {
+              titleInput.onchange = () => {
+                pushThreadUndoState(cable);
+                cable.title = titleInput.value;
+                logThreadHistory(cable, 'تعديل العنوان', titleInput.value);
+                saveCanvasState();
+              };
+
+              conceptSelect.onchange = () => {
+                pushThreadUndoState(cable);
+                cable.concept = conceptSelect.value;
+                logThreadHistory(cable, 'تغيير المفهوم', conceptSelect.options[conceptSelect.selectedIndex].text);
+                saveCanvasState();
+              };
+
+              noteInput.onchange = () => {
+                pushThreadUndoState(cable);
+                cable.hiddenNote = noteInput.value;
+                logThreadHistory(cable, 'تحديث الرسالة الخفية', 'تم التحديث');
+                saveCanvasState();
+              };
+            }
+
+            const alarmBox = document.createElement('div');
+            alarmBox.style.background = '#090d16';
+            alarmBox.style.padding = '8px 10px';
+            alarmBox.style.borderRadius = '8px';
+            alarmBox.style.border = '1px solid #23314d';
+            alarmBox.style.display = 'flex';
+            alarmBox.style.flexDirection = 'column';
+            alarmBox.style.gap = '6px';
+
+            const alarmState = cable.alarm || { enabled: false, timestamp: null, note: '', triggered: false };
+
+            alarmBox.innerHTML = `
+              <div style="display:flex; align-items:center; justify-content:space-between;">
+                <span style="font-size:11.5px; font-weight:700; color:#fbbf24;">المنبه الذكي</span>
+                <button class="path-action-btn ${alarmState.enabled ? 'active-mode' : ''}" id="toggle-alarm-btn-${cable.id}" type="button">
+                  ${alarmState.enabled ? 'مفعّل' : 'معطّل'}
+                </button>
+              </div>
+              ${alarmState.enabled ? `
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:6px; margin-top:4px;">
+                  <input type="datetime-local" class="thread-input alarm-time-input" value="${alarmState.timestamp || ''}" ${!isEditable ? 'disabled' : ''} />
+                  <input type="text" class="thread-input alarm-note-input" value="${alarmState.note || ''}" placeholder="ملاحظة المنبه" ${!isEditable ? 'disabled' : ''} />
+                </div>
+              ` : ''}
+            `;
+
+            const toggleAlarmBtn = alarmBox.querySelector(`#toggle-alarm-btn-${cable.id}`);
+            if (toggleAlarmBtn && isEditable) {
+              toggleAlarmBtn.onclick = () => {
+                pushThreadUndoState(cable);
+                if (!cable.alarm) cable.alarm = { enabled: false, timestamp: null, note: '', triggered: false };
+                cable.alarm.enabled = !cable.alarm.enabled;
+                cable.alarm.triggered = false;
+                if (cable.alarm.enabled && !cable.alarm.timestamp) {
+                  const now = new Date();
+                  now.setMinutes(now.getMinutes() + 15);
+                  cable.alarm.timestamp = now.toISOString().slice(0, 16);
+                }
+                logThreadHistory(cable, 'المنبه', cable.alarm.enabled ? 'تفعيل' : 'تعطيل');
+                saveCanvasState();
+                openInspector(cardId);
+              };
+            }
+
+            if (alarmState.enabled && isEditable) {
+              const alarmTimeInput = alarmBox.querySelector('.alarm-time-input');
+              const alarmNoteInput = alarmBox.querySelector('.alarm-note-input');
+              if (alarmTimeInput) {
+                alarmTimeInput.onchange = () => {
+                  pushThreadUndoState(cable);
+                  cable.alarm.timestamp = alarmTimeInput.value;
+                  cable.alarm.triggered = false;
+                  logThreadHistory(cable, 'وقت المنبه', alarmTimeInput.value);
+                  saveCanvasState();
+                };
+              }
+              if (alarmNoteInput) {
+                alarmNoteInput.onchange = () => {
+                  pushThreadUndoState(cable);
+                  cable.alarm.note = alarmNoteInput.value;
+                  saveCanvasState();
+                };
+              }
+            }
+
+            item.appendChild(contextBox);
+            item.appendChild(alarmBox);
+
+            const historyBox = document.createElement('div');
+            historyBox.style.marginTop = '4px';
+            historyBox.innerHTML = `
+              <div style="font-size:10.5px; font-weight:700; color:#94a3b8; margin-bottom:4px; display:flex; justify-content:space-between; align-items:center;">
+                <span>سجل التغييرات (History)</span>
+                ${isEditable && cable.undoStack && cable.undoStack.length > 0 ? `<button type="button" class="path-action-btn undo-btn" style="padding:2px 6px; font-size:10px;">التراجع (Undo)</button>` : ''}
+              </div>
+              <div class="history-log-list">
+                ${(cable.history || []).slice(0, 3).map(h => `<div class="history-item"><span>[${h.timestamp}] ${h.action}:</span> ${h.details}</div>`).join('')}
+              </div>
+            `;
+
+            const undoBtn = historyBox.querySelector('.undo-btn');
+            if (undoBtn) {
+              undoBtn.onclick = (e) => {
+                e.stopPropagation();
+                if (undoThreadLastChange(cable)) {
+                  saveCanvasState();
+                  openInspector(cardId);
+                  renderSocketsAndLeds();
+                  renderCablesAndPlugs();
+                }
+              };
+            }
+
+            item.appendChild(historyBox);
+
+            const actionsRow = document.createElement('div');
+            actionsRow.className = 'path-actions-row';
+
+            if (isEditable) {
+              const penBtn = document.createElement('button');
+              penBtn.className = 'path-action-btn';
+              penBtn.textContent = 'تحرير المسار بنقاط';
+              penBtn.onclick = (e) => { e.stopPropagation(); enterPathSession(cable.id, 'pen'); };
+
+              const paintBtn = document.createElement('button');
+              paintBtn.className = 'path-action-btn paint-mode';
+              paintBtn.textContent = 'طلاء مسار تلقائي';
+              paintBtn.onclick = (e) => { e.stopPropagation(); enterPathSession(cable.id, 'paint'); };
+
+              const resetBtn = document.createElement('button');
+              resetBtn.className = 'path-action-btn reset-btn';
+              resetBtn.textContent = 'إعادة ضبط المسار';
+              resetBtn.onclick = (e) => { e.stopPropagation(); resetCablePath(cable.id); openInspector(cardId); };
+
+              actionsRow.appendChild(penBtn);
+              actionsRow.appendChild(paintBtn);
+              actionsRow.appendChild(resetBtn);
+            }
+
+            item.appendChild(actionsRow);
+            listEl.appendChild(item);
+          });
+        }
+
+        inspectorOverlay.classList.add('active');
+      }
+
+      inspectorCloseBtn.addEventListener('click', () => {
+        inspectorOverlay.classList.remove('active');
+      });
+
+      inspectorOverlay.addEventListener('click', (e) => {
+        if (e.target === inspectorOverlay) {
+          inspectorOverlay.classList.remove('active');
+        }
+      });
+
+      function showTooltip(x, y, htmlContent) {
+        tooltipEl.innerHTML = htmlContent;
+        tooltipEl.style.left = `${x}px`;
+        tooltipEl.style.top = `${y}px`;
+        tooltipEl.classList.add('visible');
+      }
+
+      function hideTooltip() {
+        tooltipEl.classList.remove('visible');
+      }
+
+      function buildIdentitySvg(entityType, color) {
+        if (entityType === 'peer') {
+          return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="4.5"/><path d="M4 20c0-3.5 3.5-6 8-6s8 2.5 8 6"/></svg>`;
+        }
+        if (entityType === 'ai') {
+          return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="8" width="14" height="11" rx="3" fill="${color}26"/><line x1="12" y1="2" x2="12" y2="8"/><circle cx="12" cy="2" r="1.5" fill="${color}"/><circle cx="9" cy="13" r="1.5" fill="${color}"/><circle cx="15" cy="13" r="1.5" fill="${color}"/><line x1="9" y1="16.5" x2="15" y2="16.5"/><path d="M2 12h3M19 12h3"/></svg>`;
+        }
+        return `<svg width="18" height="18" viewBox="0 0 24 24" fill="${color}"><circle cx="12" cy="7" r="4.5"/><path d="M4 19c0-3.5 3.5-6 8-6s8 2.5 8 6v1H4v-1z"/></svg>`;
+      }
+
+      function applyGlobalEntityThemes() {
+        const rootStyle = document.documentElement.style;
+        rootStyle.setProperty('--accent-self', ENTITY_COLOR_MAP.self);
+        rootStyle.setProperty('--accent-peer', ENTITY_COLOR_MAP.peer);
+        rootStyle.setProperty('--accent-ai', ENTITY_COLOR_MAP.ai);
+
+        cards.forEach(card => {
+          const color = ENTITY_COLOR_MAP[card.entityType] || '#f8fafc';
+          const cardEl = document.getElementById(card.id);
+          if (cardEl) {
+            cardEl.style.borderColor = `${color}88`;
+            cardEl.style.borderRight = `4px solid ${color}`;
+            cardEl.style.background = getCardBackgroundCss(card);
+            const iconBox = cardEl.querySelector('.embedded-identity-icon');
+            if (iconBox) {
+              iconBox.innerHTML = buildIdentitySvg(card.entityType, color);
+              iconBox.style.color = color;
+              iconBox.style.borderColor = `${color}66`;
+              iconBox.style.backgroundColor = `${color}22`;
+            }
+          }
+        });
+
+        renderSocketsAndLeds();
+        renderCablesAndPlugs();
+      }
+
+      function syncPortsToggleButton() {
+        if (!togglePortsFeatureBtn) return;
+        togglePortsFeatureBtn.textContent = portsEnabled ? 'مفعّلة (إيقاف)' : 'متوقفة (تشغيل)';
+        togglePortsFeatureBtn.classList.toggle('active-mode', portsEnabled);
+      }
+
+      if (togglePortsFeatureBtn) {
+        togglePortsFeatureBtn.addEventListener('click', () => {
+          portsEnabled = !portsEnabled;
+          if (!portsEnabled) {
+            closePlugPopover();
+            hideTooltip();
+          }
+          syncPortsToggleButton();
+          svgLayer.style.display = portsEnabled ? 'block' : 'none';
+          renderSocketsAndLeds();
+          renderCablesAndPlugs();
+          saveCanvasState();
+        });
+      }
+
+      function syncLockToggleButton() {
+        if (!toggleLockFeatureBtn) return;
+        toggleLockFeatureBtn.textContent = lockFeatureEnabled ? 'مفعّلة (إيقاف)' : 'متوقفة (تشغيل)';
+        toggleLockFeatureBtn.classList.toggle('active-mode', lockFeatureEnabled);
+      }
+
+      if (toggleLockFeatureBtn) {
+        toggleLockFeatureBtn.addEventListener('click', () => {
+          lockFeatureEnabled = !lockFeatureEnabled;
+          syncLockToggleButton();
+          renderSocketsAndLeds();
+          saveCanvasState();
+        });
+      }
+
+      function renderGlobalSettingsModal() {
+        syncPortsToggleButton();
+        syncLockToggleButton();
+        syncPlugFxControls();
+        if (!settingsSectionsContainer) return;
+        settingsSectionsContainer.innerHTML = '';
+        ['self', 'peer', 'ai'].forEach(typeKey => {
+          const sec = document.createElement('div');
+          sec.className = 'settings-section';
+          sec.style.padding = '8px 10px';
+
+          const head = document.createElement('div');
+          head.className = 'settings-section-head';
+          head.innerHTML = `
+            <span style="display:inline-flex;align-items:center;gap:8px;">
+              ${buildIdentitySvg(typeKey, ENTITY_COLOR_MAP[typeKey])}
+              <span>${ENTITY_LABELS[typeKey]}</span>
+            </span>
+            <span style="font-family:monospace;font-size:11px;color:${ENTITY_COLOR_MAP[typeKey]};">${ENTITY_COLOR_MAP[typeKey]}</span>
+          `;
+
+          const row = document.createElement('div');
+          row.className = 'settings-color-row';
+
+          PALETTE_CHOICES.forEach(hex => {
+            const dot = document.createElement('div');
+            dot.className = `swatch-circle ${hex === '#f8fafc' ? 'white-swatch' : ''} ${ENTITY_COLOR_MAP[typeKey] === hex ? 'selected' : ''}`;
+            dot.style.backgroundColor = hex;
+            dot.title = hex;
+            dot.addEventListener('click', () => {
+              ENTITY_COLOR_MAP[typeKey] = hex;
+              applyGlobalEntityThemes();
+              renderGlobalSettingsModal();
+              saveCanvasState();
+            });
+            row.appendChild(dot);
+          });
+
+          sec.appendChild(head);
+          sec.appendChild(row);
+          settingsSectionsContainer.appendChild(sec);
+        });
+      }
+
+      if (globalSettingsBtn) {
+        globalSettingsBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          closePlugPopover();
+          openInspector(cards[0] ? cards[0].id : 'card-1');
+        });
+      }
+
+      if (settingsResetBtn) {
+        settingsResetBtn.addEventListener('click', () => {
+          ENTITY_COLOR_MAP.self = DEFAULT_ENTITY_COLOR_MAP.self;
+          ENTITY_COLOR_MAP.peer = DEFAULT_ENTITY_COLOR_MAP.peer;
+          ENTITY_COLOR_MAP.ai = DEFAULT_ENTITY_COLOR_MAP.ai;
+          portsEnabled = false;
+          lockFeatureEnabled = true;
+          triggerPositionMode = 'header-inline';
+          plugFxConfig = {
+            enabled: false,
+            snapAnim: 'snap_ring',
+            detachAnim: 'detach_release',
+            soundMode: 'crisp_click',
+            intensity: 65
+          };
+          svgLayer.style.display = 'none';
+          applyGlobalEntityThemes();
+          renderGlobalSettingsModal();
+          renderCards();
+          saveCanvasState();
+        });
+      }
+
+      const originalOpenInspector = openInspector;
+      openInspector = function (cardId) {
+        renderGlobalSettingsModal();
+        originalOpenInspector(cardId);
+      };
+
+      function getCardIdentityColor(card) {
+        if (!card) return '#fbbf24';
+        return ENTITY_COLOR_MAP[card.entityType] || '#fbbf24';
+      }
+
+      function appendSocketLockBadge(px, py, isLeft, badgeColor) {
+        const tone = badgeColor || '#fbbf24';
+        const lockX = isLeft ? px - 14 : px + 14;
+        const lockY = py - 14;
+        const lockG = createSvgEl('g', {
+          transform: `translate(${lockX.toFixed(1)}, ${lockY.toFixed(1)})`
+        });
+        lockG.appendChild(createSvgEl('rect', {
+          x: -6, y: -6, width: 12, height: 12, rx: 3,
+          fill: '#0f172a', stroke: tone, 'stroke-width': 1.35
+        }));
+        lockG.appendChild(createSvgEl('path', {
+          d: 'M -2.2 -1 V -2.6 a 2.2 2.2 0 0 1 4.4 0 V -1',
+          fill: 'none', stroke: tone, 'stroke-width': 1.25, 'stroke-linecap': 'round'
+        }));
+        lockG.appendChild(createSvgEl('rect', {
+          x: -2.7, y: -1, width: 5.4, height: 4, rx: 1,
+          fill: tone
+        }));
+        socketsGroup.appendChild(lockG);
+      }
+
+      function renderSocketsAndLeds() {
+        socketsGroup.innerHTML = '';
+        if (!portsEnabled) return;
+
+        cards.forEach(card => {
+          const cardW = getCardWidth(card.id);
+
+          PORT_SIDES.forEach(side => {
+            const isLeft = side === 'left';
+
+            PORT_OFFSETS.forEach((yOff, pIdx) => {
+              const px = isLeft ? card.x : card.x + cardW;
+              const py = card.y + yOff;
+
+              const connectedCable = cables.find(
+                c => (c.from && c.from.cardId === card.id && (c.from.side || 'left') === side && c.from.portIdx === pIdx) ||
+                     (c.to && c.to.cardId === card.id && (c.to.side || 'left') === side && c.to.portIdx === pIdx)
+              );
+
+              const rim = createSvgEl('rect', {
+                x: px - 4, y: py - 11, width: 8, height: 22, rx: 2,
+                fill: '#080b10', stroke: '#2a3548', 'stroke-width': 1.2
+              });
+              socketsGroup.appendChild(rim);
+
+              socketsGroup.appendChild(createSvgEl('rect', {
+                x: px - 2, y: py - 8, width: 4, height: 16, rx: 1,
+                fill: '#020305'
+              }));
+
+              const portIdText = isLeft ? `L${pIdx + 1}` : `R${pIdx + 1}`;
+              const textX = isLeft ? px + 22 : px - 26;
+              const portLabel = createSvgEl('text', {
+                x: textX, y: py + 3, class: 'port-id-label', 'text-anchor': 'middle'
+              });
+              portLabel.textContent = portIdText;
+              socketsGroup.appendChild(portLabel);
+
+              const ledX = isLeft ? px + 11 : px - 15.5;
+
+              if (connectedCable) {
+                const plugColor = connectedCable.color;
+                socketsGroup.appendChild(createSvgEl('rect', {
+                  x: ledX, y: py - 9, width: 4.5, height: 18, rx: 2,
+                  fill: plugColor,
+                  stroke: plugColor === '#11161f' ? '#475569' : (plugColor === '#f8fafc' ? '#64748b' : 'rgba(255,255,255,0.4)'),
+                  'stroke-width': '0.9'
+                }));
+
+                if (card.owner !== 'mine' && connectedCable.owner !== 'mine') {
+                  if (lockFeatureEnabled) {
+                    appendSocketLockBadge(px, py, isLeft, getCardIdentityColor(card));
+                  }
+                }
+              } else {
+                socketsGroup.appendChild(createSvgEl('rect', {
+                  x: ledX, y: py - 9, width: 4.5, height: 18, rx: 2,
+                  fill: '#1e293b', stroke: '#27354a', 'stroke-width': '0.8'
+                }));
+              }
+
+              const hitTarget = createSvgEl('rect', {
+                x: px - 12, y: py - 14, width: 24, height: 28,
+                fill: 'transparent', class: 'interactive-element'
+              });
+
+              hitTarget.addEventListener('pointerenter', () => {
+                rim.setAttribute('stroke', '#38bdf8');
+                showTooltip(px, py - 14, `${isLeft ? '[L' : '[R'}${pIdx + 1}]`);
+              });
+              hitTarget.addEventListener('pointerleave', () => {
+                rim.setAttribute('stroke', '#2a3548');
+                hideTooltip();
+              });
+
+              hitTarget.addEventListener('pointerdown', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                closePlugPopover();
+                hideTooltip();
+
+                const newCableId = generateNextCableId();
+                const nextColor = PLUG_COLORS[cables.length % PLUG_COLORS.length].hex;
+                const newCableObj = {
+                  id: newCableId,
+                  title: `خيط ${newCableId}`,
+                  concept: 'custom',
+                  hiddenNote: '',
+                  sensitivityColor: '#38bdf8',
+                  owner: card.owner,
+                  color: nextColor,
+                  from: { cardId: card.id, side, portIdx: pIdx },
+                  to: null,
+                  customPoints: [],
+                  detachedEnds: {},
+                  relations: [],
+                  alarm: { enabled: false, timestamp: null, note: '', triggered: false },
+                  history: [{ timestamp: new Date().toLocaleTimeString('ar-EG'), action: 'إنشاء الخيط', details: 'توصيل موصل جديد' }],
+                  undoStack: []
+                };
+
+                cables.push(newCableObj);
+
+                const startAnchor = getPortAnchor(card.id, side, pIdx);
+                dragState = {
+                  type: 'plug',
+                  cableId: newCableId,
+                  endKey: 'to',
+                  curX: e.clientX,
+                  curY: e.clientY,
+                  lastX: e.clientX,
+                  lastY: e.clientY,
+                  startX: e.clientX,
+                  startY: e.clientY,
+                  vx: 0,
+                  vy: 0,
+                  nearestPort: null,
+                  detachedOnMove: true
+                };
+                plugAngles[`${newCableId}_to`] = startAnchor.angle;
+                if (workspace.setPointerCapture) workspace.setPointerCapture(e.pointerId);
+                renderSocketsAndLeds();
+                renderCablesAndPlugs();
+              });
+
+              socketsGroup.appendChild(hitTarget);
+            });
+          });
+        });
+      }
+
+      function createPlugSvgGroup(px, py, angleRad, color, cableId, endKey) {
+        const cosA = Math.cos(angleRad);
+        const sinA = Math.sin(angleRad);
+        const toWorld = (lx, ly) => ({
+          x: px + lx * cosA - ly * sinA,
+          y: py + lx * sinA + ly * cosA
+        });
+
+        const g = createSvgEl('g', {
+          class: 'plug-element',
+          filter: 'url(#plugShadow)',
+          'data-cable-id': cableId,
+          'data-end-key': endKey
+        });
+
+        [-5.2, -1.7, 1.7, 5.2].forEach(pyOff => {
+          const p1 = toWorld(0, pyOff);
+          const p2 = toWorld(8, pyOff);
+          g.appendChild(createSvgEl('line', {
+            x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y,
+            stroke: 'url(#metalProngGrad)', 'stroke-width': 2, 'stroke-linecap': 'round'
+          }));
+        });
+
+        const c1 = toWorld(0, -9.5);
+        const c2 = toWorld(0, 9.5);
+        g.appendChild(createSvgEl('line', {
+          x1: c1.x, y1: c1.y, x2: c2.x, y2: c2.y,
+          stroke: '#334155', 'stroke-width': 2.2
+        }));
+
+        const b1 = toWorld(-8, -8.5);
+        const b2 = toWorld(-22, -8.5);
+        const b3 = toWorld(-22, 8.5);
+        const b4 = toWorld(-8, 8.5);
+        const bodyStroke = color === '#11161f' ? '#475569' : (color === '#f8fafc' ? '#64748b' : '#090d14');
+
+        g.appendChild(createSvgEl('path', {
+          d: `M ${b1.x} ${b1.y} L ${b2.x} ${b2.y} L ${b3.x} ${b3.y} L ${b4.x} ${b4.y} Z`,
+          fill: color, stroke: bodyStroke, 'stroke-width': 1.4, 'stroke-linejoin': 'round'
+        }));
+
+        [-18, -15, -12].forEach(lx => {
+          const r1 = toWorld(lx, -6);
+          const r2 = toWorld(lx, 6);
+          g.appendChild(createSvgEl('line', {
+            x1: r1.x, y1: r1.y, x2: r2.x, y2: r2.y,
+            stroke: color === '#11161f' ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.28)',
+            'stroke-width': 1.2
+          }));
+        });
+
+        const t1 = toWorld(-22, -8.5);
+        const t2 = toWorld(-32, -3.2);
+        const t3 = toWorld(-32, 3.2);
+        const t4 = toWorld(-22, 8.5);
+        g.appendChild(createSvgEl('path', {
+          d: `M ${t1.x} ${t1.y} L ${t2.x} ${t2.y} L ${t3.x} ${t3.y} L ${t4.x} ${t4.y} Z`,
+          fill: color, stroke: bodyStroke, 'stroke-width': 1.2, 'stroke-linejoin': 'round'
+        }));
+
+        const tailPos = toWorld(-32, 0);
+        const hitCenter = toWorld(-16, 0);
+        g.appendChild(createSvgEl('circle', {
+          cx: hitCenter.x, cy: hitCenter.y, r: 22, fill: 'transparent'
+        }));
+
+        return { group: g, tailX: tailPos.x, tailY: tailPos.y, cosA, sinA };
+      }
+
+      function normalizeAngle(a) {
+        return Math.atan2(Math.sin(a), Math.cos(a));
+      }
+
+      function resolvePlugPose(cable, endKey) {
+        const portRef = cable[endKey];
+        const angleKey = `${cable.id}_${endKey}`;
+        const isDragging = dragState && dragState.type === 'plug' && dragState.cableId === cable.id && dragState.endKey === endKey;
+
+        if (portRef) {
+          const anchor = getPortAnchor(portRef.cardId, portRef.side || 'left', portRef.portIdx);
+          plugAngles[angleKey] = anchor.angle;
+          if (cable.detachedEnds) delete cable.detachedEnds[endKey];
+          return { x: anchor.x, y: anchor.y, angle: anchor.angle };
+        }
+
+        if (isDragging) {
+          let targetAngle = plugAngles[angleKey] || 0;
+          if (dragState.nearestPort) {
+            const targetAnchor = getPortAnchor(dragState.nearestPort.cardId, dragState.nearestPort.side, dragState.nearestPort.portIdx);
+            targetAngle = targetAnchor.angle;
+          } else {
+            const speed = Math.hypot(dragState.vx, dragState.vy);
+            if (speed > 1.8) {
+              targetAngle = Math.atan2(dragState.vy, dragState.vx);
+            } else {
+              const otherKey = endKey === 'to' ? 'from' : 'to';
+              const otherRef = cable[otherKey];
+              if (otherRef) {
+                const otherAnchor = getPortAnchor(otherRef.cardId, otherRef.side || 'left', otherRef.portIdx);
+                targetAngle = Math.atan2(dragState.curY - otherAnchor.y, dragState.curX - otherAnchor.x);
+              }
+            }
+          }
+          const currentAngle = plugAngles[angleKey] ?? targetAngle;
+          const smoothedAngle = currentAngle + normalizeAngle(targetAngle - currentAngle) * 0.28;
+          plugAngles[angleKey] = smoothedAngle;
+          return { x: dragState.curX, y: dragState.curY, angle: smoothedAngle };
+        }
+
+        if (cable.detachedEnds && cable.detachedEnds[endKey]) {
+          const saved = cable.detachedEnds[endKey];
+          return { x: saved.x, y: saved.y, angle: saved.angle ?? (plugAngles[angleKey] || 0) };
+        }
+
+        return { x: 200, y: 200, angle: plugAngles[angleKey] || 0 };
+      }
+
+      function renderPaintStrokePreview() {
+        paintStrokeGroup.innerHTML = '';
+        if (!pathSession || pathSession.mode !== 'paint' || !pathSession.rawPaintSamples || pathSession.rawPaintSamples.length < 2) return;
+        const cable = cables.find(c => c.id === pathSession.cableId);
+        const pts = pathSession.rawPaintSamples;
+        let d = `M ${pts[0].x} ${pts[0].y}`;
+        for (let i = 1; i < pts.length; i++) d += ` L ${pts[i].x} ${pts[i].y}`;
+        paintStrokeGroup.appendChild(createSvgEl('path', {
+          d, fill: 'none', stroke: cable ? cable.color : '#38bdf8',
+          'stroke-width': 3, 'stroke-dasharray': '6 5', 'stroke-linecap': 'round', opacity: '0.85'
+        }));
+      }
+
+      function renderCablesAndPlugs() {
+        cablesGroup.innerHTML = '';
+        plugsGroup.innerHTML = '';
+        penNodesGroup.innerHTML = '';
+        if (!portsEnabled) return;
+
+        cables.forEach(cable => {
+          const poseFrom = resolvePlugPose(cable, 'from');
+          const poseTo = resolvePlugPose(cable, 'to');
+
+          const plugFrom = createPlugSvgGroup(poseFrom.x, poseFrom.y, poseFrom.angle, cable.color, cable.id, 'from');
+          const plugTo = createPlugSvgGroup(poseTo.x, poseTo.y, poseTo.angle, cable.color, cable.id, 'to');
+
+          const pathD = buildCablePathData(
+            plugFrom.tailX, plugFrom.tailY, -plugFrom.cosA, -plugFrom.sinA,
+            plugTo.tailX, plugTo.tailY, -plugTo.cosA, -plugTo.sinA,
+            getActivePointsForCable(cable)
+          );
+
+          cablesGroup.appendChild(createSvgEl('path', {
+            d: pathD, fill: 'none', stroke: cable.color, 'stroke-width': 6.2, 'stroke-linecap': 'round'
+          }));
+
+          cablesGroup.appendChild(createSvgEl('path', {
+            d: pathD, fill: 'none', stroke: 'rgba(255, 255, 255, 0.35)', 'stroke-width': 1.4, 'stroke-linecap': 'round'
+          }));
+
+          if (pathSession && pathSession.cableId === cable.id && pathSession.mode === 'pen' && cable.owner === 'mine') {
+            const hitLine = createSvgEl('path', {
+              d: pathD, fill: 'none', stroke: 'transparent', 'stroke-width': 18,
+              class: 'cable-hit-line', style: 'cursor: crosshair;'
+            });
+            hitLine.addEventListener('pointerdown', (e) => {
+              if (e.target.closest('.pen-node-handle') || (dragState && dragState.type === 'pen-node')) return;
+              e.preventDefault();
+              e.stopPropagation();
+              const newIdx = pathSession.draftPoints.length;
+              pathSession.draftPoints.push({ x: e.clientX, y: e.clientY });
+              pathSession.selectedNodeIdx = newIdx;
+              renderCablesAndPlugs();
+            });
+            cablesGroup.appendChild(hitLine);
+
+            pathSession.draftPoints.forEach((pt, idx) => {
+              const isSelected = pathSession.selectedNodeIdx === idx;
+              const handle = createSvgEl('circle', {
+                cx: pt.x, cy: pt.y, r: isSelected ? 8.5 : 7,
+                fill: isSelected ? cable.color : '#0f172a',
+                stroke: isSelected ? '#ffffff' : cable.color,
+                'stroke-width': 2.5, class: 'pen-node-handle'
+              });
+              handle.addEventListener('pointerdown', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                pathSession.selectedNodeIdx = idx;
+                dragState = { type: 'pen-node', cableId: cable.id, nodeIdx: idx, pointerId: e.pointerId };
+                if (handle.setPointerCapture) {
+                  try { handle.setPointerCapture(e.pointerId); } catch (_) {}
+                }
+                renderCablesAndPlugs();
+              });
+              handle.addEventListener('dblclick', (e) => {
+                e.preventDefault(); e.stopPropagation();
+                pathSession.draftPoints.splice(idx, 1);
+                renderCablesAndPlugs();
+              });
+              handle.addEventListener('contextmenu', (e) => {
+                e.preventDefault(); e.stopPropagation();
+                pathSession.draftPoints.splice(idx, 1);
+                renderCablesAndPlugs();
+              });
+              penNodesGroup.appendChild(handle);
+            });
+          }
+
+          plugsGroup.appendChild(plugFrom.group);
+          plugsGroup.appendChild(plugTo.group);
+
+          [plugFrom, plugTo].forEach(plugObj => {
+            plugObj.group.addEventListener('pointerdown', (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              dragState = {
+                type: 'plug',
+                cableId: plugObj.group.getAttribute('data-cable-id'),
+                endKey: plugObj.group.getAttribute('data-end-key'),
+                curX: e.clientX,
+                curY: e.clientY,
+                lastX: e.clientX,
+                lastY: e.clientY,
+                startX: e.clientX,
+                startY: e.clientY,
+                vx: 0,
+                vy: 0,
+                nearestPort: null,
+                detachedOnMove: false
+              };
+              if (workspace.setPointerCapture) workspace.setPointerCapture(e.pointerId);
+            });
+          });
+        });
+
+        renderPaintStrokePreview();
+      }
+
+      function isPortOccupied(cardId, side, portIdx, excludeCableId, excludeEndKey) {
+        return cables.some(c => {
+          const isFromMatch = c.from && c.from.cardId === cardId && (c.from.side || 'left') === side && c.from.portIdx === portIdx;
+          const isToMatch = c.to && c.to.cardId === cardId && (c.to.side || 'left') === side && c.to.portIdx === portIdx;
+
+          if (isFromMatch) {
+            if (c.id === excludeCableId && excludeEndKey === 'from') return false;
+            return true;
+          }
+          if (isToMatch) {
+            if (c.id === excludeCableId && excludeEndKey === 'to') return false;
+            return true;
+          }
+          return false;
+        });
+      }
+
+      function findNearestPort(x, y, excludeCableId, excludeEndKey) {
+        let best = null;
+        let minD = 38;
+        cards.forEach(card => {
+          const actualW = getCardWidth(card.id);
+          PORT_SIDES.forEach(side => {
+            const px = side === 'left' ? card.x : card.x + actualW;
+            PORT_OFFSETS.forEach((yOff, pIdx) => {
+              if (isPortOccupied(card.id, side, pIdx, excludeCableId, excludeEndKey)) return;
+              const py = card.y + yOff;
+              const d = Math.hypot(x - px, y - py);
+              if (d < minD) {
+                minD = d;
+                best = { cardId: card.id, side, portIdx: pIdx, px, py };
+              }
+            });
+          });
+        });
+        return best;
+      }
+
+      workspace.addEventListener('pointerdown', (e) => {
+        if (!pathSession || pathSession.mode !== 'paint') return;
+        if (e.target.closest('.plug-element') || e.target.closest('.msg-card') || e.target.closest('#path-session-bar') || e.target.closest('#inspector-overlay')) return;
+        const cable = cables.find(c => c.id === pathSession.cableId);
+        if (!cable || cable.owner !== 'mine') return;
+        e.preventDefault();
+        pathSession.isPainting = true;
+        pathSession.rawPaintSamples = [{ x: e.clientX, y: e.clientY }];
+        if (workspace.setPointerCapture) workspace.setPointerCapture(e.pointerId);
+        renderPaintStrokePreview();
+      });
+
+      function handlePointerMove(e) {
+        if (pathSession && pathSession.mode === 'paint' && pathSession.isPainting) {
+          pathSession.rawPaintSamples.push({ x: e.clientX, y: e.clientY });
+          renderPaintStrokePreview();
+          return;
+        }
+        if (!dragState) return;
+
+        if (dragState.type === 'pen-node') {
+          if (dragState.pointerId !== undefined && e.pointerId !== dragState.pointerId) return;
+          if (pathSession && pathSession.cableId === dragState.cableId && pathSession.draftPoints[dragState.nodeIdx]) {
+            pathSession.draftPoints[dragState.nodeIdx] = { x: e.clientX, y: e.clientY };
+            renderCablesAndPlugs();
+          }
+          return;
+        }
+
+        if (dragState.type === 'card') {
+          const card = cards.find(c => c.id === dragState.cardId);
+          if (card) {
+            card.x = dragState.origX + (e.clientX - dragState.startX);
+            card.y = dragState.origY + (e.clientY - dragState.startY);
+            if (dragState.cardEl) {
+              dragState.cardEl.style.left = `${card.x}px`;
+              dragState.cardEl.style.top = `${card.y}px`;
+            }
+            renderSocketsAndLeds();
+            renderCablesAndPlugs();
+          }
+        } else if (dragState.type === 'plug') {
+          const moveDist = Math.hypot(e.clientX - dragState.startX, e.clientY - dragState.startY);
+          if (moveDist > 8 && !dragState.detachedOnMove) {
+            dragState.detachedOnMove = true;
+            closePlugPopover();
+            const targetCable = cables.find(c => c.id === dragState.cableId);
+            if (targetCable) {
+              const prevRef = targetCable[dragState.endKey];
+              if (prevRef) {
+                const prevAnchor = getPortAnchor(prevRef.cardId, prevRef.side || 'left', prevRef.portIdx);
+                triggerPlugEffect('detach', prevAnchor.x, prevAnchor.y, targetCable.color);
+              }
+              targetCable[dragState.endKey] = null;
+            }
+          }
+
+          if (dragState.detachedOnMove) {
+            const dx = e.clientX - dragState.lastX;
+            const dy = e.clientY - dragState.lastY;
+            dragState.vx = dragState.vx * 0.4 + dx * 0.6;
+            dragState.vy = dragState.vy * 0.4 + dy * 0.6;
+            dragState.lastX = e.clientX;
+            dragState.lastY = e.clientY;
+
+            const nearest = findNearestPort(e.clientX, e.clientY, dragState.cableId, dragState.endKey);
+            if (nearest) {
+              dragState.curX = nearest.px;
+              dragState.curY = nearest.py;
+              dragState.nearestPort = nearest;
+            } else {
+              dragState.curX = e.clientX;
+              dragState.curY = e.clientY;
+              dragState.nearestPort = null;
+            }
+            renderCablesAndPlugs();
+          }
+        }
+      }
+
+      function handlePointerUp(e) {
+        if (pathSession && pathSession.mode === 'paint' && pathSession.isPainting) {
+          pathSession.isPainting = false;
+          const cable = cables.find(c => c.id === pathSession.cableId);
+          if (cable && cable.from && cable.to) {
+            const a1 = getPortAnchor(cable.from.cardId, cable.from.side || 'left', cable.from.portIdx);
+            const a2 = getPortAnchor(cable.to.cardId, cable.to.side || 'left', cable.to.portIdx);
+            const generatedPts = simplifyPaintStrokeToControlPoints(pathSession.rawPaintSamples, a1, a2);
+            if (generatedPts.length > 0) pathSession.draftPoints = generatedPts;
+          }
+          pathSession.rawPaintSamples = [];
+          renderCablesAndPlugs();
+          return;
+        }
+
+        if (!dragState) return;
+
+        if (dragState.type === 'card') {
+          if (dragState.cardEl) dragState.cardEl.classList.remove('dragging');
+        } else if (dragState.type === 'pen-node') {
+          dragState = null;
+          renderCablesAndPlugs();
+          return;
+        } else if (dragState.type === 'plug') {
+          const cableIdx = cables.findIndex(c => c.id === dragState.cableId);
+          const moveDist = Math.hypot(e.clientX - dragState.startX, e.clientY - dragState.startY);
+          const now = Date.now();
+
+          if (moveDist <= 8 && cableIdx !== -1) {
+            const targetCable = cables[cableIdx];
+            const endRef = targetCable[dragState.endKey];
+            const portCard = endRef ? cards.find(c => c.id === endRef.cardId) : null;
+            const isMineByOwnerOrCard = targetCable.owner === 'mine' || (portCard && portCard.owner === 'mine');
+            const isLockedAgainstMe = lockFeatureEnabled && !isMineByOwnerOrCard && Boolean(endRef) && targetCable.owner !== 'mine';
+
+            if (isLockedAgainstMe) {
+              plugClickTracker.count = 0;
+              const lockTone = getCardIdentityColor(portCard);
+              showTooltip(e.clientX, e.clientY - 10, `<span style="display:inline-flex;align-items:center;gap:6px;color:${lockTone};font-weight:700;">${LOCK_ICON_HTML} المنفذ مقفل</span>`);
+              setTimeout(hideTooltip, 2000);
+            } else {
+              const plugKey = `${targetCable.id}_${dragState.endKey}`;
+              if (plugClickTracker.lastPlugKey === plugKey && (now - plugClickTracker.lastTime) < 550) {
+                plugClickTracker.count++;
+              } else {
+                plugClickTracker.count = 1;
+                plugClickTracker.lastPlugKey = plugKey;
+              }
+              plugClickTracker.lastTime = now;
+
+              if (plugClickTracker.count === 3) {
+                plugClickTracker.count = 0;
+                openPlugColorPopover(targetCable, e.clientX, e.clientY);
+              }
+            }
+          } else if (dragState.detachedOnMove && cableIdx !== -1) {
+            const cable = cables[cableIdx];
+            const nearest = findNearestPort(e.clientX, e.clientY, dragState.cableId, dragState.endKey);
+            const angleKey = `${cable.id}_${dragState.endKey}`;
+
+            if (nearest) {
+              cable[dragState.endKey] = { cardId: nearest.cardId, side: nearest.side, portIdx: nearest.portIdx };
+              if (cable.detachedEnds) delete cable.detachedEnds[dragState.endKey];
+              triggerPlugEffect('snap', nearest.px, nearest.py, cable.color);
+            } else {
+              cable[dragState.endKey] = null;
+              if (!cable.detachedEnds) cable.detachedEnds = {};
+              cable.detachedEnds[dragState.endKey] = {
+                x: dragState.curX,
+                y: dragState.curY,
+                angle: plugAngles[angleKey] ?? 0
+              };
+            }
+          }
+        }
+
+        if (e && e.pointerId !== undefined && workspace.hasPointerCapture && workspace.hasPointerCapture(e.pointerId)) {
+          try { workspace.releasePointerCapture(e.pointerId); } catch (_) {}
+        }
+        dragState = null;
+        renderCards();
+        renderCablesAndPlugs();
+        saveCanvasState();
+      }
+
+      window.addEventListener('pointermove', handlePointerMove);
+      window.addEventListener('pointerup', handlePointerUp);
+      window.addEventListener('pointercancel', handlePointerUp);
+
+      window.addEventListener('pointerdown', (e) => {
+        if (!e.target.closest('#plug-color-popover') && !e.target.closest('.plug-element')) {
+          closePlugPopover();
+        }
+      });
+
+      window.addEventListener('resize', () => {
+        clampCardsIntoViewport();
+        renderCards();
+        renderCablesAndPlugs();
+      });
+
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) saveCanvasState();
+      });
+      window.addEventListener('pagehide', saveCanvasState);
+      window.addEventListener('beforeunload', saveCanvasState);
+
+      const isLoaded = loadCanvasState();
+      if (!isLoaded) {
+        autoLayoutCards();
+      } else {
+        clampCardsIntoViewport();
+      }
+
+      svgLayer.style.display = portsEnabled ? 'block' : 'none';
+      renderCards();
+      applyGlobalEntityThemes();
+      saveCanvasState();
+
+      animFrameId = requestAnimationFrame(animateFrame);
+    })();
+  </script>
+</body>
+</html>
