@@ -439,7 +439,11 @@ class ChatActivity : AppCompatActivity() {
             },
                         themeColorHex = themeColorHex,
             onMessagesChanged = { messages ->
-                messageCardBridge?.submitMessages(messages)
+    messageCardBridge?.submitMessages(
+        messages,
+        currentConversationId
+    )
+            }
             }
         )
         applyAdapterVisualConfig()
@@ -498,7 +502,10 @@ class ChatActivity : AppCompatActivity() {
             )
         }
 
-        messageCardBridge?.submitMessages(messageList)
+        messageCardBridge?.submitMessages(
+    messageList,
+    currentConversationId
+)
     }
 
     private fun applyAdapterVisualConfig() {
