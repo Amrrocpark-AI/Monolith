@@ -963,7 +963,9 @@ class ChatActivity : AppCompatActivity() {
         deletedConversationIds.add(conversationId)
 
         lifecycleScope.launch {
-            try {
+    var deletionCommitted = false
+
+    try {
                 val removed = withContext(Dispatchers.IO) {
                     databaseMutex.withLock {
                         appDatabase.deleteConversation(conversationId)
