@@ -1345,6 +1345,7 @@ Java_com_monolith_ModelManager_nativeGenerate(
         agent_id
     );
 }
+    /*
     JNIEnv* env,
     jobject,
     jstring prompt,
