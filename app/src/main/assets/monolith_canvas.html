@@ -193,9 +193,40 @@
       border: 1px stroke transparent;
     }
 
-    .msg-text:focus {
+        .msg-text:focus {
       background: rgba(0, 0, 0, 0.35);
       box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.4);
+    }
+
+    .msg-attachments {
+      display: flex;
+      flex-direction: row;
+      gap: 8px;
+      width: 100%;
+      margin-top: 8px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      position: relative;
+      z-index: 3;
+      pointer-events: auto;
+      touch-action: pan-x;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+
+    .msg-attachments::-webkit-scrollbar {
+      display: none;
+    }
+
+    .msg-attachment-image {
+      width: 148px;
+      height: 148px;
+      min-width: 148px;
+      object-fit: cover;
+      border-radius: 13px;
+      display: block;
+      pointer-events: auto;
+      touch-action: pan-x;
     }
 
     .palette-trigger-btn {
