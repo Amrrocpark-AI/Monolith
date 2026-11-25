@@ -66,6 +66,21 @@
 
         </LinearLayout>
 
+        <        <TextView
+            android:id="@+id/btnWorkspace"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:gravity="center"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:background="@drawable/monolith_bg_input"
+            android:text="مساحة العمل"
+            android:textColor="@color/monolith_accent"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:clickable="true"
+            android:focusable="true" />
+
         <ImageButton
             android:id="@+id/btnDashboard"
             android:layout_width="48dp"
