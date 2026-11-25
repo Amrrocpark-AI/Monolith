@@ -227,7 +227,7 @@ private fun flushPendingConversationStateDeletions() {
                 generation == displayGeneration &&
                 hasValidPendingDisplay
             ) {
-                webView.visibility = android.view.View.VISIBLE
+                webView.visibility = android.view.View.INVISIBLE
             }
         }
     }
