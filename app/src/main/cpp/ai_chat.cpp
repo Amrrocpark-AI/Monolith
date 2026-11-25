@@ -996,6 +996,107 @@ static bool appendTokenPiece(
 }
 
 // =========================================================
+// JNI Chat Messages Bridge
+// =========================================================
+
+static bool readChatMessages(
+    JNIEnv* env,
+    jobjectArray roles,
+    jobjectArray contents,
+    std::vector<ChatPromptMessage>& messages
+) {
+    if (
+        env == nullptr ||
+        roles == nullptr ||
+        contents == nullptr
+    ) {
+        return false;
+    }
+
+    const jsize role_count =
+        env->GetArrayLength(roles);
+
+    const jsize content_count =
+        env->GetArrayLength(contents);
+
+    if (
+        role_count <= 0 ||
+        role_count != content_count
+    ) {
+        return false;
+    }
+
+    messages.clear();
+    messages.reserve(
+        static_cast<size_t>(role_count)
+    );
+
+    for (jsize i = 0; i < role_count; ++i) {
+        jstring java_role =
+            static_cast<jstring>(
+                env->GetObjectArrayElement(roles, i)
+            );
+
+        jstring java_content =
+            static_cast<jstring>(
+                env->GetObjectArrayElement(contents, i)
+            );
+
+        if (
+            java_role == nullptr ||
+            java_content == nullptr
+        ) {
+            if (java_role != nullptr) {
+                env->DeleteLocalRef(java_role);
+            }
+
+            if (java_content != nullptr) {
+                env->DeleteLocalRef(java_content);
+            }
+
+            return false;
+        }
+
+        ChatPromptMessage message;
+
+        message.role = jstringToUtf8(
+            env,
+            java_role
+        );
+
+        message.content = jstringToUtf8(
+            env,
+            java_content
+        );
+
+        env->DeleteLocalRef(java_role);
+        env->DeleteLocalRef(java_content);
+
+        if (
+            message.role.empty() ||
+            message.content.empty()
+        ) {
+            return false;
+        }
+
+        if (
+            message.role != "system" &&
+            message.role != "user" &&
+            message.role != "assistant" &&
+            message.role != "tool"
+        ) {
+            return false;
+        }
+
+        messages.push_back(
+            std::move(message)
+        );
+    }
+
+    return !messages.empty();
+}
+
+// =========================================================
 // Text Generation
 // =========================================================
 
