@@ -22,6 +22,9 @@ class MessageCardBridge(
     private var pendingMessages: List<ChatMessage> = emptyList()
     private var pendingConversationId: String = ""
 
+    // يمنع نتائج العرض القديمة من التأثير على المحادثة الحالية.
+    private var displayGeneration = 0
+
     val webView: WebView = WebView(context)
 
     init {
@@ -63,20 +66,39 @@ class MessageCardBridge(
         messages: List<ChatMessage>,
         conversationId: String = ""
     ) {
+        displayGeneration++
+
         pendingMessages = messages.toList()
         pendingConversationId = conversationId
 
+        val generation = displayGeneration
+
         webView.post {
-            sendPendingMessages()
+            sendPendingMessages(generation)
         }
     }
 
-    private fun sendPendingMessages() {
+    // إلغاء صلاحية أي عملية عرض سابقة عند الانتقال بين المحادثات.
+    fun invalidatePendingDisplay() {
+        displayGeneration++
+        webView.visibility = android.view.View.INVISIBLE
+    }
+
+    private fun sendPendingMessages(
+        generation: Int = displayGeneration
+    ) {
         if (!pageReady) return
+
+        // تجاهل أي عملية أصبحت قديمة قبل تنفيذ JavaScript.
+        if (generation != displayGeneration) return
+
+        // استخدام نسخة ثابتة من بيانات العملية الحالية.
+        val messages = pendingMessages.toList()
+        val conversationId = pendingConversationId
 
         val cards = JSONArray()
 
-        pendingMessages.forEachIndexed { index, message ->
+        messages.forEachIndexed { index, message ->
 
             val isUser = message.role == MessageRole.USER
 
@@ -138,7 +160,7 @@ class MessageCardBridge(
             "typeof window.MonolithCards.setMessages === 'function') {" +
             "window.MonolithCards.setMessages(" +
             "JSON.parse(${JSONObject.quote(json)})," +
-            "${JSONObject.quote(pendingConversationId)}" +
+            "${JSONObject.quote(conversationId)}" +
             ");" +
             "return true;" +
             "}" +
@@ -146,7 +168,12 @@ class MessageCardBridge(
             "})();"
 
         webView.evaluateJavascript(javascript) { result ->
-            if (result == "true") {
+
+            // لا نسمح لنتيجة قديمة بإظهار WebView.
+            if (
+                result == "true" &&
+                generation == displayGeneration
+            ) {
                 webView.visibility = android.view.View.VISIBLE
             }
         }
@@ -175,6 +202,7 @@ class MessageCardBridge(
     }
 
     fun release() {
+        displayGeneration++
         pageReady = false
 
         webView.stopLoading()
