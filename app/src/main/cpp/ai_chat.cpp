@@ -1565,12 +1565,13 @@ Java_com_monolith_ModelManager_nativeGenerate(
     } catch (...) {
         LOGE("Unexpected generation exception.");
 
-        return makeResult(
+                return makeResult(
             env,
+            "حدث خطأ داخلي أثناء التوليد."
         );
     }
-}
 */
+}
 
 // =========================================================
 // Multi-Message Conversation Generation
