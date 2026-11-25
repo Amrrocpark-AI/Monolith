@@ -2131,13 +2131,11 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    private fun scrollToBottom() {
-        recyclerViewChat.post {
-            if (messageList.isNotEmpty() && !isFinishing && !isDestroyed) {
-                recyclerViewChat.scrollToPosition(messageList.size - 1)
-            }
+        private fun scrollToBottom() {
+        if (messageList.isNotEmpty() && !isFinishing && !isDestroyed) {
+            messageCardBridge?.scrollToMessage(messageList.last().id)
         }
-    }
+        }
 
     private fun hideKeyboard() {
         try {
