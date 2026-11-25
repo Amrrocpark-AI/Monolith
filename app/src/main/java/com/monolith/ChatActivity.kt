@@ -1576,8 +1576,13 @@ class ChatActivity : AppCompatActivity() {
             colorHex = themeColorHex
         )
 
-        messageList.add(userMessage)
-        chatAdapter.updateMessages(messageList)
+                messageList.add(userMessage)
+
+        messageCardBridge?.submitMessages(
+            messageList.toList(),
+            conversationId
+        )
+
         saveMessageToDb(userMessage, conversationId)
 
         if (!fromInitiative) {
