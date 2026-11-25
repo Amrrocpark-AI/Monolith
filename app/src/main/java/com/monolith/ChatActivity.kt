@@ -960,6 +960,7 @@ class ChatActivity : AppCompatActivity() {
             .show()
     }
 
+
     private fun deleteConversation(conversationId: String) {
         if (conversationId.isBlank()) return
 
@@ -974,12 +975,12 @@ class ChatActivity : AppCompatActivity() {
         deletedConversationIds.add(conversationId)
 
         lifecycleScope.launch {
-    var deletionCommitted = false
+            var deletionCommitted = false
 
-    try {
-        val removed = withContext(Dispatchers.IO) {
-         databaseMutex.withLock {
-           appDatabase.deleteConversation(conversationId)
+            try {
+                val removed = withContext(Dispatchers.IO) {
+                    databaseMutex.withLock {
+                        appDatabase.deleteConversation(conversationId)
                     }
                 }
 
@@ -988,11 +989,11 @@ class ChatActivity : AppCompatActivity() {
                 }
 
                 if (removed && wasCurrent && conversationId == currentConversationId) {
-    val remaining = withContext(Dispatchers.IO) {
-        appDatabase.getAllConversations()
-    }
+                    val remaining = withContext(Dispatchers.IO) {
+                        appDatabase.getAllConversations()
+                    }
 
-    if (remaining.isNotEmpty()) {
+                    if (remaining.isNotEmpty()) {
                         openConversation(remaining.first().id)
                     } else {
                         withContext(Dispatchers.IO) {
@@ -1014,14 +1015,13 @@ class ChatActivity : AppCompatActivity() {
                 }
 
                 if (removed) {
-                 messageCardBridge?.deleteConversationState(conversationId)
-                 showToast("تم حذف المحادثة")
-} else {
-    deletedConversationIds.remove(conversationId)
-    showToast("المحادثة غير موجودة في السجل")
+                    messageCardBridge?.deleteConversationState(conversationId)
+                    showToast("تم حذف المحادثة")
+                } else {
+                    deletedConversationIds.remove(conversationId)
+                    showToast("المحادثة غير موجودة في السجل")
                 }
-                }
-                        } catch (e: CancellationException) {
+            } catch (e: CancellationException) {
                 val conversationStillExists = try {
                     withContext(NonCancellable + Dispatchers.IO) {
                         databaseMutex.withLock {
@@ -1037,15 +1037,15 @@ class ChatActivity : AppCompatActivity() {
                 }
 
                 throw e
-                        } catch (e: Exception) {
+            } catch (e: Exception) {
                 if (!deletionCommitted) {
                     deletedConversationIds.remove(conversationId)
                 }
                 showToast("تعذر حذف المحادثة: ${e.message}")
-        }
             }
         }
     }
+
 
     private fun cancelPendingRequestsFor(conversationId: String) {
         synchronized(requestLock) {
