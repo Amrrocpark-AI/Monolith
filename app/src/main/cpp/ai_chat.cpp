@@ -1324,6 +1324,51 @@ Java_com_monolith_ModelManager_nativeGenerate(
 
     std::lock_guard<std::mutex> lock(engine_mutex);
 
+    std::string formatted_prompt;
+
+    if (
+        !formatPrompt(
+            model,
+            user_prompt,
+            formatted_prompt
+        )
+    ) {
+        return makeResult(
+            env,
+            "تعذر تجهيز قالب المحادثة الخاص بالنموذج."
+        );
+    }
+
+    return generateFromFormattedPrompt(
+        env,
+        formatted_prompt,
+        agent_id
+    );
+}
+    JNIEnv* env,
+    jobject,
+    jstring prompt,
+    jint agent_id
+) {
+    if (prompt == nullptr) {
+        return makeResult(
+            env,
+            "النص المدخل فارغ."
+        );
+    }
+
+    std::string user_prompt =
+        jstringToUtf8(env, prompt);
+
+    if (user_prompt.empty()) {
+        return makeResult(
+            env,
+            "لا يمكن توليد إجابة لنص فارغ."
+        );
+    }
+
+    std::lock_guard<std::mutex> lock(engine_mutex);
+
     if (model == nullptr || vocab == nullptr) {
         return makeResult(
             env,
