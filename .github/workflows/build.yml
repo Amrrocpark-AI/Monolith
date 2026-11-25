@@ -85,15 +85,42 @@ jobs:
         echo "Verifying APK signature..."
         "$APKSIGNER" verify --verbose --print-certs "$APK"
 
-        echo "Checking application ID..."
+                echo "Checking APK package and Android versions..."
         "$AAPT" dump badging "$APK" > "$RUNNER_TEMP/apk-badging.txt"
 
         if ! grep -Eq "^package: name='com\.monolith'([[:space:]]|$)" \
           "$RUNNER_TEMP/apk-badging.txt"; then
-          echo "::error::APK application ID is not com.monolith."
+          echo "::error::Invalid application ID."
           cat "$RUNNER_TEMP/apk-badging.txt"
           exit 1
         fi
+
+        if ! grep -Eq "^sdkVersion:'26'$" "$RUNNER_TEMP/apk-badging.txt"; then
+          echo "::error::Unexpected minimum Android SDK."
+          cat "$RUNNER_TEMP/apk-badging.txt"
+          exit 1
+        fi
+
+        if ! grep -Eq "^native-code:.*'arm64-v8a'" "$RUNNER_TEMP/apk-badging.txt"; then
+          echo "::error::APK does not contain the required arm64-v8a ABI."
+          cat "$RUNNER_TEMP/apk-badging.txt"
+          exit 1
+        fi
+
+        echo "Checking native libraries..."
+        unzip -Z1 "$APK" > "$RUNNER_TEMP/apk-files.txt"
+
+        for LIB in \
+          "lib/arm64-v8a/libmonolith.so" \
+          "lib/arm64-v8a/libc++_shared.so"; do
+          if ! grep -Fxq "$LIB" "$RUNNER_TEMP/apk-files.txt"; then
+            echo "::error::Missing native library: $LIB"
+            exit 1
+          fi
+        done
+
+        echo "APK validation passed."
+        sha256sum "$APK"
 
         echo "APK validation passed."
         sha256sum "$APK"
