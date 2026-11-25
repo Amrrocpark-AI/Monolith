@@ -1649,20 +1649,6 @@ Java_com_monolith_ModelManager_nativeGenerateConversation(
         );
     }
 }
-
-// =========================================================
-// Model Unloading
-// =========================================================
-
-// Model Unloading
-// =========================================================
-
-/*
-extern "C" JNIEXPORT void JNICALL
-
-// المقطع الخاطئ الموجود حالياً يبقى كما هو
-// حتى قوس إغلاق الدالة
-*/
 // =========================================================
 // Model Unloading
 // =========================================================
@@ -1672,8 +1658,7 @@ extern "C" JNIEXPORT void JNICALL
 Java_com_monolith_ModelManager_nativeUnloadModel(
     JNIEnv*,
     jobject
-) 
-{
+) {
     std::lock_guard<std::mutex> lock(engine_mutex);
 
     LOGI("Unloading native model.");
@@ -1686,7 +1671,6 @@ Java_com_monolith_ModelManager_nativeUnloadModel(
     }
 
     LOGI("Native model unloaded.");
-}
 }
 
 } // namespace Monolith
