@@ -1400,12 +1400,20 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    private fun updateMessageLocally(messageId: String, transform: (ChatMessage) -> ChatMessage) {
+        private fun updateMessageLocally(
+        messageId: String,
+        transform: (ChatMessage) -> ChatMessage
+    ) {
         val index = messageList.indexOfFirst { it.id == messageId }
         if (index == -1) return
+
         messageList[index] = transform(messageList[index])
-        chatAdapter.updateMessages(messageList)
-    }
+
+        messageCardBridge?.submitMessages(
+            messageList.toList(),
+            currentConversationId
+        )
+        }
 
     private fun findMessage(messageId: String): ChatMessage? {
         return messageList.firstOrNull { it.id == messageId }
