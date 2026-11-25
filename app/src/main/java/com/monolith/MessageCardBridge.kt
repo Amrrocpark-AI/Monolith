@@ -42,7 +42,7 @@ class MessageCardBridge(
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.allowFileAccess = true
-            settings.allowContentAccess = false
+            settings.allowContentAccess = true
 
             addJavascriptInterface(
                 AndroidCallbacks(),
