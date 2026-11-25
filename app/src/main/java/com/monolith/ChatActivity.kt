@@ -486,8 +486,7 @@ class ChatActivity : AppCompatActivity() {
             }
                 }
         messageCardBridge?.webView?.let { cardWebView ->
-            cardWebView.visibility = View.INVISIBLE
-
+         cardWebView.visibility = View.VISIBLE
                         chatContentContainer.addView(
                 cardWebView,
                 1,
