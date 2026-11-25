@@ -1462,7 +1462,61 @@ class ChatActivity : AppCompatActivity() {
             .setNegativeButton("إلغاء", null)
             .show()
     }
+    
     private fun MessageEntity.toChatMessage(): ChatMessage {
+        val resolvedSenderId = senderId
+            .takeIf { it.isNotBlank() }
+            ?: if (role.equals("USER", true)) "me" else "ai"
+
+        return ChatMessage(
+            id = id,
+            role = if (role.equals("USER", true)) {
+                MessageRole.USER
+            } else {
+                MessageRole.AI
+            },
+            content = content,
+            attachmentUris = decodeAttachmentUris(attachmentUris),
+            colorHex = if (role.equals("USER", true)) {
+                themeColorHex
+            } else {
+                "#2A2A2A"
+            },
+            timestamp = timestamp,
+            reactionType = reactionType,
+            reactionColor = reactionColor,
+            isPinned = isPinned,
+            modelName = modelName,
+            isEdited = isEdited,
+            originalContent = originalContent,
+            editReason = editReason,
+            editedTimestamp = editedTimestamp,
+            isThinking = false,
+            senderId = resolvedSenderId
+        )
+    }
+
+    private fun ChatMessage.toMessageEntity(conversationId: String): MessageEntity {
+        return MessageEntity(
+            id = id,
+            conversationId = conversationId,
+            senderId = senderId,
+            role = role.name,
+            content = content,
+            timestamp = timestamp,
+            attachmentUris = encodeAttachmentUris(attachmentUris),
+            isEncrypted = false,
+            reactionType = reactionType,
+            reactionColor = reactionColor,
+            isPinned = isPinned,
+            modelName = modelName,
+            isEdited = isEdited,
+            originalContent = originalContent,
+            editReason = editReason,
+            editedTimestamp = editedTimestamp
+        )
+    }
+
         return ChatMessage(
             id = id,
             role = if (role.equals("USER", true)) MessageRole.USER else MessageRole.AI,
