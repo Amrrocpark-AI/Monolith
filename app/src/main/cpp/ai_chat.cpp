@@ -1567,15 +1567,13 @@ Java_com_monolith_ModelManager_nativeGenerate(
 
         return makeResult(
             env,
-            "حدث خطأ داخلي أثناء التوليد."
         );
     }
-*/
 }
+*/
 
 // =========================================================
 // Model Unloading
-// =========================================================
 
 extern "C" JNIEXPORT void JNICALL
 
