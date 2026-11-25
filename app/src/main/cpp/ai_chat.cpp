@@ -521,14 +521,10 @@ static bool formatPrompt(
         formatted_prompt
     );
 }
-    const char* tmpl =
-        llama_model_chat_template(source_model, nullptr);
-
     // No template usually means a base/completion model.
     // Never force ChatML onto a model whose format is unknown.
     if (tmpl == nullptr || tmpl[0] == '\0') {
-        formatted_prompt = user_prompt;
-
+        
         LOGI("No model chat template; using raw prompt.");
 
         return true;
