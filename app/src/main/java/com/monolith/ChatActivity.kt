@@ -970,9 +970,10 @@ class ChatActivity : AppCompatActivity() {
                     }
                 }
 
-                if (wasCurrent && conversationId == currentConversationId) {
-                    val remaining = withContext(Dispatchers.IO) {
-                        appDatabase.getAllConversations()
+                if (removed && wasCurrent && conversationId == currentConversationId) {
+    val remaining = withContext(Dispatchers.IO) {
+        appDatabase.getAllConversations()
+    }
                     }
 
                     if (remaining.isNotEmpty()) {
