@@ -578,11 +578,14 @@ recyclerViewChat.visibility = View.GONE
 
         lifecycleScope.launch {
             try {
-                val startId = withContext(Dispatchers.IO) {
+             val startId = withContext(Dispatchers.IO) {
                     databaseMutex.withLock { prepareInitialConversation() }
                 }
-                currentConversationId = startId
-                saveLastConversationId(startId)
+
+                if (loadGeneration == 0) {
+                    currentConversationId = startId
+                    saveLastConversationId(startId)
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
