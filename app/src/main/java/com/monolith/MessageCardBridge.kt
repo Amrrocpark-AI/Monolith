@@ -28,6 +28,9 @@ class MessageCardBridge(
     // يمنع إعادة إرسال بيانات العرض بعد إلغاء صلاحيتها.
     private var hasValidPendingDisplay = false
 
+    // يحتفظ بطلبات حذف تخصيصات المحادثات حتى تصبح صفحة العرض جاهزة.
+    private val pendingConversationStateDeletions = LinkedHashSet<String>()
+
     val webView: WebView = WebView(context)
 
     init {
