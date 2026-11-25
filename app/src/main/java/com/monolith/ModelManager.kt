@@ -64,12 +64,18 @@ class ModelManager(context: Context) : AgentModel {
 
     private external fun nativeLoadModel(modelPath: String): String
 
-    private external fun nativeGenerate(
-        prompt: String,
-        agentId: Int
-    ): String
+private external fun nativeGenerate(
+    prompt: String,
+    agentId: Int
+): String
 
-    private external fun nativeUnloadModel()
+private external fun nativeGenerateConversation(
+    roles: Array<String>,
+    contents: Array<String>,
+    agentId: Int
+): String
+
+private external fun nativeUnloadModel()
 
     private external fun nativeCreateSubAgent(): Int
 
