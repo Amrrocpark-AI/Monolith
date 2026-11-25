@@ -1411,6 +1411,57 @@ class ChatActivity : AppCompatActivity() {
         return messageList.firstOrNull { it.id == messageId }
     }
 
+    private fun confirmDeleteMessage(message: ChatMessage) {
+        val conversationId = currentConversationId
+
+        AlertDialog.Builder(this)
+            .setTitle("حذف الرسالة")
+            .setMessage("هل تريد حذف هذه الرسالة نهائياً؟")
+            .setPositiveButton("حذف") { _, _ ->
+                lifecycleScope.launch {
+                    try {
+                        val deleted = withContext(Dispatchers.IO) {
+                            databaseMutex.withLock {
+                                appDatabase.deleteMessage(
+                                    message.id,
+                                    conversationId
+                                )
+                            }
+                        }
+
+                        if (!deleted) {
+                            showToast("لم يتم العثور على الرسالة في قاعدة البيانات")
+                            return@launch
+                        }
+
+                        if (currentConversationId == conversationId) {
+                            val index = messageList.indexOfFirst {
+                                it.id == message.id
+                            }
+
+                            if (index >= 0) {
+                                messageList.removeAt(index)
+                                chatAdapter.updateMessages(messageList)
+                            }
+                        }
+
+                        showToast("تم حذف الرسالة")
+
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        android.util.Log.e(
+                            "Monolith",
+                            "Message deletion failed",
+                            e
+                        )
+                        showToast("تعذر حذف الرسالة: ${e.message}")
+                    }
+                }
+            }
+            .setNegativeButton("إلغاء", null)
+            .show()
+    }
     private fun MessageEntity.toChatMessage(): ChatMessage {
         return ChatMessage(
             id = id,
