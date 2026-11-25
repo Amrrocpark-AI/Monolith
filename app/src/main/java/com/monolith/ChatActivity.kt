@@ -802,8 +802,8 @@ class ChatActivity : AppCompatActivity() {
         currentConversationId = conversationId
         saveLastConversationId(conversationId)
 
-        messageList.clear()
-        chatAdapter.updateMessages(messageList)
+                messageList.clear()
+        recyclerViewChat.visibility = View.INVISIBLE
         hideKeyboard()
         clearInitiatives()
         resetInputHint()
