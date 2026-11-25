@@ -2519,7 +2519,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
                 arrayOf(messageId)
             )
 
-            // الإبقاء على الفروع وتنظيف مرجع الرسالة الأب فقط.
+            // الإبقاء على الفروع وتنظيف جميع مراجع الرسالة المحذوفة.
             val clearedBranchParent = ContentValues().apply {
                 putNull("parent_message_id")
             }
@@ -2527,9 +2527,22 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
             db.update(
                 "message_branches",
                 clearedBranchParent,
-                "parent_message_id = ? AND conversation_id = ?",
-                arrayOf(messageId, conversationId)
+                "parent_message_id = ?",
+                arrayOf(messageId)
             )
+
+            // الإبقاء على عناصر مساحة العمل مع إزالة مرجع الرسالة المصدر.
+            val clearedWorkspaceSource = ContentValues().apply {
+                putNull("source_message_id")
+            }
+
+            db.update(
+                "workspace_code_items",
+                clearedWorkspaceSource,
+                "source_message_id = ?",
+                arrayOf(messageId)
+            )
+
 
             // الحذف النهائي مع التحقق من المحادثة مرة أخرى.
             val removedRows = db.delete(
