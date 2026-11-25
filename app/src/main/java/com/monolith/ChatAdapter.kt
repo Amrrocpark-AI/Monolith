@@ -923,8 +923,15 @@ class ChatAdapter(
         }
     }
 
-    private fun applyCardBackground(card: CardView, isUser: Boolean) {
-        val sideColor = if (isUser) identitySelfColor else identityAiColor
+    private fun applyCardBackground(
+        card: CardView,
+        senderType: MessageSenderType
+    ) {
+        val sideColor = when (senderType) {
+            MessageSenderType.SELF -> identitySelfColor
+            MessageSenderType.PEER -> identityPeerColor
+            MessageSenderType.AI -> identityAiColor
+        }
         val (baseTop, baseBottom) = resolvePresetColors(activeBgPresetId)
         val alphaByte = (cardOpacityFloat * 255f).toInt().coerceIn(64, 255)
 
