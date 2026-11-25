@@ -604,7 +604,8 @@ static bool formatPrompt(
         written
     );
 
-    formatted_prompt = user_prompt;
+        formatted_prompt = user_prompt;
+*/
 
 // =========================================================
 // Tokenization
