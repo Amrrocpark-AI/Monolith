@@ -112,7 +112,6 @@ class MessageCardBridge(
         }
     }
 
-        fun scrollToMessage(messageId: String) {
         val safeMessageId = messageId.trim()
 
         if (safeMessageId.isBlank()) return
