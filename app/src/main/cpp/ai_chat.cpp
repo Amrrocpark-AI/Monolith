@@ -521,8 +521,6 @@ static bool formatPrompt(
         formatted_prompt
     );
 }
-
-    // Use the template stored in the model's GGUF metadata.
     const char* tmpl =
         llama_model_chat_template(source_model, nullptr);
 
