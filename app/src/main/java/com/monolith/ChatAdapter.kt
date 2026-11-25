@@ -319,7 +319,7 @@ class ChatAdapter(
     }
 
     override fun getItemViewType(position: Int): Int {
-        return if (getItem(position).role == MessageRole.USER) {
+        return if (getItem(position).senderType == MessageSenderType.SELF) {
             TYPE_USER
         } else {
             TYPE_AI
