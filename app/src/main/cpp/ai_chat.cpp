@@ -1654,7 +1654,23 @@ Java_com_monolith_ModelManager_nativeGenerateConversation(
 // Model Unloading
 // =========================================================
 
+// Model Unloading
+// =========================================================
+
+/*
 extern "C" JNIEXPORT void JNICALL
+
+// المقطع الخاطئ الموجود حالياً يبقى كما هو
+// حتى قوس إغلاق الدالة
+*/
+
+// =========================================================
+// Model Unloading
+// =========================================================
+
+extern "C" JNIEXPORT void JNICALL
+
+Java_com_monolith_ModelManager_nativeUnloadModel(
 Java_com_monolith_ModelManager_nativeGenerateConversation(
     JNIEnv* env,
     jobject,
