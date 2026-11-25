@@ -2418,8 +2418,137 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
     // DATABASE MAINTENANCE
     // =========================================================
 
-    fun getDatabaseVersion(): Int {
+        fun getDatabaseVersion(): Int {
         return readableDatabase.version
+    }
+
+    /**
+     * حذف رسالة واحدة وجميع بياناتها المرتبطة داخل Transaction واحدة.
+     *
+     * يشترط تطابق معرّف الرسالة ومعرّف المحادثة معاً.
+     * لا يحذف بيانات الرسائل الأخرى، بل ينظف مراجعها إلى الرسالة المحذوفة.
+     *
+     * يعيد true عند نجاح الحذف، و false إذا لم تكن الرسالة موجودة
+     * ضمن المحادثة المحددة.
+     */
+    fun deleteMessage(
+        messageId: String,
+        conversationId: String
+    ): Boolean {
+        if (messageId.isBlank() || conversationId.isBlank()) {
+            return false
+        }
+
+        val db = writableDatabase
+
+        db.beginTransaction()
+
+        try {
+            val messageExists = db.rawQuery(
+                """
+                SELECT 1 FROM messages
+                WHERE id = ? AND conversationId = ?
+                LIMIT 1
+                """.trimIndent(),
+                arrayOf(messageId, conversationId)
+            ).use { cursor ->
+                cursor.moveToFirst()
+            }
+
+            if (!messageExists) {
+                return false
+            }
+
+            // حذف ملاحظات الخيوط المرتبطة بالرسالة.
+            db.delete(
+                "thread_annotations",
+                """
+                thread_id IN (
+                    SELECT id FROM message_threads
+                    WHERE source_msg_id = ? OR target_msg_id = ?
+                )
+                """.trimIndent(),
+                arrayOf(messageId, messageId)
+            )
+
+            // حذف روابط الخيوط المرتبطة بالرسالة.
+            db.delete(
+                "message_threads",
+                "source_msg_id = ? OR target_msg_id = ?",
+                arrayOf(messageId, messageId)
+            )
+
+            // حذف العلاقات الصادرة والواردة من الرسالة.
+            db.delete(
+                "message_relations",
+                "source_message_id = ? OR target_message_id = ?",
+                arrayOf(messageId, messageId)
+            )
+
+            // تنظيف مراجع الرسالة داخل بيانات الرسائل الأخرى.
+            val clearedReferences = ContentValues().apply {
+                putNull("parent_message_id")
+                putNull("reply_to_message_id")
+            }
+
+            db.update(
+                "message_runtime_metadata",
+                clearedReferences,
+                "parent_message_id = ? OR reply_to_message_id = ?",
+                arrayOf(messageId, messageId)
+            )
+
+            // حذف البيانات الوصفية الخاصة بالرسالة نفسها.
+            db.delete(
+                "message_runtime_metadata",
+                "message_id = ?",
+                arrayOf(messageId)
+            )
+
+            // حذف سجلات تنفيذ الأدوات الخاصة بالرسالة.
+            db.delete(
+                "message_tool_executions",
+                "message_id = ?",
+                arrayOf(messageId)
+            )
+
+            // حذف أحداث التوليد الخاصة بالرسالة.
+            db.delete(
+                "message_generation_events",
+                "message_id = ?",
+                arrayOf(messageId)
+            )
+
+            // الإبقاء على الفروع وتنظيف مرجع الرسالة الأب فقط.
+            val clearedBranchParent = ContentValues().apply {
+                putNull("parent_message_id")
+            }
+
+            db.update(
+                "message_branches",
+                clearedBranchParent,
+                "parent_message_id = ? AND conversation_id = ?",
+                arrayOf(messageId, conversationId)
+            )
+
+            // الحذف النهائي مع التحقق من المحادثة مرة أخرى.
+            val removedRows = db.delete(
+                "messages",
+                "id = ? AND conversationId = ?",
+                arrayOf(messageId, conversationId)
+            )
+
+            if (removedRows != 1) {
+                return false
+            }
+
+            db.setTransactionSuccessful()
+            return true
+
+        } finally {
+            db.endTransaction()
+        }
+    }
     }
 
     fun deleteConversationMessages(conversationId: String) {
