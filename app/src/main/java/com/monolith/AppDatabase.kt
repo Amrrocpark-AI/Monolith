@@ -706,7 +706,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
         val list = mutableListOf<MessageEntity>()
 
         readableDatabase.rawQuery(
-            "SELECT * FROM messages WHERE conversationId = ? ORDER BY timestamp ASC",
+            "SELECT * FROM messages WHERE conversationId = ? ORDER BY timestamp ASC, rowid ASC",
             arrayOf(conversationId)
         ).use { cursor ->
             while (cursor.moveToNext()) {
