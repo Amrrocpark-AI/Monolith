@@ -25,6 +25,9 @@ class MessageCardBridge(
     // يمنع نتائج العرض القديمة من التأثير على المحادثة الحالية.
     private var displayGeneration = 0
 
+    // يمنع إعادة إرسال بيانات العرض بعد إلغاء صلاحيتها.
+    private var hasValidPendingDisplay = false
+
     val webView: WebView = WebView(context)
 
     init {
@@ -70,6 +73,7 @@ class MessageCardBridge(
 
         pendingMessages = messages.toList()
         pendingConversationId = conversationId
+        hasValidPendingDisplay = true
 
         val generation = displayGeneration
 
@@ -81,13 +85,14 @@ class MessageCardBridge(
     // إلغاء صلاحية أي عملية عرض سابقة عند الانتقال بين المحادثات.
     fun invalidatePendingDisplay() {
         displayGeneration++
+        hasValidPendingDisplay = false
         webView.visibility = android.view.View.INVISIBLE
     }
 
     private fun sendPendingMessages(
         generation: Int = displayGeneration
     ) {
-        if (!pageReady) return
+        if (!pageReady || !hasValidPendingDisplay) return
 
         // تجاهل أي عملية أصبحت قديمة قبل تنفيذ JavaScript.
         if (generation != displayGeneration) return
@@ -172,7 +177,8 @@ class MessageCardBridge(
             // لا نسمح لنتيجة قديمة بإظهار WebView.
             if (
                 result == "true" &&
-                generation == displayGeneration
+                generation == displayGeneration &&
+                hasValidPendingDisplay
             ) {
                 webView.visibility = android.view.View.VISIBLE
             }
@@ -203,6 +209,7 @@ class MessageCardBridge(
 
     fun release() {
         displayGeneration++
+        hasValidPendingDisplay = false
         pageReady = false
 
         webView.stopLoading()
