@@ -800,10 +800,13 @@ class ChatActivity : AppCompatActivity() {
         openConversation(conversationId)
     }
 
-    private fun openConversation(conversationId: String) {
+        private fun openConversation(conversationId: String) {
+        if (conversationId.isBlank() || deletedConversationIds.contains(conversationId)) {
+            return
+        }
+
         currentConversationId = conversationId
         saveLastConversationId(conversationId)
-
                         messageList.clear()
         recyclerViewChat.visibility = View.INVISIBLE
         messageCardBridge?.invalidatePendingDisplay()
