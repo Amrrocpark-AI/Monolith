@@ -1961,9 +1961,39 @@ let activeConversationId = null;
           textEl.textContent = card.text || '';
           textEl.addEventListener('pointerdown', (e) => e.stopPropagation());
 
-                    cardEl.appendChild(headerEl);
+                              cardEl.appendChild(headerEl);
           cardEl.appendChild(titleEl);
           cardEl.appendChild(textEl);
+
+          const attachments = Array.isArray(card.attachments)
+            ? card.attachments
+            : [];
+
+          if (attachments.length > 0) {
+            const attachmentsEl = document.createElement('div');
+            attachmentsEl.className = 'msg-attachments';
+
+            attachmentsEl.addEventListener('pointerdown', (e) => {
+              e.stopPropagation();
+            });
+
+            attachments.forEach((uri) => {
+              if (typeof uri !== 'string' || !uri.trim()) return;
+
+              const imageEl = document.createElement('img');
+              imageEl.className = 'msg-attachment-image';
+              imageEl.alt = 'مرفق الرسالة';
+              imageEl.loading = 'lazy';
+              imageEl.draggable = false;
+              imageEl.src = uri;
+
+              attachmentsEl.appendChild(imageEl);
+            });
+
+            if (attachmentsEl.childElementCount > 0) {
+              cardEl.appendChild(attachmentsEl);
+            }
+          }
 
           // أزرار التحكم بالرسالة الحقيقية
           if (card.messageId !== undefined && card.messageId !== null) {
