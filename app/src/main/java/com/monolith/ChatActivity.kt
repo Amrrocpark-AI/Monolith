@@ -2125,9 +2125,14 @@ class ChatActivity : AppCompatActivity() {
         )
 
         if (isCurrentConversation) {
-            if (index >= 0) {
+                        if (index >= 0) {
                 messageList[index] = updated
-                chatAdapter.updateMessages(messageList)
+
+                messageCardBridge?.submitMessages(
+                    messageList.toList(),
+                    conversationId
+                )
+
             } else if (!isThinking && !isLoadingMessages) {
                 messageList.add(updated)
                 messageList.sortBy { it.timestamp }
