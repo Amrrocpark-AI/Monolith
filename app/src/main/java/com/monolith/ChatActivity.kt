@@ -997,9 +997,10 @@ class ChatActivity : AppCompatActivity() {
                 }
 
                 if (removed) {
-                    showToast("تم حذف المحادثة")
-                } else {
-                    showToast("المحادثة غير موجودة في السجل")
+                 messageCardBridge?.deleteConversationState(conversationId)
+                 showToast("تم حذف المحادثة")
+} else {
+    showToast("المحادثة غير موجودة في السجل")
                 }
             } catch (e: CancellationException) {
                 throw e
