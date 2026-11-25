@@ -55,11 +55,10 @@ class MessageCardBridge(
                 ) {
                     super.onPageFinished(view, url)
 
-                    if (url?.endsWith("monolith_canvas.html") == true) {
-    pageReady = true
-    flushPendingConversationStateDeletions()
-    sendPendingMessages()
-                    }
+                                        if (url?.endsWith("monolith_canvas.html") == true) {
+                        pageReady = true
+                        flushPendingConversationStateDeletions()
+                        sendPendingMessages()
                     }
                 }
             }
