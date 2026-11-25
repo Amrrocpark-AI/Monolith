@@ -56,8 +56,10 @@ class MessageCardBridge(
                     super.onPageFinished(view, url)
 
                     if (url?.endsWith("monolith_canvas.html") == true) {
-                        pageReady = true
-                        sendPendingMessages()
+    pageReady = true
+    flushPendingConversationStateDeletions()
+    sendPendingMessages()
+                    }
                     }
                 }
             }
@@ -84,7 +86,36 @@ class MessageCardBridge(
             sendPendingMessages(generation)
         }
     }
+fun deleteConversationState(conversationId: String) {
+    val safeConversationId = conversationId.trim()
 
+    if (safeConversationId.isBlank()) return
+
+    webView.post {
+        pendingConversationStateDeletions.add(safeConversationId)
+
+        if (pageReady) {
+            flushPendingConversationStateDeletions()
+        }
+    }
+}
+
+private fun flushPendingConversationStateDeletions() {
+    if (!pageReady || pendingConversationStateDeletions.isEmpty()) return
+
+    val conversationIds = pendingConversationStateDeletions.toList()
+    pendingConversationStateDeletions.clear()
+
+    conversationIds.forEach { conversationId ->
+        val javascript =
+            "window.MonolithCards && " +
+            "typeof window.MonolithCards.deleteConversationState === 'function' " +
+            "? window.MonolithCards.deleteConversationState(" +
+            "${JSONObject.quote(conversationId)}) : false;"
+
+        webView.evaluateJavascript(javascript, null)
+    }
+}
     // إلغاء صلاحية أي عملية عرض سابقة عند الانتقال بين المحادثات.
     fun invalidatePendingDisplay() {
         displayGeneration++
