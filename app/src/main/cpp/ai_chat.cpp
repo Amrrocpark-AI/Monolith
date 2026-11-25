@@ -1663,85 +1663,6 @@ extern "C" JNIEXPORT void JNICALL
 // المقطع الخاطئ الموجود حالياً يبقى كما هو
 // حتى قوس إغلاق الدالة
 */
-
-// =========================================================
-// Model Unloading
-// =========================================================
-
-extern "C" JNIEXPORT void JNICALL
-
-Java_com_monolith_ModelManager_nativeUnloadModel(
-Java_com_monolith_ModelManager_nativeGenerateConversation(
-    JNIEnv* env,
-    jobject,
-    jobjectArray roles,
-    jobjectArray contents,
-    jint agent_id
-) {
-    if (roles == nullptr || contents == nullptr) {
-        return makeResult(
-            env,
-            "بيانات المحادثة غير متاحة."
-        );
-    }
-
-    std::lock_guard<std::mutex> lock(engine_mutex);
-
-    if (model == nullptr || vocab == nullptr) {
-        return makeResult(
-            env,
-            "النموذج غير محمل."
-        );
-    }
-
-    try {
-        std::vector<ChatPromptMessage> messages;
-
-        if (
-            !readChatMessages(
-                env,
-                roles,
-                contents,
-                messages
-            )
-        ) {
-            return makeResult(
-                env,
-                "تعذر قراءة رسائل المحادثة."
-            );
-        }
-
-        std::string formatted_prompt;
-
-        if (
-            !formatPrompt(
-                model,
-                messages,
-                formatted_prompt
-            )
-        ) {
-            return makeResult(
-                env,
-                "تعذر تجهيز قالب المحادثة."
-            );
-        }
-
-        return generateFromFormattedPrompt(
-            env,
-            formatted_prompt,
-            agent_id
-        );
-
-    } catch (...) {
-        LOGE("Conversation generation exception.");
-
-        return makeResult(
-            env,
-            "حدث خطأ أثناء معالجة المحادثة."
-        );
-    }
-}
-
 // =========================================================
 // Model Unloading
 // =========================================================
@@ -1751,7 +1672,8 @@ extern "C" JNIEXPORT void JNICALL
 Java_com_monolith_ModelManager_nativeUnloadModel(
     JNIEnv*,
     jobject
-) {
+) 
+{
     std::lock_guard<std::mutex> lock(engine_mutex);
 
     LOGI("Unloading native model.");
@@ -1764,6 +1686,7 @@ Java_com_monolith_ModelManager_nativeUnloadModel(
     }
 
     LOGI("Native model unloaded.");
+}
 }
 
 } // namespace Monolith
