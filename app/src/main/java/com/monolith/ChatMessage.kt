@@ -12,12 +12,26 @@ import java.util.UUID
  * - Streaming and generation states
  * - Tool execution metadata
  * - Model and token metadata
+ * - Explicit sender identity
  *
  * Immutable by design: updates return a new ChatMessage instance.
  */
 
 enum class MessageRole {
     USER,
+    AI
+}
+
+/**
+ * Visual and logical identity of the message sender.
+ *
+ * SELF = Main application user.
+ * PEER = Another human user.
+ * AI = Artificial intelligence.
+ */
+enum class MessageSenderType {
+    SELF,
+    PEER,
     AI
 }
 
@@ -212,7 +226,40 @@ data class ChatMessage(
     // Additional metadata
     // ---------------------------------------------------------
 
-    val metadata: Map<String, String> = emptyMap()
+    val metadata: Map<String, String> = emptyMap(),
+
+    // ---------------------------------------------------------
+    // Sender identity
+    // ---------------------------------------------------------
+
+    /**
+     * Stable identifier of the actual sender.
+     *
+     * Existing messages remain compatible:
+     * USER -> me
+     * AI   -> ai
+     *
+     * Other sender identifiers can represent peer users.
+     */
+    val senderId: String = if (role == MessageRole.USER) {
+        "me"
+    } else {
+        "ai"
+    },
+
+    /**
+     * Identity used by the presentation layer.
+     *
+     * AI messages remain AI regardless of senderId.
+     * The main user is SELF.
+     * Other human senders are PEER.
+     */
+    val senderType: MessageSenderType = when {
+        role == MessageRole.AI -> MessageSenderType.AI
+        senderId == "me" -> MessageSenderType.SELF
+        senderId == "ai" -> MessageSenderType.AI
+        else -> MessageSenderType.PEER
+    }
 
 ) {
 
@@ -511,6 +558,20 @@ data class ChatMessage(
     fun withoutMetadata(key: String): ChatMessage {
         return copy(
             metadata = metadata - key
+        )
+    }
+
+    // =========================================================
+    // Sender identity management
+    // =========================================================
+
+    fun withSender(
+        newSenderId: String,
+        newSenderType: MessageSenderType
+    ): ChatMessage {
+        return copy(
+            senderId = newSenderId,
+            senderType = newSenderType
         )
     }
 
