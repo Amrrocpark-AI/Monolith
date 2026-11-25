@@ -103,8 +103,7 @@ fun deleteConversationState(conversationId: String) {
 private fun flushPendingConversationStateDeletions() {
     if (!pageReady || pendingConversationStateDeletions.isEmpty()) return
 
-    val conversationIds = pendingConversationStateDeletions.toList()
-    pendingConversationStateDeletions.clear()
+        val conversationIds = pendingConversationStateDeletions.toList()
 
     conversationIds.forEach { conversationId ->
         val javascript =
@@ -113,7 +112,11 @@ private fun flushPendingConversationStateDeletions() {
             "? window.MonolithCards.deleteConversationState(" +
             "${JSONObject.quote(conversationId)}) : false;"
 
-        webView.evaluateJavascript(javascript, null)
+        webView.evaluateJavascript(javascript) { result ->
+            if (result == "true") {
+                pendingConversationStateDeletions.remove(conversationId)
+            }
+        }
     }
 }
     // إلغاء صلاحية أي عملية عرض سابقة عند الانتقال بين المحادثات.
