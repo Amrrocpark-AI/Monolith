@@ -1283,9 +1283,10 @@ class ChatActivity : AppCompatActivity() {
                 }
             } finally {
                 if (generation == loadGeneration) {
+                    recyclerViewChat.visibility = View.VISIBLE
                     isLoadingMessages = false
                     updateSendButtonState()
-                }
+            }
             }
         }
     }
