@@ -82,9 +82,10 @@
       pointer-events: none;
     }
 
-    .msg-card {
+     .msg-card {
       position: absolute;
-      width: 320px;
+      width: min(320px, calc(100% - 20px));
+      min-height: 155px;
       min-height: 155px;
       background: linear-gradient(160deg, var(--card-bg-start), var(--card-bg-end));
       border: 1px solid var(--card-border);
