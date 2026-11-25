@@ -339,17 +339,19 @@
     #inspector-overlay.active { display: flex; }
 
     .inspector-panel {
-      background: #0f172a;
-      border: 1px solid #334155;
-      border-radius: 18px;
-      width: 560px;
-      max-width: 95vw;
-      padding: 20px;
-      box-shadow: 0 25px 65px rgba(0, 0, 0, 0.9);
-      color: #f1f5f9;
-      max-height: 90vh;
-      overflow-y: auto;
-    }
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 18px;
+  width: min(560px, calc(100vw - 20px));
+  max-width: 95vw;
+  padding: clamp(12px, 3vw, 20px);
+  box-shadow: 0 25px 65px rgba(0, 0, 0, 0.9);
+  color: #f1f5f9;
+  max-height: 90vh;
+  max-height: calc(100dvh - 20px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+      }
 
     .inspector-header {
       display: flex;
