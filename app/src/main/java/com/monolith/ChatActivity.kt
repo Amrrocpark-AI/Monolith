@@ -1011,7 +1011,21 @@ class ChatActivity : AppCompatActivity() {
     showToast("المحادثة غير موجودة في السجل")
                 }
                 }
-            } catch (e: CancellationException) {
+                        } catch (e: CancellationException) {
+                val conversationStillExists = try {
+                    withContext(NonCancellable + Dispatchers.IO) {
+                        databaseMutex.withLock {
+                            appDatabase.getConversationById(conversationId) != null
+                        }
+                    }
+                } catch (_: Exception) {
+                    false
+                }
+
+                if (conversationStillExists) {
+                    deletedConversationIds.remove(conversationId)
+                }
+
                 throw e
                         } catch (e: Exception) {
                 if (!deletionCommitted) {
