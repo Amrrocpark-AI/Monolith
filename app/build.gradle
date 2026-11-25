@@ -31,7 +31,7 @@ android {
                           "-DGGML_NATIVE=OFF",
                           "-DGGML_OPENMP=OFF",
                           "-DLLAMA_OPENSSL=OFF",
-                          "-DGGML_CPU_ARM_ARCH=armv8.6-a+i8mm+dotprod+fp16"
+                          "-DGGML_CPU_ARM_ARCH=armv8-a"
             }
         }
     }
