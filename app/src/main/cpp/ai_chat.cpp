@@ -521,7 +521,7 @@ static bool formatPrompt(
         formatted_prompt
     );
 }
-    // Never force ChatML onto a model whose format is unknown.
+    /*.
     if (tmpl == nullptr || tmpl[0] == '\0') {
         
         LOGI("No model chat template; using raw prompt.");
