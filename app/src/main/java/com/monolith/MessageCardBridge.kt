@@ -81,9 +81,13 @@ class MessageCardBridge(
         pendingConversationId = conversationId
         hasValidPendingDisplay = true
 
-        val generation = displayGeneration
+                val generation = displayGeneration
 
         webView.post {
+            if (generation != displayGeneration) return@post
+
+            webView.visibility = View.VISIBLE
+
             if (pageReady) {
                 flushPendingConversationStateDeletions()
             }
