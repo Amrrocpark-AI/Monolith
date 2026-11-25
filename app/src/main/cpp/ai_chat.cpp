@@ -368,16 +368,160 @@ static bool resetContext(size_t agent_id) {
     return true;
 }
 
-// =========================================================
-// Model-Specific Prompt Formatting
-// =========================================================
 
+struct ChatPromptMessage {
+    std::string role;
+    std::string content;
+};
+
+static bool formatPrompt(
+    const llama_model* source_model,
+    const std::vector<ChatPromptMessage>& messages,
+    std::string& formatted_prompt
+) {
+    if (source_model == nullptr || messages.empty()) {
+        return false;
+    }
+
+    std::vector<llama_chat_message> llama_messages;
+    llama_messages.reserve(messages.size());
+
+    size_t total_size = 0;
+
+    for (const auto& message : messages) {
+        if (
+            message.role.empty() ||
+            message.content.empty()
+        ) {
+            return false;
+        }
+
+        if (
+            message.role != "system" &&
+            message.role != "user" &&
+            message.role != "assistant" &&
+            message.role != "tool"
+        ) {
+            return false;
+        }
+
+        if (
+            message.content.size() >
+            static_cast<size_t>(
+                std::numeric_limits<int32_t>::max()
+            ) - total_size
+        ) {
+            return false;
+        }
+
+        total_size += message.content.size();
+
+        llama_chat_message item;
+        item.role = message.role.c_str();
+        item.content = message.content.c_str();
+
+        llama_messages.push_back(item);
+    }
+
+    const char* tmpl =
+        llama_model_chat_template(source_model, nullptr);
+
+    if (tmpl == nullptr || tmpl[0] == '\0') {
+        formatted_prompt.clear();
+
+        for (const auto& message : messages) {
+            formatted_prompt += message.role;
+            formatted_prompt += ":\n";
+            formatted_prompt += message.content;
+            formatted_prompt += "\n\n";
+        }
+
+        return !formatted_prompt.empty();
+    }
+
+    if (
+        total_size >
+        static_cast<size_t>(
+            (std::numeric_limits<int32_t>::max() - 1024) / 2
+        )
+    ) {
+        return false;
+    }
+
+    size_t capacity = total_size * 2 + 1024;
+
+    std::vector<char> buffer(capacity, '\0');
+
+    int32_t written = llama_chat_apply_template(
+        tmpl,
+        llama_messages.data(),
+        static_cast<int32_t>(llama_messages.size()),
+        true,
+        buffer.data(),
+        static_cast<int32_t>(buffer.size())
+    );
+
+    if (written > static_cast<int32_t>(buffer.size())) {
+        if (written == INT32_MAX) {
+            return false;
+        }
+
+        buffer.assign(
+            static_cast<size_t>(written) + 1,
+            '\0'
+        );
+
+        written = llama_chat_apply_template(
+            tmpl,
+            llama_messages.data(),
+            static_cast<int32_t>(llama_messages.size()),
+            true,
+            buffer.data(),
+            static_cast<int32_t>(buffer.size())
+        );
+    }
+
+    if (
+        written > 0 &&
+        static_cast<size_t>(written) < buffer.size()
+    ) {
+        formatted_prompt.assign(
+            buffer.data(),
+            static_cast<size_t>(written)
+        );
+
+        return !formatted_prompt.empty();
+    }
+
+    LOGE(
+        "Multi-message chat template failed (%d).",
+        written
+    );
+
+    return false;
+}
+
+// Backward-compatible single-user-message interface.
 static bool formatPrompt(
     const llama_model* source_model,
     const std::string& user_prompt,
     std::string& formatted_prompt
 ) {
-    if (source_model == nullptr || user_prompt.empty()) {
+    if (user_prompt.empty()) {
+        return false;
+    }
+
+    const std::vector<ChatPromptMessage> messages = {
+        {"user", user_prompt}
+    };
+
+    return formatPrompt(
+        source_model,
+        messages,
+        formatted_prompt
+    );
+}
+
         return false;
     }
 
