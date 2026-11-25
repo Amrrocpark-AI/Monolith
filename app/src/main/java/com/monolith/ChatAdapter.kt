@@ -2610,16 +2610,15 @@ class ChatAdapter(
     }
 
     override fun onCurrentListChanged(
-    previousList: List<ChatMessage>,
-    currentList: List<ChatMessage>
-) {
-    super.onCurrentListChanged(previousList, currentList)
-    onMessagesChanged?.invoke(currentList)
-}
+        previousList: List<ChatMessage>,
+        currentList: List<ChatMessage>
+    ) {
+        super.onCurrentListChanged(previousList, currentList)
+        onMessagesChanged?.invoke(currentList)
+    }
 
-fun updateMessages(messages: List<ChatMessage>) {
-    submitList(messages.toList())
-}
+    fun updateMessages(messages: List<ChatMessage>) {
+        submitList(messages.toList())
     }
 
     private fun roundedBackground(
