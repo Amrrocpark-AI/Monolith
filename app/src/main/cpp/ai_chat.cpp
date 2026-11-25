@@ -616,9 +616,6 @@ static bool formatPrompt(
 
     formatted_prompt = user_prompt;
 
-    return true;
-}
-
 // =========================================================
 // Tokenization
 // =========================================================
