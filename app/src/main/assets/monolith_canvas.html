@@ -2057,6 +2057,23 @@ function resetConversationCanvasState() {
 }
       // استقبال الرسائل الحقيقية من Android
       window.MonolithCards = {
+    deleteConversationState(conversationId) {
+        const id = String(conversationId || '').trim();
+
+        if (!id) return false;
+
+        try {
+            const storageKey =
+                STORAGE_KEY + '_CONVERSATION_' +
+                encodeURIComponent(id);
+
+            localStorage.removeItem(storageKey);
+
+            return true;
+        } catch (_) {
+            return false;
+        }
+    },
         setMessages(messages, conversationId) {
     if (!Array.isArray(messages)) return;
 
