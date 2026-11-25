@@ -1897,8 +1897,13 @@ class ChatActivity : AppCompatActivity() {
             pendingRequests[statusMessage.id] = PendingRequest(conversationId, statusMessage)
         }
 
-        messageList.add(statusMessage)
-        chatAdapter.updateMessages(messageList)
+                messageList.add(statusMessage)
+
+        messageCardBridge?.submitMessages(
+            messageList.toList(),
+            conversationId
+        )
+
         scrollToBottom()
 
         val historySnapshot = messageList
