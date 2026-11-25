@@ -145,25 +145,32 @@ private fun flushPendingConversationStateDeletions() {
 
         messages.forEachIndexed { index, message ->
 
-            val isUser = message.role == MessageRole.USER
+            val senderType = message.senderType
+
+            val entityType = when (senderType) {
+                MessageSenderType.SELF -> "self"
+                MessageSenderType.PEER -> "peer"
+                MessageSenderType.AI -> "ai"
+            }
+
+            val owner = when (senderType) {
+                MessageSenderType.SELF -> "mine"
+                MessageSenderType.PEER -> "peer"
+                MessageSenderType.AI -> "ai"
+            }
+
+            val title = when (senderType) {
+                MessageSenderType.SELF -> "أنت"
+                MessageSenderType.PEER -> "PEER"
+                MessageSenderType.AI -> message.modelName ?: "MONOLITH"
+            }
 
             val card = JSONObject().apply {
                 put("id", "message-${message.id}")
                 put("messageId", message.id)
-
-                put(
-                    "entityType",
-                    if (isUser) "self" else "ai"
-                )
-
-                put(
-                    "owner",
-                    if (isUser) "mine" else "ai"
-                )
-
-                put("title", if (isUser) "أنت" else {
-                    message.modelName ?: "MONOLITH"
-                })
+                put("entityType", entityType)
+                put("owner", owner)
+                put("title", title)
 
                 put("text", message.content)
 
