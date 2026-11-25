@@ -2552,8 +2552,6 @@ class ChatActivity : AppCompatActivity() {
         if (previousTheme != themeColorHex && ::chatAdapter.isInitialized) {
             initializeAdapter()
             if (isConversationHistoryVisible()) refreshConversationHistory()
-        } else if (::chatAdapter.isInitialized) {
-            applyAdapterVisualConfig()
         }
 
         val bgImagePath = settings.getString("AppBackgroundImage", null)
