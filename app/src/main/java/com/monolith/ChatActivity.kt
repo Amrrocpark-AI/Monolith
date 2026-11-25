@@ -805,7 +805,7 @@ class ChatActivity : AppCompatActivity() {
 
                         messageList.clear()
         recyclerViewChat.visibility = View.INVISIBLE
-        messageCardBridge?.webView?.visibility = View.INVISIBLE
+        messageCardBridge?.invalidatePendingDisplay()
         hideKeyboard()
         clearInitiatives()
         resetInputHint()
