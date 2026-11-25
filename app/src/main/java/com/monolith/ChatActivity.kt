@@ -504,22 +504,6 @@ class ChatActivity : AppCompatActivity() {
 )
     }
 
-    private fun applyAdapterVisualConfig() {
-        if (!::chatAdapter.isInitialized) return
-        chatAdapter.applyVisualConfig(
-            selfColorHex = "#f8fafc",
-            peerColorHex = themeColorHex,
-            aiColorHex = "#ef4444",
-            bgPresetId = "default",
-            cardOpacity = 0.98f,
-            dynamicEnabled = true,
-            dynamicState = "on",
-            dynamicPattern = "pulse",
-            dynamicSpeedSec = 8f,
-            dynamicIntensityPercent = 20
-        )
-    }
-
     private fun createTopBarButton(iconResource: Int, tint: Int): ImageButton {
         return ImageButton(this).apply {
             setImageResource(iconResource)
