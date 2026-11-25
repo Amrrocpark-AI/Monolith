@@ -1282,13 +1282,25 @@ class ChatAdapter(
             }
             currentMessage = msg
 
-            val isUser = msg.role == MessageRole.USER
-            val entityType = if (isUser) "self" else "ai"
-            val idColor = if (isUser) identitySelfColor else identityAiColor
+                        val senderType = msg.senderType
 
-            root.gravity = if (isUser) Gravity.END else Gravity.START
+            val entityType = when (senderType) {
+                MessageSenderType.SELF -> "self"
+                MessageSenderType.PEER -> "peer"
+                MessageSenderType.AI -> "ai"
+            }
 
-            applyCardBackground(card, isUser)
+            val idColor = when (senderType) {
+                MessageSenderType.SELF -> identitySelfColor
+                MessageSenderType.PEER -> identityPeerColor
+                MessageSenderType.AI -> identityAiColor
+            }
+
+            val isSelf = senderType == MessageSenderType.SELF
+
+            root.gravity = if (isSelf) Gravity.END else Gravity.START
+
+            applyCardBackground(card, senderType)
 
             val badgeNumber = (msg.id.hashCode() and 0x7FFFFFFF) % 999 + 1
             badge.text = "#$badgeNumber"
@@ -1301,6 +1313,15 @@ class ChatAdapter(
                 dp(root.context, 8).toFloat(),
                 Color.argb(102, Color.red(idColor), Color.green(idColor), Color.blue(idColor)),
                 dp(root.context, 1)
+            )
+
+            titleText.text = when (senderType) {
+                MessageSenderType.SELF -> "YOU"
+                MessageSenderType.PEER -> "PEER"
+                MessageSenderType.AI -> "MONOLITH"
+            }
+
+            dynLayer.configure(entityType)
             )
 
             titleText.text = if (isUser) "YOU" else "MONOLITH"
