@@ -448,11 +448,10 @@ class ChatActivity : AppCompatActivity() {
                 }
                      }
         )
-        applyAdapterVisualConfig()
+                applyAdapterVisualConfig()
         recyclerViewChat.adapter = chatAdapter
-                chatAdapter.updateMessages(messageList)
 
-                messageCardBridge = MessageCardBridge(this) { action, messageId, _ ->
+        messageCardBridge = MessageCardBridge(this) { action, messageId, _ ->
             findMessage(messageId)?.let { message ->
                 when (action) {
                     
