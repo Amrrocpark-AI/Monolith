@@ -455,7 +455,11 @@ class ChatActivity : AppCompatActivity() {
                 messageCardBridge = MessageCardBridge(this) { action, messageId, _ ->
             findMessage(messageId)?.let { message ->
                 when (action) {
+                    
                     "edit" -> showEditDialog(message)
+
+                    "delete" -> confirmDeleteMessage(message)
+                    
 
                     "reaction" -> {
                         val newReaction = when (message.reactionType) {
