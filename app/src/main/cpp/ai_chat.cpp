@@ -1562,7 +1562,7 @@ Java_com_monolith_ModelManager_nativeGenerate(
 
         return makeUtf8Result(env, output);
 
-    } catch (...) {
+        } catch (...) {
         LOGE("Unexpected generation exception.");
 
                 return makeResult(
@@ -1571,12 +1571,10 @@ Java_com_monolith_ModelManager_nativeGenerate(
         );
     }
 */
-}
 
 // =========================================================
 // Multi-Message Conversation Generation
 // =========================================================
-
 extern "C" JNIEXPORT jstring JNICALL
 
 Java_com_monolith_ModelManager_nativeGenerateConversation(
