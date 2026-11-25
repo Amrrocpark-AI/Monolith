@@ -2133,11 +2133,15 @@ class ChatActivity : AppCompatActivity() {
                     conversationId
                 )
 
-            } else if (!isThinking && !isLoadingMessages) {
+                        } else if (!isThinking && !isLoadingMessages) {
                 messageList.add(updated)
                 messageList.sortBy { it.timestamp }
-                chatAdapter.updateMessages(messageList)
-            }
+
+                messageCardBridge?.submitMessages(
+                    messageList.toList(),
+                    conversationId
+                )
+                        }
         }
 
         if (!isThinking) {
