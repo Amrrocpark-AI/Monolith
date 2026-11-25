@@ -1242,55 +1242,66 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun loadMessagesFromDb(conversationId: String = currentConversationId) {
-        val generation = ++loadGeneration
-        isLoadingMessages = true
-        updateSendButtonState()
+    val generation = ++loadGeneration
+    isLoadingMessages = true
+    updateSendButtonState()
 
-        lifecycleScope.launch {
-            try {
-                val loadedMessages = withContext(Dispatchers.IO) {
-                    databaseMutex.withLock {
-                        appDatabase.getMessagesForConversation(conversationId).map { it.toChatMessage() }
-                    }
-                }
+    lifecycleScope.launch {
+        var loadSucceeded = false
 
-                if (generation != loadGeneration || conversationId != currentConversationId) {
-                    return@launch
+        try {
+            val loadedMessages = withContext(Dispatchers.IO) {
+                databaseMutex.withLock {
+                    appDatabase.getMessagesForConversation(conversationId).map { it.toChatMessage() }
                 }
-
-                messageList.clear()
-                messageList.addAll(loadedMessages)
-
-                val placeholders = synchronized(requestLock) {
-                    pendingRequests.values
-                        .filter { it.conversationId == conversationId }
-                        .map { it.placeholder }
-                }
-                var addedPlaceholder = false
-                placeholders.forEach { placeholder ->
-                    if (messageList.none { it.id == placeholder.id }) {
-                        messageList.add(placeholder)
-                        addedPlaceholder = true
-                    }
-                }
-                if (addedPlaceholder) messageList.sortBy { it.timestamp }
-
-                chatAdapter.updateMessages(messageList)
-                if (messageList.isNotEmpty()) scrollToBottom()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                if (generation == loadGeneration) {
-                    showToast("تعذر تحميل سجل المحادثة: ${e.message}")
-                }
-            } finally {
-                if (generation == loadGeneration) {
-                    recyclerViewChat.visibility = View.VISIBLE
-                    isLoadingMessages = false
-                    updateSendButtonState()
             }
+
+            if (generation != loadGeneration || conversationId != currentConversationId) {
+                return@launch
+            }
+
+            messageList.clear()
+            messageList.addAll(loadedMessages)
+
+            val placeholders = synchronized(requestLock) {
+                pendingRequests.values
+                    .filter { it.conversationId == conversationId }
+                    .map { it.placeholder }
+            }
+
+            var addedPlaceholder = false
+
+            placeholders.forEach { placeholder ->
+                if (messageList.none { it.id == placeholder.id }) {
+                    messageList.add(placeholder)
+                    addedPlaceholder = true
+                }
+            }
+
+            if (addedPlaceholder) messageList.sortBy { it.timestamp }
+
+            chatAdapter.updateMessages(messageList)
+            loadSucceeded = true
+
+            if (messageList.isNotEmpty()) scrollToBottom()
+
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            if (generation == loadGeneration) {
+                showToast("لم تكتمل قراءة المحادثة. بياناتها الأصلية لم تُحذف.")
+            }
+        } finally {
+            if (generation == loadGeneration) {
+                if (loadSucceeded) {
+                    recyclerViewChat.visibility = View.VISIBLE
+                }
+
+                isLoadingMessages = false
+                updateSendButtonState()
             }
         }
+    }
     }
 
     private fun saveMessageToDb(
