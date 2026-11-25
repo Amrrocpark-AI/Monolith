@@ -1629,16 +1629,25 @@ let activeConversationId = null;
       }
 
       function clampCardsIntoViewport() {
-        const vw = window.innerWidth || 360;
-        const vh = window.innerHeight || 640;
-        const cardW = 320;
-        const cardH = 160;
-        cards.forEach(card => {
-          if (typeof card.x !== 'number' || isNaN(card.x)) card.x = 20;
-          if (typeof card.y !== 'number' || isNaN(card.y)) card.y = 20;
-          card.x = Math.max(10, Math.min(vw - cardW - 10, card.x));
-          card.y = Math.max(10, Math.min(vh - cardH - 10, card.y));
-        });
+      const vw = Math.max(1, workspace.clientWidth || window.innerWidth || 360);
+      const vh = Math.max(1, workspace.clientHeight || window.innerHeight || 640);
+
+      cards.forEach(card => {
+      const cardEl = document.getElementById(card.id);
+      const cardW = cardEl
+      ? Math.max(1, cardEl.offsetWidth)
+      : Math.min(320, Math.max(1, vw - 20));
+      const cardH = cardEl ? Math.max(1, cardEl.offsetHeight) : 160;
+
+      const maxX = Math.max(10, vw - cardW - 10);
+      const maxY = Math.max(10, vh - cardH - 10);
+
+    if (typeof card.x !== 'number' || !Number.isFinite(card.x)) card.x = 20;
+    if (typeof card.y !== 'number' || !Number.isFinite(card.y)) card.y = 20;
+
+    card.x = Math.max(10, Math.min(maxX, card.x));
+    card.y = Math.max(10, Math.min(maxY, card.y));
+  });
       }
 
             function autoLayoutCards() {
