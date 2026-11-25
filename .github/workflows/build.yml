@@ -85,7 +85,7 @@ jobs:
         echo "Verifying APK signature..."
         "$APKSIGNER" verify --verbose --print-certs "$APK"
 
-                echo "Checking APK package and Android versions..."
+        echo "Checking APK package and Android versions..."
         "$AAPT" dump badging "$APK" > "$RUNNER_TEMP/apk-badging.txt"
 
         if ! grep -Eq "^package: name='com\.monolith'([[:space:]]|$)" \
@@ -118,9 +118,6 @@ jobs:
             exit 1
           fi
         done
-
-        echo "APK validation passed."
-        sha256sum "$APK"
 
         echo "APK validation passed."
         sha256sum "$APK"
