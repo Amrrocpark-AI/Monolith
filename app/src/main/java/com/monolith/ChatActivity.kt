@@ -966,10 +966,14 @@ class ChatActivity : AppCompatActivity() {
     var deletionCommitted = false
 
     try {
-                val removed = withContext(Dispatchers.IO) {
-                    databaseMutex.withLock {
-                        appDatabase.deleteConversation(conversationId)
+        val removed = withContext(Dispatchers.IO) {
+         databaseMutex.withLock {
+           appDatabase.deleteConversation(conversationId)
                     }
+                }
+
+                if (removed) {
+                    deletionCommitted = true
                 }
 
                 if (removed && wasCurrent && conversationId == currentConversationId) {
