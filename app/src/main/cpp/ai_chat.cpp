@@ -521,7 +521,6 @@ static bool formatPrompt(
         formatted_prompt
     );
 }
-    // No template usually means a base/completion model.
     // Never force ChatML onto a model whose format is unknown.
     if (tmpl == nullptr || tmpl[0] == '\0') {
         
