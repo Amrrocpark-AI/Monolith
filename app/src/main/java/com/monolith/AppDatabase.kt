@@ -2549,7 +2549,6 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
             db.endTransaction()
         }
     }
-    }
 
     fun deleteConversationMessages(conversationId: String) {
         // حماية: لا تُمسح رسائل المحادثة الرئيسية بهذه الدالة. تُرمى قبل فتح القاعدة أو أي Transaction.
