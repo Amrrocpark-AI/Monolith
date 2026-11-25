@@ -3,6 +3,7 @@ package com.monolith
 
 import android.content.Context
 import android.graphics.Color
+import android.view.View
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -28,8 +29,12 @@ class MessageCardBridge(
     // يمنع إعادة إرسال بيانات العرض بعد إلغاء صلاحيتها.
     private var hasValidPendingDisplay = false
 
-    // يحتفظ بطلبات حذف تخصيصات المحادثات حتى تصبح صفحة العرض جاهزة.
-    private val pendingConversationStateDeletions = LinkedHashSet<String>()
+    // يتحكم في ظهور مساحة العمل بطلب صريح من المستخدم.
+    private var workspaceVisible = false
+
+    // يحتفظ بطلبات حذف تخصيصات المحادثات حتى تصبح الصفحة جاهزة.
+    private val pendingConversationStateDeletions =
+        LinkedHashSet<String>()
 
     val webView: WebView = WebView(context)
 
@@ -55,7 +60,7 @@ class MessageCardBridge(
                 ) {
                     super.onPageFinished(view, url)
 
-                                        if (url?.endsWith("monolith_canvas.html") == true) {
+                    if (url?.endsWith("monolith_canvas.html") == true) {
                         pageReady = true
                         flushPendingConversationStateDeletions()
                         sendPendingMessages()
@@ -81,52 +86,73 @@ class MessageCardBridge(
 
         val generation = displayGeneration
 
-                webView.post {
+        webView.post {
             if (pageReady) {
                 flushPendingConversationStateDeletions()
             }
 
             sendPendingMessages(generation)
-                }
-    }
-fun deleteConversationState(conversationId: String) {
-    val safeConversationId = conversationId.trim()
-
-    if (safeConversationId.isBlank()) return
-
-    webView.post {
-        pendingConversationStateDeletions.add(safeConversationId)
-
-        if (pageReady) {
-            flushPendingConversationStateDeletions()
         }
     }
-}
 
-private fun flushPendingConversationStateDeletions() {
-    if (!pageReady || pendingConversationStateDeletions.isEmpty()) return
+    fun deleteConversationState(conversationId: String) {
+        val safeConversationId = conversationId.trim()
 
-        val conversationIds = pendingConversationStateDeletions.toList()
+        if (safeConversationId.isBlank()) return
 
-    conversationIds.forEach { conversationId ->
-        val javascript =
-            "window.MonolithCards && " +
-            "typeof window.MonolithCards.deleteConversationState === 'function' " +
-            "? window.MonolithCards.deleteConversationState(" +
-            "${JSONObject.quote(conversationId)}) : false;"
+        webView.post {
+            pendingConversationStateDeletions.add(safeConversationId)
 
-        webView.evaluateJavascript(javascript) { result ->
-            if (result == "true") {
-                pendingConversationStateDeletions.remove(conversationId)
+            if (pageReady) {
+                flushPendingConversationStateDeletions()
             }
         }
     }
-}
-    // إلغاء صلاحية أي عملية عرض سابقة عند الانتقال بين المحادثات.
+
+    private fun flushPendingConversationStateDeletions() {
+        if (!pageReady || pendingConversationStateDeletions.isEmpty()) {
+            return
+        }
+
+        val conversationIds =
+            pendingConversationStateDeletions.toList()
+
+        conversationIds.forEach { conversationId ->
+            val javascript =
+                "window.MonolithCards && " +
+                "typeof window.MonolithCards.deleteConversationState === 'function' " +
+                "? window.MonolithCards.deleteConversationState(" +
+                "${JSONObject.quote(conversationId)}) : false;"
+
+            webView.evaluateJavascript(javascript) { result ->
+                if (result == "true") {
+                    pendingConversationStateDeletions.remove(conversationId)
+                }
+            }
+        }
+    }
+
+    // إلغاء صلاحية العرض السابق عند الانتقال بين المحادثات.
     fun invalidatePendingDisplay() {
         displayGeneration++
         hasValidPendingDisplay = false
-        webView.visibility = android.view.View.INVISIBLE
+        workspaceVisible = false
+        webView.visibility = View.INVISIBLE
+    }
+
+    // فتح أو إخفاء مساحة العمل بطلب صريح من ChatActivity.
+    fun setWorkspaceVisible(visible: Boolean) {
+        webView.post {
+            workspaceVisible = visible
+
+            if (!visible) {
+                displayGeneration++
+                webView.visibility = View.INVISIBLE
+                return@post
+            }
+
+            sendPendingMessages()
+        }
     }
 
     private fun sendPendingMessages(
@@ -188,7 +214,10 @@ private fun flushPendingConversationStateDeletions() {
                 put("role", message.role.name)
                 put("timestamp", message.timestamp)
                 put("isPinned", message.isPinned)
-                put("reactionType", message.reactionType ?: JSONObject.NULL)
+                put(
+                    "reactionType",
+                    message.reactionType ?: JSONObject.NULL
+                )
                 put("isThinking", message.isThinking)
                 put("isStreaming", message.isStreaming)
                 put("status", message.status.name)
@@ -221,13 +250,17 @@ private fun flushPendingConversationStateDeletions() {
 
         webView.evaluateJavascript(javascript) { result ->
 
-            // لا نسمح لنتيجة قديمة بإظهار WebView.
+            // لا نسمح لنتيجة قديمة بتغيير حالة ظهور مساحة العمل.
             if (
                 result == "true" &&
                 generation == displayGeneration &&
                 hasValidPendingDisplay
             ) {
-                webView.visibility = android.view.View.INVISIBLE
+                webView.visibility = if (workspaceVisible) {
+                    View.VISIBLE
+                } else {
+                    View.INVISIBLE
+                }
             }
         }
     }
@@ -257,6 +290,7 @@ private fun flushPendingConversationStateDeletions() {
     fun release() {
         displayGeneration++
         hasValidPendingDisplay = false
+        workspaceVisible = false
         pageReady = false
 
         webView.stopLoading()
