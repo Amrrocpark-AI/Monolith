@@ -949,7 +949,7 @@ private external fun nativeUnloadModel()
         return generateResponse(prompt, agentId)
     }
 
-    suspend fun generateResponse(
+        suspend fun generateResponse(
         prompt: String,
         agentId: Int = 0
     ): String {
@@ -983,6 +983,78 @@ private external fun nativeUnloadModel()
                     throw e
                 } catch (e: Exception) {
                     Log.e(TAG, "Text generation failed", e)
+                    throw e
+                }
+            }
+        }
+    }
+
+    // =========================================================
+    // Multi-message conversation generation
+    // =========================================================
+
+    suspend fun generateConversation(
+        roles: Array<String>,
+        contents: Array<String>,
+        agentId: Int = 0
+    ): String {
+
+        return withContext(Dispatchers.IO) {
+            engineMutex.withLock {
+                try {
+                    check(nativeEngineReady) {
+                        "Native engine is unavailable"
+                    }
+
+                    check(!closed) {
+                        "Model manager is closed"
+                    }
+
+                    check(textModelLoaded) {
+                        "Text model is not loaded"
+                    }
+
+                    require(agentId >= 0) {
+                        "Invalid agent ID"
+                    }
+
+                    require(roles.isNotEmpty()) {
+                        "Conversation history is empty"
+                    }
+
+                    require(roles.size == contents.size) {
+                        "Conversation roles and contents do not match"
+                    }
+
+                    require(
+                        roles.all {
+                            it == "system" ||
+                            it == "user" ||
+                            it == "assistant" ||
+                            it == "tool"
+                        }
+                    ) {
+                        "Invalid conversation role"
+                    }
+
+                    require(contents.all { it.isNotBlank() }) {
+                        "Conversation contains an empty message"
+                    }
+
+                    nativeGenerateConversation(
+                        roles,
+                        contents,
+                        agentId
+                    )
+
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.e(
+                        TAG,
+                        "Conversation generation failed",
+                        e
+                    )
                     throw e
                 }
             }
