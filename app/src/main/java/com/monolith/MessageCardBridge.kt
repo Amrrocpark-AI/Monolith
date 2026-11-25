@@ -82,9 +82,13 @@ class MessageCardBridge(
 
         val generation = displayGeneration
 
-        webView.post {
+                webView.post {
+            if (pageReady) {
+                flushPendingConversationStateDeletions()
+            }
+
             sendPendingMessages(generation)
-        }
+                }
     }
 fun deleteConversationState(conversationId: String) {
     val safeConversationId = conversationId.trim()
