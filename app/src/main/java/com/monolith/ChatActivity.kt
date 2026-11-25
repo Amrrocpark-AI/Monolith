@@ -974,9 +974,8 @@ class ChatActivity : AppCompatActivity() {
     val remaining = withContext(Dispatchers.IO) {
         appDatabase.getAllConversations()
     }
-                    }
 
-                    if (remaining.isNotEmpty()) {
+    if (remaining.isNotEmpty()) {
                         openConversation(remaining.first().id)
                     } else {
                         withContext(Dispatchers.IO) {
