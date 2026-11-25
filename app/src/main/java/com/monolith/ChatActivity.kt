@@ -825,10 +825,13 @@ class ChatActivity : AppCompatActivity() {
                 val title = withContext(Dispatchers.IO) {
                     appDatabase.getConversationById(conversationId)?.title
                 }
-                if (conversationId == currentConversationId) {
+                                if (
+                    conversationId == currentConversationId &&
+                    !deletedConversationIds.contains(conversationId)
+                ) {
                     tvCurrentConversation.text =
                         if (title.isNullOrBlank()) DEFAULT_CONVERSATION_TITLE else title
-                }
+                                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
