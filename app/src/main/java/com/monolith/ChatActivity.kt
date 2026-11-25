@@ -1319,9 +1319,13 @@ class ChatActivity : AppCompatActivity() {
                 }
             }
 
-            if (addedPlaceholder) messageList.sortBy { it.timestamp }
+                        if (addedPlaceholder) messageList.sortBy { it.timestamp }
 
-            chatAdapter.updateMessages(messageList)
+            messageCardBridge?.submitMessages(
+                messageList.toList(),
+                conversationId
+            )
+
             loadSucceeded = true
 
             if (messageList.isNotEmpty()) scrollToBottom()
@@ -1334,10 +1338,6 @@ class ChatActivity : AppCompatActivity() {
             }
         } finally {
             if (generation == loadGeneration) {
-                if (loadSucceeded) {
-                    recyclerViewChat.visibility = View.VISIBLE
-                }
-
                 isLoadingMessages = false
                 updateSendButtonState()
             }
