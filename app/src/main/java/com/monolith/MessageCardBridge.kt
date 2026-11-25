@@ -29,9 +29,6 @@ class MessageCardBridge(
     // يمنع إعادة إرسال بيانات العرض بعد إلغاء صلاحيتها.
     private var hasValidPendingDisplay = false
 
-    // يتحكم في ظهور مساحة العمل بطلب صريح من المستخدم.
-    private var workspaceVisible = false
-
     // يحتفظ بطلبات حذف تخصيصات المحادثات حتى تصبح الصفحة جاهزة.
     private val pendingConversationStateDeletions =
         LinkedHashSet<String>()
@@ -136,23 +133,7 @@ class MessageCardBridge(
     fun invalidatePendingDisplay() {
         displayGeneration++
         hasValidPendingDisplay = false
-        workspaceVisible = false
         webView.visibility = View.INVISIBLE
-    }
-
-    // فتح أو إخفاء مساحة العمل بطلب صريح من ChatActivity.
-    fun setWorkspaceVisible(visible: Boolean) {
-        webView.post {
-            workspaceVisible = visible
-
-            if (!visible) {
-                displayGeneration++
-                webView.visibility = View.INVISIBLE
-                return@post
-            }
-
-            sendPendingMessages()
-        }
     }
 
     private fun sendPendingMessages(
@@ -250,17 +231,13 @@ class MessageCardBridge(
 
         webView.evaluateJavascript(javascript) { result ->
 
-            // لا نسمح لنتيجة قديمة بتغيير حالة ظهور مساحة العمل.
+            // إظهار HTML فقط بعد نجاح استقبال الرسائل الحالية.
             if (
                 result == "true" &&
                 generation == displayGeneration &&
                 hasValidPendingDisplay
             ) {
-                webView.visibility = if (workspaceVisible) {
-                    View.VISIBLE
-                } else {
-                    View.INVISIBLE
-                }
+                webView.visibility = View.VISIBLE
             }
         }
     }
@@ -290,7 +267,6 @@ class MessageCardBridge(
     fun release() {
         displayGeneration++
         hasValidPendingDisplay = false
-        workspaceVisible = false
         pageReady = false
 
         webView.stopLoading()
