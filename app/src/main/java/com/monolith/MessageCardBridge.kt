@@ -112,25 +112,6 @@ class MessageCardBridge(
         }
     }
 
-        val safeMessageId = messageId.trim()
-
-        if (safeMessageId.isBlank()) return
-
-        webView.post {
-            if (!pageReady || !hasValidPendingDisplay) return@post
-
-            val cardId = "message-$safeMessageId"
-
-            val javascript =
-                "window.MonolithCards && " +
-                "typeof window.MonolithCards.scrollToMessage === 'function' " +
-                "? window.MonolithCards.scrollToMessage(" +
-                "${JSONObject.quote(cardId)}) : false;"
-
-            webView.evaluateJavascript(javascript, null)
-        }
-    }
-
     fun deleteConversationState(conversationId: String) {
         val safeConversationId = conversationId.trim()
 
