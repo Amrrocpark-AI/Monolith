@@ -439,14 +439,6 @@ class ChatActivity : AppCompatActivity() {
                 }
             },
                         themeColorHex = themeColorHex,
-                        onMessagesChanged = { messages ->
-                if (messages == messageList) {
-                    messageCardBridge?.submitMessages(
-                        messages,
-                        currentConversationId
-                    )
-                }
-                     }
         )
                 applyAdapterVisualConfig()
         recyclerViewChat.adapter = chatAdapter
