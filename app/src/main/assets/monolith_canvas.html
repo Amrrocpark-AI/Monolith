@@ -1973,9 +1973,54 @@ let activeConversationId = null;
             const attachmentsEl = document.createElement('div');
             attachmentsEl.className = 'msg-attachments';
 
+                        let attachmentScroll = null;
+
             attachmentsEl.addEventListener('pointerdown', (e) => {
+              e.preventDefault();
               e.stopPropagation();
+
+              attachmentScroll = {
+                pointerId: e.pointerId,
+                startX: e.clientX,
+                startScrollLeft: attachmentsEl.scrollLeft
+              };
+
+              attachmentsEl.setPointerCapture(e.pointerId);
             });
+
+            attachmentsEl.addEventListener('pointermove', (e) => {
+              if (
+                !attachmentScroll ||
+                attachmentScroll.pointerId !== e.pointerId
+              ) return;
+
+              e.preventDefault();
+              e.stopPropagation();
+
+              const deltaX = e.clientX - attachmentScroll.startX;
+
+              attachmentsEl.scrollLeft =
+                attachmentScroll.startScrollLeft - deltaX;
+            });
+
+            const finishAttachmentScroll = (e) => {
+              if (
+                !attachmentScroll ||
+                attachmentScroll.pointerId !== e.pointerId
+              ) return;
+
+              attachmentScroll = null;
+            };
+
+            attachmentsEl.addEventListener(
+              'pointerup',
+              finishAttachmentScroll
+            );
+
+            attachmentsEl.addEventListener(
+              'pointercancel',
+              finishAttachmentScroll
+            );
 
             attachments.forEach((uri) => {
               if (typeof uri !== 'string' || !uri.trim()) return;
