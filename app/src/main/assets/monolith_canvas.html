@@ -1651,25 +1651,26 @@ let activeConversationId = null;
       }
 
             function autoLayoutCards() {
-        const vw = window.innerWidth || 360;
-        const cardW = 320;
-        const isMobile = vw < 768;
+  const vw = Math.max(1, workspace.clientWidth || window.innerWidth || 360);
+  const cardW = Math.min(320, Math.max(1, vw - 20));
+  const isMobile = vw < 768;
+  const gap = 20;
 
-        const columns = isMobile
-          ? 1
-          : Math.max(1, Math.floor((vw - 40) / 340));
+  const columns = isMobile
+    ? 1
+    : Math.max(1, Math.floor((vw - 40) / (cardW + gap)));
 
-        cards.forEach((card, index) => {
-          const column = index % columns;
-          const row = Math.floor(index / columns);
+  cards.forEach((card, index) => {
+    const column = index % columns;
+    const row = Math.floor(index / columns);
 
-          card.x = isMobile
-            ? Math.max(15, Math.floor((vw - cardW) / 2))
-            : 20 + (column * 340);
+    card.x = isMobile
+      ? Math.max(10, Math.floor((vw - cardW) / 2))
+      : 20 + (column * (cardW + gap));
 
-          card.y = 56 + (row * 190);
-        });
-    }
+    card.y = 56 + (row * 190);
+  });
+            }
 
       function showAlarmToast(cableId, title, note) {
         const toast = document.createElement('div');
