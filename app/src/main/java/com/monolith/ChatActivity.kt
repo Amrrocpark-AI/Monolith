@@ -1447,10 +1447,14 @@ class ChatActivity : AppCompatActivity() {
                                 it.id == message.id
                             }
 
-                            if (index >= 0) {
+                                                        if (index >= 0) {
                                 messageList.removeAt(index)
-                                chatAdapter.updateMessages(messageList)
-                            }
+
+                                messageCardBridge?.submitMessages(
+                                    messageList.toList(),
+                                    conversationId
+                                )
+                                                        }
                         }
 
                         showToast("تم حذف الرسالة")
