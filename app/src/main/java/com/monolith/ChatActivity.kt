@@ -1634,8 +1634,13 @@ class ChatActivity : AppCompatActivity() {
                 PendingRequest(conversationId, statusMessage)
         }
 
-        messageList.add(statusMessage)
-        chatAdapter.updateMessages(messageList)
+                messageList.add(statusMessage)
+
+        messageCardBridge?.submitMessages(
+            messageList.toList(),
+            conversationId
+        )
+
         scrollToBottom()
 
         val job = lifecycleScope.launch {
