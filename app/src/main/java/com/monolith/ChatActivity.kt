@@ -1283,9 +1283,13 @@ class ChatActivity : AppCompatActivity() {
                 }
             }
 
-            if (generation != loadGeneration || conversationId != currentConversationId) {
+                        if (
+                generation != loadGeneration ||
+                conversationId != currentConversationId ||
+                deletedConversationIds.contains(conversationId)
+            ) {
                 return@launch
-            }
+                        }
 
             messageList.clear()
             messageList.addAll(loadedMessages)
