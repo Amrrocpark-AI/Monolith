@@ -2373,11 +2373,8 @@ class ChatActivity : AppCompatActivity() {
                 val listView = ListView(this@ChatActivity)
                 listView.adapter = ArrayAdapter(this@ChatActivity, android.R.layout.simple_list_item_1, pinnedMessages.map { it.content })
                 listView.setOnItemClickListener { _, _, position, _ ->
-                    val id = pinnedMessages[position].id
-                    val index = messageList.indexOfFirst { it.id == id }
-                    if (index >= 0) {
-                        recyclerViewChat.smoothScrollToPosition(index)
-                    }
+                                        val id = pinnedMessages[position].id
+                    messageCardBridge?.scrollToMessage(id)
                     dialog.dismiss()
                 }
                 dialog.setContentView(listView)
