@@ -1322,11 +1322,6 @@ class ChatAdapter(
             }
 
             dynLayer.configure(entityType)
-            )
-
-            titleText.text = if (isUser) "YOU" else "MONOLITH"
-
-            dynLayer.configure(entityType)
 
             if (renderedContent != msg.content) {
                 if (msg.content.isEmpty()) {
