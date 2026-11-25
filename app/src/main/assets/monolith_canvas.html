@@ -1940,11 +1940,12 @@ let activeConversationId = null;
             toolbar.style.cssText =
               'display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;position:relative;z-index:5;';
 
-            const actions = [
+                        const actions = [
               ['edit', 'تعديل'],
               ['reaction', 'تفاعل'],
               ['pin', card.isPinned ? 'إلغاء التثبيت' : 'تثبيت'],
-              ['speak', 'قراءة']
+              ['speak', 'قراءة'],
+              ['delete', 'حذف']
             ];
 
             actions.forEach(([action, label]) => {
