@@ -1097,6 +1097,203 @@ static bool readChatMessages(
 }
 
 // =========================================================
+// Shared Text Generation Engine
+// =========================================================
+
+// The caller must hold engine_mutex before calling this function.
+static jstring generateFromFormattedPrompt(
+    JNIEnv* env,
+    const std::string& formatted_prompt,
+    jint agent_id
+) {
+    if (model == nullptr || vocab == nullptr) {
+        return makeResult(
+            env,
+            "النموذج غير محمل."
+        );
+    }
+
+    if (
+        agent_id < 0 ||
+        static_cast<size_t>(agent_id) >= contexts.size()
+    ) {
+        return makeResult(
+            env,
+            "معرف الوكيل غير صالح."
+        );
+    }
+
+    if (formatted_prompt.empty()) {
+        return makeResult(
+            env,
+            "النص المجهز للتوليد فارغ."
+        );
+    }
+
+    try {
+        if (!resetContext(static_cast<size_t>(agent_id))) {
+            return makeResult(
+                env,
+                "فشل إعادة تهيئة سياق الوكيل."
+            );
+        }
+
+        llama_context* ctx =
+            contexts[static_cast<size_t>(agent_id)];
+
+        if (ctx == nullptr) {
+            return makeResult(
+                env,
+                "سياق النموذج غير متاح."
+            );
+        }
+
+        const uint32_t n_ctx = llama_n_ctx(ctx);
+
+        if (n_ctx < 2) {
+            return makeResult(
+                env,
+                "سعة سياق النموذج غير صالحة."
+            );
+        }
+
+        std::vector<llama_token> tokens;
+
+        if (!tokenizePrompt(formatted_prompt, tokens)) {
+            return makeResult(
+                env,
+                "فشل تحويل النص إلى رموز."
+            );
+        }
+
+        if (
+            tokens.size() >=
+            static_cast<size_t>(n_ctx - 1)
+        ) {
+            return makeResult(
+                env,
+                "النص أطول من سعة سياق النموذج."
+            );
+        }
+
+        llama_batch prompt_batch =
+            llama_batch_get_one(
+                tokens.data(),
+                static_cast<int32_t>(tokens.size())
+            );
+
+        const int prompt_result =
+            llama_decode(ctx, prompt_batch);
+
+        if (prompt_result != 0) {
+            LOGE(
+                "Prompt decoding failed: %d",
+                prompt_result
+            );
+
+            return makeResult(
+                env,
+                "فشل معالجة النص داخل النموذج."
+            );
+        }
+
+        SamplerPtr sampler(
+            llama_sampler_chain_init(
+                llama_sampler_chain_default_params()
+            )
+        );
+
+        if (!sampler) {
+            return makeResult(
+                env,
+                "فشل إنشاء نظام التوليد."
+            );
+        }
+
+        llama_sampler* greedy =
+            llama_sampler_init_greedy();
+
+        if (greedy == nullptr) {
+            return makeResult(
+                env,
+                "فشل تهيئة خوارزمية التوليد."
+            );
+        }
+
+        llama_sampler_chain_add(
+            sampler.get(),
+            greedy
+        );
+
+        std::string output;
+
+        int current_position =
+            static_cast<int>(tokens.size());
+
+        int generated = 0;
+
+        while (
+            generated < MAX_GENERATION_TOKENS &&
+            current_position < static_cast<int>(n_ctx)
+        ) {
+            const llama_token token =
+                llama_sampler_sample(
+                    sampler.get(),
+                    ctx,
+                    -1
+                );
+
+            if (llama_vocab_is_eog(vocab, token)) {
+                break;
+            }
+
+            if (!appendTokenPiece(vocab, token, output)) {
+                LOGE("Token-to-piece conversion failed.");
+                break;
+            }
+
+            if (
+                !decodeGeneratedToken(
+                    ctx,
+                    token,
+                    current_position
+                )
+            ) {
+                LOGE("Generated token decoding failed.");
+                break;
+            }
+
+            ++current_position;
+            ++generated;
+        }
+
+        LOGI(
+            "Generation completed. Agent=%d Tokens=%d OutputBytes=%zu",
+            agent_id,
+            generated,
+            output.size()
+        );
+
+        if (output.empty()) {
+            return makeResult(
+                env,
+                "لم ينتج النموذج إجابة. تحقق من توافق قالب المحادثة والنموذج."
+            );
+        }
+
+        return makeUtf8Result(env, output);
+
+    } catch (...) {
+        LOGE("Unexpected generation exception.");
+
+        return makeResult(
+            env,
+            "حدث خطأ داخلي أثناء التوليد."
+        );
+    }
+}
+
+// =========================================================
 // Text Generation
 // =========================================================
 
