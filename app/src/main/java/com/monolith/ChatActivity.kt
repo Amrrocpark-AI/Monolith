@@ -1012,9 +1012,12 @@ class ChatActivity : AppCompatActivity() {
                 }
             } catch (e: CancellationException) {
                 throw e
-            } catch (e: Exception) {
-                deletedConversationIds.remove(conversationId)
+                        } catch (e: Exception) {
+                if (!deletionCommitted) {
+                    deletedConversationIds.remove(conversationId)
+                }
                 showToast("تعذر حذف المحادثة: ${e.message}")
+        }
             }
         }
     }
