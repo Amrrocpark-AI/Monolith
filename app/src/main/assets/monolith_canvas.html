@@ -2075,7 +2075,29 @@ function resetConversationCanvasState() {
             return false;
         }
     },
-        setMessages(messages, conversationId) {
+            },
+
+    scrollToMessage(messageId) {
+        const id = String(messageId || '').trim();
+        if (!id) return false;
+
+        const card = document.getElementById(id);
+        const workspace = document.getElementById('workspace');
+
+        if (!card || !workspace) return false;
+
+        const cardRect = card.getBoundingClientRect();
+        const workspaceRect = workspace.getBoundingClientRect();
+
+        workspace.scrollTo({
+            top: workspace.scrollTop + cardRect.top - workspaceRect.top - 20,
+            behavior: 'smooth'
+        });
+
+        return true;
+    },
+
+    setMessages(messages, conversationId) {
     if (!Array.isArray(messages)) return;
 
     const nextConversationId = String(conversationId || 'default');
