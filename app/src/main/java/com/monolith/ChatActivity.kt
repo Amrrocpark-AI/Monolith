@@ -1577,13 +1577,34 @@ class ChatActivity : AppCompatActivity() {
         scrollToBottom()
 
         if (isModelLoaded) {
-            sendToLocalModel(userMessage, conversationId)
+            sendToLocalModel(
+                userMessage,
+                conversationId,
+                fromInitiative
+            )
         } else {
-            sendToCloudModel(userMessage, conversationId, selectedModel!!, apiKey!!)
+            sendToCloudModel(
+                userMessage,
+                conversationId,
+                selectedModel!!,
+                apiKey!!
+            )
         }
     }
 
-    private fun sendToLocalModel(userMessage: ChatMessage, conversationId: String) {
+    private fun sendToLocalModel(
+        userMessage: ChatMessage,
+        conversationId: String,
+        useAgent: Boolean
+    ) {
+        val conversationSnapshot = messageList
+            .filter {
+                !it.isThinking &&
+                it.content.isNotBlank()
+            }
+            .takeLast(12)
+            .toList()
+
         val statusMessage = ChatMessage(
             role = MessageRole.AI,
             content = STATUS_LOCAL,
@@ -1592,7 +1613,8 @@ class ChatActivity : AppCompatActivity() {
         )
 
         synchronized(requestLock) {
-            pendingRequests[statusMessage.id] = PendingRequest(conversationId, statusMessage)
+            pendingRequests[statusMessage.id] =
+                PendingRequest(conversationId, statusMessage)
         }
 
         messageList.add(statusMessage)
@@ -1602,41 +1624,132 @@ class ChatActivity : AppCompatActivity() {
         val job = lifecycleScope.launch {
             try {
                 val memoriesContext = getMemoriesContext()
-                val enrichedPrompt = buildString {
-                    append(userMessage.content)
 
-                    if (memoriesContext.isNotBlank()) {
-                        append("\n\n")
-                        append(memoriesContext)
-                    }
+                val attachmentContext = buildString {
+                    val attachments =
+                        userMessage.attachmentUris.orEmpty()
 
-                    val attachments = userMessage.attachmentUris.orEmpty()
                     if (attachments.isNotEmpty()) {
                         append("\n\n")
-                        if (modelManager.isVisionModelLoaded) {
-                            append(analyzeLocalImageAttachments(attachments))
-                        } else {
-                            append("ملاحظة للنموذج: توجد صور مرفقة، لكن نموذج الرؤية المحلي غير محمّل. لا تفترض أنك شاهدت محتوى الصور.")
-                        }
-                    }
 
-                    if (INITIATIVES_IN_LOCAL_PROMPT) {
-                        append("\n\n")
-                        append(DialogInitiativeProtocol.INSTRUCTION)
+                        if (modelManager.isVisionModelLoaded) {
+                            append(
+                                analyzeLocalImageAttachments(attachments)
+                            )
+                        } else {
+                            append(
+                                "ملاحظة للنموذج: توجد صور مرفقة، لكن نموذج الرؤية المحلي غير محمّل. لا تفترض أنك شاهدت محتوى الصور."
+                            )
+                        }
                     }
                 }
 
-                val result = agentBrain.executeTask(userGoal = enrichedPrompt, agentId = activeAgentId)
+                val result: String
+
+                if (useAgent) {
+
+                    val enrichedPrompt = buildString {
+                        append(userMessage.content)
+
+                        if (memoriesContext.isNotBlank()) {
+                            append("\n\n")
+                            append(memoriesContext)
+                        }
+
+                        append(attachmentContext)
+
+                        if (INITIATIVES_IN_LOCAL_PROMPT) {
+                            append("\n\n")
+                            append(DialogInitiativeProtocol.INSTRUCTION)
+                        }
+                    }
+
+                    result = agentBrain.executeTask(
+                        userGoal = enrichedPrompt,
+                        agentId = activeAgentId
+                    )
+
+                } else {
+
+                    val persona =
+                        securePrefs.getString("persona", "default")
+                            ?: "default"
+
+                    val personaPrompt = when (persona) {
+                        "analytical" ->
+                            "أنت Monolith في وضع المحلل النقدي. حلل المعطيات بدقة وميّز بين الحقائق والافتراضات."
+
+                        "objective" ->
+                            "أنت Monolith في الوضع الموضوعي. قدم إجابات متوازنة ودقيقة دون تحيز."
+
+                        "innovator" ->
+                            "أنت Monolith في وضع الابتكار. اقترح حلولاً عملية وأفكاراً جديدة مع توضيح حدودها."
+
+                        else ->
+                            "أنت Monolith، مساعد ذكي. أجب بوضوح ودقة ولا تدّعِ تنفيذ شيء لم تنفذه."
+                    }
+
+                    val systemPrompt = buildString {
+                        append(personaPrompt)
+
+                        if (memoriesContext.isNotBlank()) {
+                            append("\n\n")
+                            append(memoriesContext)
+                        }
+
+                        if (INITIATIVES_IN_LOCAL_PROMPT) {
+                            append("\n\n")
+                            append(DialogInitiativeProtocol.INSTRUCTION)
+                        }
+                    }
+
+                    val roles = mutableListOf<String>()
+                    val contents = mutableListOf<String>()
+
+                    roles.add("system")
+                    contents.add(systemPrompt)
+
+                    conversationSnapshot.forEach { message ->
+
+                        val content = if (
+                            message.id == userMessage.id
+                        ) {
+                            userMessage.content + attachmentContext
+                        } else {
+                            message.content
+                        }
+
+                        if (content.isBlank()) return@forEach
+
+                        roles.add(
+                            if (message.role == MessageRole.USER) {
+                                "user"
+                            } else {
+                                "assistant"
+                            }
+                        )
+
+                        contents.add(content)
+                    }
+
+                    result = modelManager.generateConversation(
+                        roles = roles.toTypedArray(),
+                        contents = contents.toTypedArray(),
+                        agentId = activeAgentId
+                    )
+                }
 
                 updateRequestMessage(
                     conversationId = conversationId,
                     requestMessage = statusMessage,
                     content = result,
                     isThinking = false,
-                    parseInitiatives = true
+                    parseInitiatives = INITIATIVES_IN_LOCAL_PROMPT
                 )
+
             } catch (e: CancellationException) {
                 throw e
+
             } catch (e: Exception) {
                 updateRequestMessage(
                     conversationId = conversationId,
@@ -1644,12 +1757,17 @@ class ChatActivity : AppCompatActivity() {
                     content = "تعذر تنفيذ الطلب: ${e.message}",
                     isThinking = false
                 )
+
             } finally {
-                synchronized(requestLock) { activeLocalJobs.remove(statusMessage.id) }
+                synchronized(requestLock) {
+                    activeLocalJobs.remove(statusMessage.id)
+                }
             }
         }
 
-        synchronized(requestLock) { activeLocalJobs[statusMessage.id] = job }
+        synchronized(requestLock) {
+            activeLocalJobs[statusMessage.id] = job
+        }
     }
 
     private suspend fun analyzeLocalImageAttachments(attachments: List<String>): String {
