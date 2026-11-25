@@ -441,6 +441,7 @@ class ChatActivity : AppCompatActivity() {
                         themeColorHex = themeColorHex,
         )
                         recyclerViewChat.adapter = chatAdapter
+recyclerViewChat.visibility = View.GONE
 
         messageCardBridge = MessageCardBridge(this) { action, messageId, _ ->
             findMessage(messageId)?.let { message ->
