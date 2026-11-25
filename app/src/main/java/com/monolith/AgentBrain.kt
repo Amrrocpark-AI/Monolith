@@ -455,10 +455,8 @@ class AgentBrain(
             )
 
             val rawResponse = try {
-                withTimeout(30_000L) {
-                    model.generate(prompt, agentId)
-                }
-            } catch (e: CancellationException) {
+    model.generate(prompt, agentId)
+} catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Log.e(TAG, "Model generation failed", e)
