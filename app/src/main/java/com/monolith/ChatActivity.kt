@@ -2481,8 +2481,12 @@ class ChatActivity : AppCompatActivity() {
                                 editReason = reason.ifBlank { null },
                                 editedTimestamp = editTime
                             )
-                            messageList[index] = updated
-                            chatAdapter.updateMessages(messageList)
+                                                        messageList[index] = updated
+
+                            messageCardBridge?.submitMessages(
+                                messageList.toList(),
+                                currentConversationId
+                            )
                         }
 
                         showToast("تم تعديل الرسالة")
