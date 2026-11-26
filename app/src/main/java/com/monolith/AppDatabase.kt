@@ -1132,15 +1132,9 @@ fun beginMessageDeletionReview(
     fun getMessageDeletionReview(
         messageId: String,
         conversationId: String
-    ): Map<String, String>? {
-        return queryMaps(
-            """
-            SELECT * FROM message_deletion_reviews
-            WHERE message_id = ? AND conversation_id = ?
-            LIMIT 1
-            """.trimIndent(),
-            arrayOf(messageId, conversationId)
-        ).firstOrNull()
+    ): MessageDeletionReview? {
+        return getDeletionReviewsForConversation(conversationId)
+            .firstOrNull { it.messageId == messageId }
     }
 
     fun getDeletionReviewsForConversation(
