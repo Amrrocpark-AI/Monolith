@@ -20,7 +20,8 @@ class ProtectedConversationException(val conversationId: String) :
 class AppDatabase(context: Context) : SQLiteOpenHelper(
     context,
     "monolith_database",
-    null,    9
+    null,
+    DB_VERSION
 ) {
 
     companion object {
