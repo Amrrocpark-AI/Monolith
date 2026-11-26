@@ -1145,7 +1145,7 @@ fun beginMessageDeletionReview(
 
     fun getDeletionReviewsForConversation(
         conversationId: String
-    ): List<Map<String, String>> {
+    ): List<MessageDeletionReview> {
         return queryMaps(
             """
             SELECT * FROM message_deletion_reviews
@@ -1153,7 +1153,36 @@ fun beginMessageDeletionReview(
             ORDER BY review_started_at ASC
             """.trimIndent(),
             arrayOf(conversationId)
-        )
+        ).map { row ->
+
+            MessageDeletionReview(
+                messageId = requireNotNull(row["message_id"]) {
+                    "Missing message_id in deletion review"
+                },
+                conversationId = requireNotNull(row["conversation_id"]) {
+                    "Missing conversation_id in deletion review"
+                },
+                reviewState = MessageDeletionReviewState.valueOf(
+                    requireNotNull(row["review_state"]) {
+                        "Missing review_state in deletion review"
+                    }
+                ),
+                contentState = MessageDeletionContentState.valueOf(
+                    requireNotNull(row["content_state"]) {
+                        "Missing content_state in deletion review"
+                    }
+                ),
+                reviewStartedAt = requireNotNull(
+                    row["review_started_at"]
+                ).toLong(),
+                hideAt = row["hide_at"]?.toLong(),
+                durationMs = row["duration_ms"]?.toLong(),
+                updatedAt = requireNotNull(
+                    row["updated_at"]
+                ).toLong(),
+                finalizedAt = row["finalized_at"]?.toLong()
+            )
+        }
     }
 
     fun updatePinnedStatus(
