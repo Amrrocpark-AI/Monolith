@@ -2562,12 +2562,14 @@ function resetConversationCanvasState() {
           pCard.className = `dyn-pattern-card ${isSelected ? 'selected' : ''}`;
           pCard.innerHTML = `
             <div class="dyn-pattern-head">
-              <span style="color:${isSelected ? '#38bdf8' : '#94a3b8'};">${pat.iconSvg}</span>
+              <span class="dyn-pattern-icon" style="color:${isSelected ? '#38bdf8' : '#94a3b8'};"></span>
               ${isPrimary ? '<span class="dyn-primary-badge">أساسي</span>' : ''}
             </div>
-            <div class="dyn-pattern-name">${pat.name}</div>
+            <div class="dyn-pattern-name"></div>
           `;
 
+          pCard.querySelector('.dyn-pattern-icon').innerHTML = pat.iconSvg;
+          pCard.querySelector('.dyn-pattern-name').textContent = pat.name;
           if (card.dynState === 'locked') {
             pCard.style.opacity = '0.5';
             pCard.style.cursor = 'not-allowed';
