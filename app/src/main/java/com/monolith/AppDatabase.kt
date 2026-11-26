@@ -1021,52 +1021,68 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
     // MESSAGE DELETION REVIEW
     // =========================================================
 
-    fun beginMessageDeletionReview(
-        messageId: String,
-        conversationId: String
-    ): Boolean {
-        val db = writableDatabase
 
-        val messageExists = db.rawQuery(
-            """
-            SELECT 1 FROM messages
-            WHERE id = ? AND conversationId = ?
-            LIMIT 1
-            """,
-            arrayOf(messageId, conversationId)
-        ).use { it.moveToFirst() }
+fun beginMessageDeletionReview(
+    messageId: String,
+    conversationId: String
+): Boolean {
+    val db = writableDatabase
 
-        if (!messageExists) return false
+    val messageExists = db.rawQuery(
+        """
+        SELECT 1 FROM messages
+        WHERE id = ? AND conversationId = ?
+        LIMIT 1
+        """,
+        arrayOf(messageId, conversationId)
+    ).use { it.moveToFirst() }
 
-        val now = System.currentTimeMillis()
+    if (!messageExists) return false
 
-        val values = ContentValues().apply {
-            put("message_id", messageId)
-            put("conversation_id", conversationId)
-            put("review_state", "PENDING_DELETE")
-            put("content_state", "VISIBLE")
-            put("review_started_at", now)
-            put("updated_at", now)
-        }
+    val existingState = db.rawQuery(
+        """
+        SELECT review_state FROM message_deletion_reviews
+        WHERE message_id = ? AND conversation_id = ?
+        LIMIT 1
+        """,
+        arrayOf(messageId, conversationId)
+    ).use { cursor ->
+        if (cursor.moveToFirst()) cursor.getString(0) else null
+    }
 
-        val inserted = db.insertWithOnConflict(
+    if (existingState == "PENDING_DELETE") return true
+
+    if (existingState == "PERMANENT_DELETE") return false
+
+    val now = System.currentTimeMillis()
+
+    val values = ContentValues().apply {
+        put("message_id", messageId)
+        put("conversation_id", conversationId)
+        put("review_state", "PENDING_DELETE")
+        put("content_state", "VISIBLE")
+        put("review_started_at", now)
+        putNull("hide_at")
+        putNull("duration_ms")
+        put("updated_at", now)
+        putNull("finalized_at")
+    }
+
+    return if (existingState == null) {
+        db.insertOrThrow(
             "message_deletion_reviews",
             null,
+            values
+        ) != -1L
+    } else {
+        db.update(
+            "message_deletion_reviews",
             values,
-            SQLiteDatabase.CONFLICT_IGNORE
-        )
-
-        if (inserted != -1L) return true
-
-        return db.rawQuery(
-            """
-            SELECT 1 FROM message_deletion_reviews
-            WHERE message_id = ? AND conversation_id = ?
-            LIMIT 1
-            """,
+            "message_id = ? AND conversation_id = ?",
             arrayOf(messageId, conversationId)
-        ).use { it.moveToFirst() }
+        ) > 0
     }
+}
 
     fun updateMessageDeletionReview(
         messageId: String,
