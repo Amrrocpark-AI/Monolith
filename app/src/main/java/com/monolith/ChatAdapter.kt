@@ -1000,40 +1000,6 @@ class ChatAdapter(
     }
      
 
-        val infoString = line.substring(idx).trim()
-        if (candidateChar == '`' && infoString.contains('`')) return null
-
-        val language = infoString.split(Regex("\\s+")).firstOrNull()?.trim().orEmpty()
-        return Triple(candidateChar, count, language)
-    }
-
-    private fun isClosingFence(
-        line: String,
-        fenceChar: Char,
-        minLength: Int
-    ): Boolean {
-        var idx = 0
-        var spaces = 0
-        while (idx < line.length && spaces < 3 && (line[idx] == ' ' || line[idx] == '\t')) {
-            idx++
-            spaces++
-        }
-        if (idx >= line.length || line[idx] != fenceChar) return false
-
-        var count = 0
-        while (idx < line.length && line[idx] == fenceChar) {
-            count++
-            idx++
-        }
-        if (count < minLength) return false
-
-        while (idx < line.length) {
-            if (line[idx] != ' ' && line[idx] != '\t') return false
-            idx++
-        }
-        return true
-    }
-
     private fun blockKey(messageId: String, blockIndex: Int): String {
         return "${messageId}::block::$blockIndex"
     }
