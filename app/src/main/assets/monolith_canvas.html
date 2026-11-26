@@ -4133,7 +4133,10 @@ function resetConversationCanvasState() {
         }
 
         if (!dragState) return;
-
+        if (
+          dragState.pointerId !== undefined &&
+          e.pointerId !== dragState.pointerId
+        ) return;
         if (dragState.type === 'card') {
           if (dragState.cardEl) dragState.cardEl.classList.remove('dragging');
         } else if (dragState.type === 'pen-node') {
