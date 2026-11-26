@@ -3905,7 +3905,12 @@ function resetConversationCanvasState() {
               const angleKey = `${cableId}_${endKey}`;
               const hadOriginalPlugAngle =
               Object.prototype.hasOwnProperty.call(plugAngles, angleKey);
+                            const originalDetachedEnd = targetCable?.detachedEnds?.[endKey];
+              const angleKey = `${cableId}_${endKey}`;
+              const hadOriginalPlugAngle =
+                Object.prototype.hasOwnProperty.call(plugAngles, angleKey);
               const originalPlugAngle = plugAngles[angleKey];
+
               dragState = {
                 type: 'plug',
                 pointerId: e.pointerId,
@@ -3924,6 +3929,8 @@ function resetConversationCanvasState() {
                 originalDetachedEnd: originalDetachedEnd
                   ? { ...originalDetachedEnd }
                   : null,
+                hadOriginalPlugAngle,
+                originalPlugAngle,
                 curX: e.clientX,
                 curY: e.clientY,
                 lastX: e.clientX,
