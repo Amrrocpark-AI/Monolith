@@ -1403,7 +1403,12 @@ let activeConversationId = null;
             plugFxConfig
           };
           localStorage.setItem(activeStorageKey, JSON.stringify(stateData));
-        } catch (_) {}
+        } catch (error) {
+          console.error('فشل حفظ بيانات مساحة المحادثة:', activeStorageKey, error);
+          window.dispatchEvent(new CustomEvent('monolith:canvas-save-error', {
+            detail: { storageKey: activeStorageKey, message: String(error) }
+          }));
+        }
       }
 
       function loadCanvasState() {
