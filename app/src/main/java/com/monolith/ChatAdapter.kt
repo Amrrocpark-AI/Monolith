@@ -999,7 +999,6 @@ class ChatAdapter(
         }
     }
 
-    private fun extractCodeBlocks(content: String): List<ExtractedCodeBlock> {
         if (content.isEmpty() || (!content.contains("```") && !content.contains("~~~"))) {
             return emptyList()
         }
