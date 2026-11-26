@@ -3032,19 +3032,28 @@ function resetConversationCanvasState() {
             alarmBox.innerHTML = `
               <div style="display:flex; align-items:center; justify-content:space-between;">
                 <span style="font-size:11.5px; font-weight:700; color:#fbbf24;">المنبه الذكي</span>
-                <button class="path-action-btn ${alarmState.enabled ? 'active-mode' : ''}" id="toggle-alarm-btn-${cable.id}" type="button">
-                  ${alarmState.enabled ? 'مفعّل' : 'معطّل'}
-                </button>
+                <button class="path-action-btn alarm-toggle-btn" type="button"></button>
               </div>
               ${alarmState.enabled ? `
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap:6px; margin-top:4px;">
-                  <input type="datetime-local" class="thread-input alarm-time-input" value="${alarmState.timestamp || ''}" ${!isEditable ? 'disabled' : ''} />
-                  <input type="text" class="thread-input alarm-note-input" value="${alarmState.note || ''}" placeholder="ملاحظة المنبه" ${!isEditable ? 'disabled' : ''} />
+                  <input type="datetime-local" class="thread-input alarm-time-input" ${!isEditable ? 'disabled' : ''} />
+                  <input type="text" class="thread-input alarm-note-input" placeholder="ملاحظة المنبه" ${!isEditable ? 'disabled' : ''} />
                 </div>
               ` : ''}
             `;
 
-            const toggleAlarmBtn = alarmBox.querySelector(`#toggle-alarm-btn-${cable.id}`);
+            const toggleAlarmBtn = alarmBox.querySelector('.alarm-toggle-btn');
+            toggleAlarmBtn.textContent = alarmState.enabled ? 'مفعّل' : 'معطّل';
+            if (alarmState.enabled) {
+              toggleAlarmBtn.classList.add('active-mode');
+            }
+
+            if (alarmState.enabled) {
+              const safeAlarmTime = alarmBox.querySelector('.alarm-time-input');
+              const safeAlarmNote = alarmBox.querySelector('.alarm-note-input');
+              safeAlarmTime.value = alarmState.timestamp || '';
+              safeAlarmNote.value = alarmState.note || '';
+    }
             if (toggleAlarmBtn && isEditable) {
               toggleAlarmBtn.onclick = () => {
                 pushThreadUndoState(cable);
