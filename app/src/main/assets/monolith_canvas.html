@@ -3695,10 +3695,22 @@ function resetConversationCanvasState() {
             };
           }
 
+          if (isDragging) {
+            return {
+              x: dragState.curX,
+              y: dragState.curY,
+              angle: Number.isFinite(plugAngles[angleKey])
+                ? plugAngles[angleKey]
+                : 0
+            };
+          }
+
           return {
             x: 200,
             y: 200,
-            angle: plugAngles[angleKey] || 0
+            angle: Number.isFinite(plugAngles[angleKey])
+              ? plugAngles[angleKey]
+              : 0
           };
         }
 
