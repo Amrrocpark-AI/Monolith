@@ -548,12 +548,13 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
         db.setForeignKeyConstraintsEnabled(true)
     }
 
-    override fun onCreate(db: SQLiteDatabase) {
+        override fun onCreate(db: SQLiteDatabase) {
         db.beginTransaction()
         try {
             createCoreTables(db)
             createAgentTables(db)
             createMessageArchitecture(db)
+            createMessageDeletionArchiveTable(db)
             ensureCodeWorkspaceTables(db)
             db.setTransactionSuccessful()
         } finally {
@@ -572,6 +573,10 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
 
             if (oldVersion < 8) {
                 createMessageArchitecture(db)
+            }
+
+            if (oldVersion < 9) {
+                createMessageDeletionArchiveTable(db)
             }
 
             ensureCodeWorkspaceTables(db)
