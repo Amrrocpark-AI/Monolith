@@ -674,7 +674,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
         return result
     }
 
-        private fun cursorToJsonArray(cursor: Cursor): JSONArray {
+    private fun cursorToJsonArray(cursor: Cursor): JSONArray {
         val rows = JSONArray()
 
         while (cursor.moveToNext()) {
@@ -714,6 +714,117 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
         }
 
         return rows
+    }
+
+    private fun captureMessageRelationshipSnapshot(
+        db: SQLiteDatabase,
+        messageId: String,
+        conversationId: String
+    ): JSONObject {
+
+        val snapshot = JSONObject()
+        val modules = JSONObject()
+
+        modules.put(
+            "threads",
+            db.rawQuery(
+                """
+                SELECT id, source_msg_id, target_msg_id, node_id, timestamp
+                FROM message_threads
+                WHERE source_msg_id = ? OR target_msg_id = ?
+                """.trimIndent(),
+                arrayOf(messageId, messageId)
+            ).use { cursor ->
+                cursorToJsonArray(cursor)
+            }
+        )
+
+        modules.put(
+            "annotations",
+            db.rawQuery(
+                """
+                SELECT id, thread_id, timestamp
+                FROM thread_annotations
+                WHERE thread_id IN (
+                    SELECT id FROM message_threads
+                    WHERE source_msg_id = ? OR target_msg_id = ?
+                )
+                """.trimIndent(),
+                arrayOf(messageId, messageId)
+            ).use { cursor ->
+                cursorToJsonArray(cursor)
+            }
+        )
+
+        modules.put(
+            "relations",
+            db.rawQuery(
+                """
+                SELECT id, source_message_id, target_message_id,
+                       relation_kind, label, is_directed, created_at
+                FROM message_relations
+                WHERE source_message_id = ? OR target_message_id = ?
+                """.trimIndent(),
+                arrayOf(messageId, messageId)
+            ).use { cursor ->
+                cursorToJsonArray(cursor)
+            }
+        )
+
+        modules.put(
+            "runtimeReferences",
+            db.rawQuery(
+                """
+                SELECT message_id, thread_id, parent_message_id,
+                       reply_to_message_id, branch_id, branch_index,
+                       status, is_streaming
+                FROM message_runtime_metadata
+                WHERE message_id = ?
+                   OR parent_message_id = ?
+                   OR reply_to_message_id = ?
+                """.trimIndent(),
+                arrayOf(messageId, messageId, messageId)
+            ).use { cursor ->
+                cursorToJsonArray(cursor)
+            }
+        )
+
+        modules.put(
+            "branches",
+            db.rawQuery(
+                """
+                SELECT id, conversation_id, parent_message_id,
+                       branch_name, branch_index, created_at, updated_at
+                FROM message_branches
+                WHERE conversation_id = ?
+                  AND parent_message_id = ?
+                """.trimIndent(),
+                arrayOf(conversationId, messageId)
+            ).use { cursor ->
+                cursorToJsonArray(cursor)
+            }
+        )
+
+        modules.put(
+            "workspaceReferences",
+            db.rawQuery(
+                """
+                SELECT id, source_conversation_id, source_message_id
+                FROM workspace_code_items
+                WHERE source_message_id = ?
+                """.trimIndent(),
+                arrayOf(messageId)
+            ).use { cursor ->
+                cursorToJsonArray(cursor)
+            }
+        )
+
+        snapshot.put("snapshotVersion", 1)
+        snapshot.put("messageId", messageId)
+        snapshot.put("conversationId", conversationId)
+        snapshot.put("modules", modules)
+
+        return snapshot
     }
 
     private fun cursorString(
