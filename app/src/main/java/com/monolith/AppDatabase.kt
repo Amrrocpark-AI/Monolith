@@ -562,23 +562,16 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
         }
     }
 
-    override fun onUpgrade(
+        override fun onUpgrade(
         db: SQLiteDatabase,
         oldVersion: Int,
         newVersion: Int
     ) {
         db.beginTransaction()
         try {
-                        if (oldVersion < 8) {
-                createMessageArchitecture(db)
-            }
+            createAgentTables(db)
 
-            ensureCodeWorkspaceTables(db)
-            }
-
-            if (oldVersion < 3) {
-                createMessageArchitecture(db)
-            } else if (oldVersion < 8) {
+            if (oldVersion < 8) {
                 createMessageArchitecture(db)
             }
 
@@ -587,6 +580,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
+        }
         }
     }
 
