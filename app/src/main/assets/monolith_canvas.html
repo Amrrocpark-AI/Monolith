@@ -2011,7 +2011,14 @@ let activeConversationId = null;
         cards.forEach((card, cardIdx) => {
           const cardClassMap = { self: 'card-self', peer: 'card-peer', ai: 'card-ai' };
           const cardEl = document.createElement('div');
-          cardEl.className = `msg-card ${cardClassMap[card.entityType] || 'card-self'}`;
+         cardEl.className = `msg-card ${cardClassMap[card.entityType] || 'card-self'}`;
+          if (
+            card.messageId !== undefined &&
+            card.messageId !== null &&
+            messageSelection.has(String(card.messageId))
+          ) {
+            cardEl.classList.add('is-selected');
+          }
           cardEl.id = card.id;
           if (dragState && dragState.type === 'card' && dragState.cardId === card.id) {
             cardEl.classList.add('dragging');
