@@ -18,7 +18,11 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
     context,
     "monolith_database",
     null,
-    7
+    8
+) {
+
+    companion object {
+        private const val DB_VERSION = 8
 ) {
 
     companion object {
