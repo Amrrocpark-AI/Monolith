@@ -1678,21 +1678,32 @@ let activeConversationId = null;
   });
             }
 
-      function showAlarmToast(cableId, title, note) {
+            function showAlarmToast(cableId, title, note) {
         const toast = document.createElement('div');
         toast.className = 'alarm-toast';
         toast.innerHTML = `
           <div style="flex:1;">
-            <div style="font-size:11px; font-weight:700; color:#fbbf24; font-family:monospace;">[${cableId}]</div>
-            <div style="font-size:12.5px; font-weight:700; color:#f1f5f9; margin-top:2px;">${title}</div>
-            ${note ? `<div style="font-size:11.5px; color:#cbd5e1; margin-top:4px;">${note}</div>` : ''}
+            <div class="alarm-toast-id" style="font-size:11px; font-weight:700; color:#fbbf24; font-family:monospace;"></div>
+            <div class="alarm-toast-title" style="font-size:12.5px; font-weight:700; color:#f1f5f9; margin-top:2px;"></div>
+            <div class="alarm-toast-note" style="font-size:11.5px; color:#cbd5e1; margin-top:4px;"></div>
           </div>
           <button class="alarm-toast-close" type="button">&times;</button>
         `;
+
+        toast.querySelector('.alarm-toast-id').textContent = `[${cableId}]`;
+        toast.querySelector('.alarm-toast-title').textContent = title;
+
+        const noteElement = toast.querySelector('.alarm-toast-note');
+        if (note) {
+          noteElement.textContent = note;
+        } else {
+          noteElement.remove();
+        }
+
         toast.querySelector('.alarm-toast-close').onclick = () => toast.remove();
         alarmToastContainer.appendChild(toast);
         setTimeout(() => { if (toast.parentNode) toast.remove(); }, 8000);
-      }
+    }
 
       function checkSmartAlarms() {
         const nowMs = Date.now();
