@@ -1254,12 +1254,12 @@ class ChatAdapter(
         private fun bindCodeBlocks(msg: ChatMessage) {
             codeBlocksContainer.removeAllViews()
 
-                                    val blocks = if (msg.isThinking || msg.content.isBlank()) {
+                                                val blocks = if (msg.isThinking || msg.content.isBlank()) {
                 expandedBlockIndex = null
                 emptyList()
             } else {
                 CodeAdapter.extractCodeBlocks(msg.content)
-                                    }
+           }
             if (blocks.isEmpty()) {
                 expandedBlockIndex = null
                 codeBlocksContainer.visibility = View.GONE
