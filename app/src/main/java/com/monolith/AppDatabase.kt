@@ -2584,6 +2584,60 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
                 }
             }
 
+            // تنظيف المراجع إلى الرسائل التي ستُحذف، مع الحفاظ على السجلات المالكة لها.
+            db.execSQL(
+                """
+                UPDATE message_branches
+                SET parent_message_id = NULL
+                WHERE parent_message_id IN (
+                    SELECT id FROM messages WHERE conversationId = ?
+                )
+                """.trimIndent(),
+                arrayOf(conversationId)
+            )
+
+            db.execSQL(
+                """
+                UPDATE message_runtime_metadata
+                SET parent_message_id = NULL
+                WHERE parent_message_id IN (
+                    SELECT id FROM messages WHERE conversationId = ?
+                )
+                """.trimIndent(),
+                arrayOf(conversationId)
+            )
+
+            db.execSQL(
+                """
+                UPDATE message_runtime_metadata
+                SET reply_to_message_id = NULL
+                WHERE reply_to_message_id IN (
+                    SELECT id FROM messages WHERE conversationId = ?
+                )
+                """.trimIndent(),
+                arrayOf(conversationId)
+            )
+
+            db.execSQL(
+                """
+                UPDATE workspace_code_items
+                SET source_message_id = NULL
+                WHERE source_message_id IN (
+                    SELECT id FROM messages WHERE conversationId = ?
+                )
+                """.trimIndent(),
+                arrayOf(conversationId)
+            )
+
+            db.execSQL(
+                """
+                UPDATE workspace_code_items
+                SET source_conversation_id = NULL
+                WHERE source_conversation_id = ?
+                """.trimIndent(),
+                arrayOf(conversationId)
+            )
+
             for (messageId in messageIds) {
                 db.delete(
                     "message_relations",
