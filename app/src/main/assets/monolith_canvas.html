@@ -2223,8 +2223,9 @@ function resetConversationCanvasState() {
             localStorage.removeItem(storageKey);
 
             if (activeConversationId === id) {
-                activeConversationId = null;
-                activeStorageKey = STORAGE_KEY;
+    activeConversationId = null;
+    activeStorageKey = null;
+            }
             }
 
             return true;
