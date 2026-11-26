@@ -1388,6 +1388,18 @@ class ChatActivity : AppCompatActivity() {
                             return@launch
                         }
 
+                        synchronized(requestLock) {
+                            activeApiCalls.remove(message.id)?.let { call ->
+                                try {
+                                    call.cancel()
+                                } catch (_: Exception) {
+                                }
+                            }
+
+                            activeLocalJobs.remove(message.id)?.cancel()
+                            pendingRequests.remove(message.id)
+                        }
+
                         if (currentConversationId == conversationId) {
                             val index = messageList.indexOfFirst {
                                 it.id == message.id
