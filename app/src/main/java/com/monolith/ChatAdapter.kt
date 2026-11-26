@@ -85,13 +85,6 @@ data class ToolPresentation(
     val durationMs: Long? = null
 )
 
-data class ExtractedCodeBlock(
-    val index: Int,
-    val language: String,
-    val code: String,
-    val isClosed: Boolean = true
-)
-
 data class CardBgPreset(
     val id: String,
     val label: String,
