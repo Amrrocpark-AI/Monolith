@@ -2028,7 +2028,11 @@ class ChatActivity : AppCompatActivity() {
         modelName: String? = null,
         parseInitiatives: Boolean = false
     ) {
-        if (isFinishing || isDestroyed) return
+           if (
+            isFinishing ||
+            isDestroyed ||
+            deletedMessageIds.contains(requestMessage.id)
+        ) return
 
         if (!isThinking) {
             synchronized(requestLock) { pendingRequests.remove(requestMessage.id) }
