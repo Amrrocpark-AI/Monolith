@@ -1285,7 +1285,10 @@ class ChatActivity : AppCompatActivity() {
         conversationId: String = currentConversationId,
         touchConversation: Boolean = true
     ) {
-        if (deletedConversationIds.contains(conversationId)) return
+         if (
+            deletedConversationIds.contains(conversationId) ||
+            deletedMessageIds.contains(message.id)
+        ) return
 
         lifecycleScope.launch(Dispatchers.IO) {
             try {
