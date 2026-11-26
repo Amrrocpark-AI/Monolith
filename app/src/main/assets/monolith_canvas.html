@@ -1555,7 +1555,29 @@ let activeConversationId = null;
                   }
             if (parsed.plugAngles) Object.assign(plugAngles, parsed.plugAngles);
             if (parsed.primaryDynEffect) Object.assign(primaryDynEffect, parsed.primaryDynEffect);
-            if (parsed.plugFxConfig) Object.assign(plugFxConfig, parsed.plugFxConfig);
+                        if (parsed.plugFxConfig && typeof parsed.plugFxConfig === 'object') {
+              const savedFx = parsed.plugFxConfig;
+
+              if (typeof savedFx.enabled === 'boolean') {
+                plugFxConfig.enabled = savedFx.enabled;
+              }
+
+              if (['snap_ring', 'micro_recoil', 'signal_flash', 'none'].includes(savedFx.snapAnim)) {
+                plugFxConfig.snapAnim = savedFx.snapAnim;
+              }
+
+              if (['detach_release', 'micro_recoil', 'none'].includes(savedFx.detachAnim)) {
+                plugFxConfig.detachAnim = savedFx.detachAnim;
+              }
+
+              if (['crisp_click', 'subtle_pulse', 'silent'].includes(savedFx.soundMode)) {
+                plugFxConfig.soundMode = savedFx.soundMode;
+              }
+
+              if (typeof savedFx.intensity === 'number' && savedFx.intensity >= 0 && savedFx.intensity <= 100) {
+                plugFxConfig.intensity = savedFx.intensity;
+              }
+  }
             return true;
           }
         } catch (_) {}
