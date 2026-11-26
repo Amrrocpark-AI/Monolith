@@ -3702,9 +3702,39 @@ function resetConversationCanvasState() {
             } else {
               const otherKey = endKey === 'to' ? 'from' : 'to';
               const otherRef = cable[otherKey];
+
               if (otherRef) {
-                const otherAnchor = getPortAnchor(otherRef.cardId, otherRef.side || 'left', otherRef.portIdx);
-                targetAngle = Math.atan2(dragState.curY - otherAnchor.y, dragState.curX - otherAnchor.x);
+                const otherCardExists = cards.some(
+                  card => card.id === otherRef.cardId
+                );
+
+                let otherAnchor = null;
+
+                if (otherCardExists) {
+                  otherAnchor = getPortAnchor(
+                    otherRef.cardId,
+                    otherRef.side || 'left',
+                    otherRef.portIdx
+                  );
+                } else {
+                  const savedEnd = cable.detachedEnds &&
+                    cable.detachedEnds[otherKey];
+
+                  if (
+                    savedEnd &&
+                    Number.isFinite(savedEnd.x) &&
+                    Number.isFinite(savedEnd.y)
+                  ) {
+                    otherAnchor = savedEnd;
+                  }
+                }
+
+                if (otherAnchor) {
+                  targetAngle = Math.atan2(
+                    dragState.curY - otherAnchor.y,
+                    dragState.curX - otherAnchor.x
+                  );
+                }
               }
             }
           }
