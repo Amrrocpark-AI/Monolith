@@ -4223,7 +4223,56 @@ function resetConversationCanvasState() {
         renderCablesAndPlugs();
         saveCanvasState();
       }
+      function handlePointerCancel(e) {
+        if (!dragState) {
+          handlePointerUp(e);
+          return;
+        }
 
+        if (
+          dragState.pointerId !== undefined &&
+          e.pointerId !== dragState.pointerId
+        ) return;
+
+        if (dragState.type !== 'plug') {
+          handlePointerUp(e);
+          return;
+        }
+
+        const cable = cables.find(c => c.id === dragState.cableId);
+
+        if (cable) {
+          cable[dragState.endKey] = dragState.originalEnd
+            ? { ...dragState.originalEnd }
+            : null;
+
+          if (dragState.hadDetachedEnd) {
+            if (!cable.detachedEnds) cable.detachedEnds = {};
+
+            cable.detachedEnds[dragState.endKey] =
+              dragState.originalDetachedEnd
+                ? { ...dragState.originalDetachedEnd }
+                : dragState.originalDetachedEnd;
+          } else if (cable.detachedEnds) {
+            delete cable.detachedEnds[dragState.endKey];
+          }
+        }
+
+        if (
+          e.pointerId !== undefined &&
+          workspace.hasPointerCapture &&
+          workspace.hasPointerCapture(e.pointerId)
+        ) {
+          try {
+            workspace.releasePointerCapture(e.pointerId);
+          } catch (_) {}
+        }
+
+        dragState = null;
+        renderCards();
+        renderCablesAndPlugs();
+        saveCanvasState();
+            }
       window.addEventListener('pointermove', handlePointerMove);
       window.addEventListener('pointerup', handlePointerUp);
       window.addEventListener('pointercancel', handlePointerUp);
