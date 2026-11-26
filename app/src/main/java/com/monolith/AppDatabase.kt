@@ -750,12 +750,13 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
     }
 
     fun updateMessageContent(
+        conversationId: String,
         messageId: String,
         newContent: String,
         originalContent: String,
         reason: String?,
         timestamp: Long
-    ) {
+    ): Int {
         val values = ContentValues().apply {
             put("content", newContent)
             put("isEdited", 1)
@@ -764,11 +765,11 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
             put("editedTimestamp", timestamp)
         }
 
-        writableDatabase.update(
+        return writableDatabase.update(
             "messages",
             values,
-            "id = ?",
-            arrayOf(messageId)
+            "id = ? AND conversationId = ?",
+            arrayOf(messageId, conversationId)
         )
     }
 
