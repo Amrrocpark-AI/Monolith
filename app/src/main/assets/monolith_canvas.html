@@ -3898,11 +3898,29 @@ function resetConversationCanvasState() {
             plugObj.group.addEventListener('pointerdown', (e) => {
               e.preventDefault();
               e.stopPropagation();
-              dragState = { 
-               type: 'plug',
+                            const cableId = plugObj.group.getAttribute('data-cable-id');
+              const endKey = plugObj.group.getAttribute('data-end-key');
+              const targetCable = cables.find(c => c.id === cableId);
+              const originalDetachedEnd = targetCable?.detachedEnds?.[endKey];
+
+              dragState = {
+                type: 'plug',
                 pointerId: e.pointerId,
-                cableId: plugObj.group.getAttribute('data-cable-id'),
-                endKey: plugObj.group.getAttribute('data-end-key'),
+                cableId,
+                endKey,
+                originalEnd: targetCable?.[endKey]
+                  ? { ...targetCable[endKey] }
+                  : null,
+                hadDetachedEnd: Boolean(
+                  targetCable?.detachedEnds &&
+                  Object.prototype.hasOwnProperty.call(
+                    targetCable.detachedEnds,
+                    endKey
+                  )
+                ),
+                originalDetachedEnd: originalDetachedEnd
+                  ? { ...originalDetachedEnd }
+                  : null,
                 curX: e.clientX,
                 curY: e.clientY,
                 lastX: e.clientX,
