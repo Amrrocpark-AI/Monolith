@@ -229,19 +229,6 @@
         android:clipChildren="false"
         android:clipToPadding="false">
 
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/recyclerViewChat"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:clipToPadding="false"
-            android:paddingStart="14dp"
-            android:paddingEnd="14dp"
-            android:paddingTop="16dp"
-            android:paddingBottom="18dp"
-            android:overScrollMode="ifContentScrolls"
-            android:scrollbars="vertical"
-            android:descendantFocusability="afterDescendants" />
-
         <!-- FLOATING CONVERSATION HISTORY -->
 
         <LinearLayout
