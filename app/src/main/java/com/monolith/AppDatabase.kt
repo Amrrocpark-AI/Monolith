@@ -516,9 +516,31 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
                 ON message_tool_executions(message_id)
             """)
 
-            db.execSQL("""
+                        db.execSQL("""
                 CREATE INDEX IF NOT EXISTS idx_agent_tasks_status
                 ON agent_tasks(status, task_type)
+            """)
+
+            // Independent deletion review records.
+            // No foreign key: records must survive permanent message deletion.
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS message_deletion_reviews (
+                    message_id TEXT NOT NULL,
+                    conversation_id TEXT NOT NULL,
+                    review_state TEXT NOT NULL DEFAULT 'PENDING_DELETE',
+                    content_state TEXT NOT NULL DEFAULT 'VISIBLE',
+                    review_started_at INTEGER NOT NULL,
+                    hide_at INTEGER,
+                    duration_ms INTEGER,
+                    updated_at INTEGER NOT NULL,
+                    finalized_at INTEGER,
+                    PRIMARY KEY (message_id, conversation_id)
+                )
+            """)
+
+            db.execSQL("""
+                CREATE INDEX IF NOT EXISTS idx_deletion_reviews_conversation
+                ON message_deletion_reviews(conversation_id, review_state)
             """)
         }
     }
