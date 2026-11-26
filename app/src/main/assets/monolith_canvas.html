@@ -3096,16 +3096,39 @@ function resetConversationCanvasState() {
             item.appendChild(alarmBox);
 
             const historyBox = document.createElement('div');
-            historyBox.style.marginTop = '4px';
-            historyBox.innerHTML = `
-              <div style="font-size:10.5px; font-weight:700; color:#94a3b8; margin-bottom:4px; display:flex; justify-content:space-between; align-items:center;">
+                        historyBox.innerHTML = `
+              <div class="history-header" style="font-size:10.5px; font-weight:700; color:#94a3b8; margin-bottom:4px; display:flex; justify-content:space-between; align-items:center;">
                 <span>سجل التغييرات (History)</span>
-                ${isEditable && cable.undoStack && cable.undoStack.length > 0 ? `<button type="button" class="path-action-btn undo-btn" style="padding:2px 6px; font-size:10px;">التراجع (Undo)</button>` : ''}
               </div>
-              <div class="history-log-list">
-                ${(cable.history || []).slice(0, 3).map(h => `<div class="history-item"><span>[${h.timestamp}] ${h.action}:</span> ${h.details}</div>`).join('')}
-              </div>
+              <div class="history-log-list"></div>
             `;
+
+            const historyHeader = historyBox.querySelector('.history-header');
+            const historyList = historyBox.querySelector('.history-log-list');
+
+            if (isEditable && cable.undoStack && cable.undoStack.length > 0) {
+              const historyUndoBtn = document.createElement('button');
+              historyUndoBtn.type = 'button';
+              historyUndoBtn.className = 'path-action-btn undo-btn';
+              historyUndoBtn.style.padding = '2px 6px';
+              historyUndoBtn.style.fontSize = '10px';
+              historyUndoBtn.textContent = 'التراجع (Undo)';
+              historyHeader.appendChild(historyUndoBtn);
+            }
+
+            (cable.history || []).slice(0, 3).forEach(h => {
+              const historyItem = document.createElement('div');
+              historyItem.className = 'history-item';
+
+              const historyDetails = document.createElement('span');
+              historyDetails.textContent = `[${h.timestamp}] ${h.action}:`;
+
+              const historyText = document.createTextNode(` ${h.details}`);
+
+              historyItem.appendChild(historyDetails);
+              historyItem.appendChild(historyText);
+              historyList.appendChild(historyItem);
+            });
 
             const undoBtn = historyBox.querySelector('.undo-btn');
             if (undoBtn) {
@@ -3148,7 +3171,8 @@ function resetConversationCanvasState() {
 
             item.appendChild(actionsRow);
             listEl.appendChild(item);
-          });
+          }
+                );
         }
 
         inspectorOverlay.classList.add('active');
