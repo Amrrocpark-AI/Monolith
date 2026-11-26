@@ -407,8 +407,6 @@ class ChatActivity : AppCompatActivity() {
         }
         messageCardBridge = null
 
-recyclerViewChat.visibility = View.GONE
-
         messageCardBridge = MessageCardBridge(this) { action, messageId, _ ->
             findMessage(messageId)?.let { message ->
                 when (action) {
