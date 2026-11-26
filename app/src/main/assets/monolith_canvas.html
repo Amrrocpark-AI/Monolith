@@ -2167,7 +2167,10 @@ let activeConversationId = null;
             toolbar.style.cssText =
               'display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;position:relative;z-index:5;';
 
-                        const actions = [
+            const messageId = String(card.messageId);
+
+            const actions = [
+              ['select', messageSelection.has(messageId) ? 'إلغاء التحديد' : 'تحديد'],
               ['edit', 'تعديل'],
               ['reaction', 'تفاعل'],
               ['pin', card.isPinned ? 'إلغاء التثبيت' : 'تثبيت'],
@@ -2190,13 +2193,19 @@ let activeConversationId = null;
                 e.preventDefault();
                 e.stopPropagation();
 
+                if (action === 'select') {
+                  messageSelection.toggle(messageId);
+                  renderCards();
+                  return;
+                }
+
                 if (
                   window.MonolithAndroid &&
                   typeof window.MonolithAndroid.onCardAction === 'function'
                 ) {
                   window.MonolithAndroid.onCardAction(
                     action,
-                    String(card.messageId),
+                    messageId,
                     ''
                   );
                 }
@@ -2210,7 +2219,7 @@ let activeConversationId = null;
             });
 
             cardEl.appendChild(toolbar);
-          }
+              }
 
           cardEl.addEventListener('pointerdown', (e) => {
             if (e.target.closest('.palette-trigger-btn') || e.target.closest('.msg-text')) return;
