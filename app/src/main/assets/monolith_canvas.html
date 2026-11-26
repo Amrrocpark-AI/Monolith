@@ -2902,19 +2902,27 @@ function resetConversationCanvasState() {
             const fromPortStr = cable.from ? `${cable.from.side === 'left' ? 'L' : 'R'}${cable.from.portIdx + 1}` : 'مفكوك';
             const toPortStr = cable.to ? `${cable.to.side === 'left' ? 'L' : 'R'}${cable.to.portIdx + 1}` : 'مفكوك';
             const isEditable = cable.owner === 'mine';
-
             const itemTop = document.createElement('div');
             itemTop.className = 'cable-item-top';
             itemTop.innerHTML = `
               <div style="display:flex; align-items:center; gap:8px;">
-                <span class="plug-tag" style="border-color:${cable.sensitivityColor || '#38bdf8'}; color:${cable.sensitivityColor || '#38bdf8'};">${cable.id}</span>
-                <span style="font-size:12.5px; font-weight:700; color:#f1f5f9;">${cable.title || cable.id}</span>
-                <span style="font-size:11px; color:#cbd5e1;">(${fromPortStr} ↔ ${toPortStr})</span>
+                <span class="plug-tag"></span>
+                <span class="cable-title" style="font-size:12.5px; font-weight:700; color:#f1f5f9;"></span>
+                <span class="cable-ports" style="font-size:11px; color:#cbd5e1;"></span>
               </div>
               <span class="cable-status-badge ${isEditable ? 'editable' : 'locked'}">
                 ${isEditable ? 'قابل للتعديل' : LOCK_ICON_HTML}
               </span>
             `;
+
+            const plugTag = itemTop.querySelector('.plug-tag');
+            plugTag.textContent = cable.id;
+            plugTag.style.borderColor = cable.sensitivityColor || '#38bdf8';
+            plugTag.style.color = cable.sensitivityColor || '#38bdf8';
+
+            itemTop.querySelector('.cable-title').textContent = cable.title || cable.id;
+            itemTop.querySelector('.cable-ports').textContent = `(${fromPortStr} ↔ ${toPortStr})`;
+
             item.appendChild(itemTop);
 
             const contextBox = document.createElement('div');
