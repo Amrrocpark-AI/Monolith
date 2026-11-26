@@ -1368,14 +1368,20 @@ class ChatActivity : AppCompatActivity() {
             .setPositiveButton("حذف") { _, _ ->
                 lifecycleScope.launch {
                     try {
-                        val deleted = withContext(Dispatchers.IO) {
-                            databaseMutex.withLock {
-                                appDatabase.deleteMessage(
-                                    message.id,
-                                    conversationId
+                                val deleted = withContext(Dispatchers.IO) {
+                                databaseMutex.withLock {
+                                val removed = appDatabase.deleteMessage(
+                                 message.id,
+                                 conversationId
                                 )
+
+                                if (removed) {
+                                    deletedMessageIds.add(message.id)
+                                }
+
+                                removed
                             }
-                        }
+                                                }
 
                         if (!deleted) {
                             showToast("لم يتم العثور على الرسالة في قاعدة البيانات")
