@@ -1,6 +1,6 @@
 
 package com.monolith
-
+package com.monolith
 object CodeAdapter {
 
     fun extractCodeBlocks(content: String): List<ExtractedCodeBlock> {
