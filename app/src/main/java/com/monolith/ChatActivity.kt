@@ -1295,8 +1295,10 @@ class ChatActivity : AppCompatActivity() {
                 var titleChanged = false
 
                 databaseMutex.withLock {
-                    if (deletedConversationIds.contains(conversationId)) return@withLock
-
+                    if (
+                        deletedConversationIds.contains(conversationId) ||
+                        deletedMessageIds.contains(message.id)
+                    ) return@withLock
                     appDatabase.insertMessage(message.toMessageEntity(conversationId))
 
                     if (touchConversation) {
