@@ -4004,9 +4004,6 @@ function resetConversationCanvasState() {
       });
       window.addEventListener('pagehide', saveCanvasState);
       window.addEventListener('beforeunload', saveCanvasState);
-
-      }
-
       svgLayer.style.display = portsEnabled ? 'block' : 'none';
       renderCards();
       applyGlobalEntityThemes();
