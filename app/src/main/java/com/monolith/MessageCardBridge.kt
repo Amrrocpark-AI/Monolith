@@ -226,12 +226,81 @@ class MessageCardBridge(
                 put("isStreaming", message.isStreaming)
                 put("status", message.status.name)
 
-                put(
+                                put(
                     "attachments",
                     JSONArray(
                         message.attachmentUris ?: emptyList<String>()
                     )
                 )
+
+                // بيانات التعديل وسجل الرسالة
+                put("colorHex", message.colorHex)
+                put("isEdited", message.isEdited)
+                put("originalContent", message.originalContent ?: JSONObject.NULL)
+                put("editReason", message.editReason ?: JSONObject.NULL)
+                put("editedTimestamp", message.editedTimestamp ?: JSONObject.NULL)
+
+                // بيانات المحادثات والفروع
+                put("threadId", message.threadId ?: JSONObject.NULL)
+                put("parentMessageId", message.parentMessageId ?: JSONObject.NULL)
+                put("replyToMessageId", message.replyToMessageId ?: JSONObject.NULL)
+                put("branchId", message.branchId ?: JSONObject.NULL)
+                put("branchIndex", message.branchIndex)
+
+                // هوية المرسل
+                put("senderId", message.senderId)
+                put("senderType", message.senderType.name)
+
+                // بيانات النموذج والرموز
+                put("modelId", message.modelId ?: JSONObject.NULL)
+                put("modelProvider", message.modelProvider ?: JSONObject.NULL)
+                put("modelName", message.modelName ?: JSONObject.NULL)
+                put("inputTokenCount", message.inputTokenCount ?: JSONObject.NULL)
+                put("outputTokenCount", message.outputTokenCount ?: JSONObject.NULL)
+                put("totalTokenCount", message.totalTokenCount ?: JSONObject.NULL)
+
+                // دورة التوليد والأخطاء
+                put("generationStartedAt", message.generationStartedAt ?: JSONObject.NULL)
+                put("generationCompletedAt", message.generationCompletedAt ?: JSONObject.NULL)
+                put("generationDurationMs", message.generationDurationMs ?: JSONObject.NULL)
+                put("errorMessage", message.errorMessage ?: JSONObject.NULL)
+
+                // علاقات الرسالة
+                put("relations", JSONArray().apply {
+                    message.relationRefs.forEach { relation ->
+                        put(JSONObject().apply {
+                            put("id", relation.id)
+                            put("sourceMessageId", relation.sourceMessageId)
+                            put("targetMessageId", relation.targetMessageId)
+                            put("kind", relation.kind.name)
+                            put("label", relation.label ?: JSONObject.NULL)
+                            put("isDirected", relation.isDirected)
+                            put("createdAt", relation.createdAt)
+                        })
+                    }
+                })
+
+                // تنفيذ الأدوات المرتبطة بالرسالة
+                put("toolExecutions", JSONArray().apply {
+                    message.toolExecutions.forEach { tool ->
+                        put(JSONObject().apply {
+                            put("id", tool.id)
+                            put("toolName", tool.toolName)
+                            put("description", tool.description ?: JSONObject.NULL)
+                            put("state", tool.state.name)
+                            put("result", tool.result ?: JSONObject.NULL)
+                            put("error", tool.error ?: JSONObject.NULL)
+                            put("startedAt", tool.startedAt ?: JSONObject.NULL)
+                            put("completedAt", tool.completedAt ?: JSONObject.NULL)
+                            put("durationMs", tool.durationMs ?: JSONObject.NULL)
+                        })
+                    }
+                })
+
+                put("isToolMessage", message.isToolMessage)
+
+                // بيانات إضافية
+                put("metadata", JSONObject(message.metadata))
             }
 
             cards.put(card)
