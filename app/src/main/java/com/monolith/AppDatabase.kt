@@ -1129,12 +1129,52 @@ fun beginMessageDeletionReview(
         ) > 0
     }
 
+    private fun readMessageDeletionReview(
+        row: Map<String, String>
+    ): MessageDeletionReview {
+        return MessageDeletionReview(
+            messageId = requireNotNull(row["message_id"]) {
+                "Missing message_id in deletion review"
+            },
+            conversationId = requireNotNull(row["conversation_id"]) {
+                "Missing conversation_id in deletion review"
+            },
+            reviewState = MessageDeletionReviewState.valueOf(
+                requireNotNull(row["review_state"]) {
+                    "Missing review_state in deletion review"
+                }
+            ),
+            contentState = MessageDeletionContentState.valueOf(
+                requireNotNull(row["content_state"]) {
+                    "Missing content_state in deletion review"
+                }
+            ),
+            reviewStartedAt = requireNotNull(
+                row["review_started_at"]
+            ).toLong(),
+            hideAt = row["hide_at"]?.toLong(),
+            durationMs = row["duration_ms"]?.toLong(),
+            updatedAt = requireNotNull(
+                row["updated_at"]
+            ).toLong(),
+            finalizedAt = row["finalized_at"]?.toLong()
+        )
+    }
+
     fun getMessageDeletionReview(
         messageId: String,
         conversationId: String
     ): MessageDeletionReview? {
-        return getDeletionReviewsForConversation(conversationId)
-            .firstOrNull { it.messageId == messageId }
+        return queryMaps(
+            """
+            SELECT * FROM message_deletion_reviews
+            WHERE message_id = ? AND conversation_id = ?
+            LIMIT 1
+            """.trimIndent(),
+            arrayOf(messageId, conversationId)
+        ).firstOrNull()?.let { row ->
+            readMessageDeletionReview(row)
+        }
     }
 
     fun getDeletionReviewsForConversation(
@@ -1148,37 +1188,9 @@ fun beginMessageDeletionReview(
             """.trimIndent(),
             arrayOf(conversationId)
         ).map { row ->
-
-            MessageDeletionReview(
-                messageId = requireNotNull(row["message_id"]) {
-                    "Missing message_id in deletion review"
-                },
-                conversationId = requireNotNull(row["conversation_id"]) {
-                    "Missing conversation_id in deletion review"
-                },
-                reviewState = MessageDeletionReviewState.valueOf(
-                    requireNotNull(row["review_state"]) {
-                        "Missing review_state in deletion review"
-                    }
-                ),
-                contentState = MessageDeletionContentState.valueOf(
-                    requireNotNull(row["content_state"]) {
-                        "Missing content_state in deletion review"
-                    }
-                ),
-                reviewStartedAt = requireNotNull(
-                    row["review_started_at"]
-                ).toLong(),
-                hideAt = row["hide_at"]?.toLong(),
-                durationMs = row["duration_ms"]?.toLong(),
-                updatedAt = requireNotNull(
-                    row["updated_at"]
-                ).toLong(),
-                finalizedAt = row["finalized_at"]?.toLong()
-            )
+            readMessageDeletionReview(row)
         }
     }
-
     fun updatePinnedStatus(
         messageId: String,
         isPinned: Boolean,
