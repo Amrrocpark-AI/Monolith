@@ -752,8 +752,7 @@ class ChatActivity : AppCompatActivity() {
 
         currentConversationId = conversationId
         saveLastConversationId(conversationId)
-                        messageList.clear()
-        recyclerViewChat.visibility = View.INVISIBLE
+        messageList.clear()
         messageCardBridge?.invalidatePendingDisplay()
         hideKeyboard()
         clearInitiatives()
