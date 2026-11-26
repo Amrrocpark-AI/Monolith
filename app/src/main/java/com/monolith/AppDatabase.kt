@@ -538,9 +538,44 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
             """)
 
             createMessageDeletionArchiveTable(db)
+        }
+
+        private fun createMessageDeletionArchiveTable(db: SQLiteDatabase) {
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS message_deletion_archives (
+                    archive_id TEXT PRIMARY KEY,
+                    message_id TEXT NOT NULL,
+                    conversation_id TEXT NOT NULL,
+                    snapshot_version INTEGER NOT NULL,
+                    snapshot_json TEXT NOT NULL,
+                    archive_state TEXT NOT NULL DEFAULT 'READY',
+                    created_at INTEGER NOT NULL,
+                    restored_at INTEGER
+                )
+            """)
+
+            db.execSQL("""
+                CREATE INDEX IF NOT EXISTS idx_deletion_archives_message
+                ON message_deletion_archives(
+                    conversation_id,
+                    message_id,
+                    created_at
+                )
+            """)
+
+            db.execSQL("""
+                CREATE INDEX IF NOT EXISTS idx_deletion_archives_state
+                ON message_deletion_archives(
+                    conversation_id,
+                    archive_state
+                )
+            """)
+        }
+    }
 
     // =========================================================
     // DATABASE LIFECYCLE
+    // =========================================================
     // =========================================================
 
     override fun onConfigure(db: SQLiteDatabase) {
