@@ -562,7 +562,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
         }
     }
 
-        override fun onUpgrade(
+    override fun onUpgrade(
         db: SQLiteDatabase,
         oldVersion: Int,
         newVersion: Int
@@ -580,7 +580,6 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
-        }
         }
     }
 
