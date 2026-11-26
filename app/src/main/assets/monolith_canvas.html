@@ -3674,11 +3674,11 @@ function resetConversationCanvasState() {
           }
 
           const savedEnd = cable.detachedEnds && cable.detachedEnds[endKey];
-
           if (
             savedEnd &&
             Number.isFinite(savedEnd.x) &&
-            Number.isFinite(savedEnd.y)
+            Number.isFinite(savedEnd.y) &&
+            !isDragging
           ) {
             const savedAngle = Number.isFinite(savedEnd.angle)
               ? savedEnd.angle
