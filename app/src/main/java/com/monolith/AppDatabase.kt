@@ -536,8 +536,8 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
                 CREATE INDEX IF NOT EXISTS idx_deletion_reviews_conversation
                 ON message_deletion_reviews(conversation_id, review_state)
             """)
-        }
-    }
+
+            createMessageDeletionArchiveTable(db)
 
     // =========================================================
     // DATABASE LIFECYCLE
