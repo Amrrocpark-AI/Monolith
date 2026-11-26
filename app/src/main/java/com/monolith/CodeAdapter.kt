@@ -1,13 +1,14 @@
 
 package com.monolith
-package com.monolith
-object CodeAdapter {
-    data class ExtractedCodeBlock(
+
+data class ExtractedCodeBlock(
     val index: Int,
     val language: String,
     val code: String,
     val isClosed: Boolean = true
 )
+
+object CodeAdapter {
 
     fun extractCodeBlocks(content: String): List<ExtractedCodeBlock> {
         if (content.isEmpty() ||
