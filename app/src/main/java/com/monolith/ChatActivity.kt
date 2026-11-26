@@ -402,10 +402,6 @@ class ChatActivity : AppCompatActivity() {
         suggestionsScroll = findViewById(R.id.suggestionsScroll)
         suggestionsContainer = findViewById(R.id.suggestionsContainer)
         etMessage.hint = DEFAULT_INPUT_HINT
-
-        recyclerViewChat.layoutManager = LinearLayoutManager(this).apply {
-            stackFromEnd = false
-        }
     }
 
         private fun initializeAdapter() {
