@@ -827,6 +827,41 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
         return snapshot
     }
 
+    private fun saveMessageDeletionArchive(
+        db: SQLiteDatabase,
+        messageId: String,
+        conversationId: String
+    ): String {
+
+        val snapshot = captureMessageRelationshipSnapshot(
+            db,
+            messageId,
+            conversationId
+        )
+
+        val archiveId = UUID.randomUUID().toString()
+        val createdAt = System.currentTimeMillis()
+
+        val values = ContentValues().apply {
+            put("archive_id", archiveId)
+            put("message_id", messageId)
+            put("conversation_id", conversationId)
+            put("snapshot_version", 1)
+            put("snapshot_json", snapshot.toString())
+            put("archive_state", "READY")
+            put("created_at", createdAt)
+            putNull("restored_at")
+        }
+
+        db.insertOrThrow(
+            "message_deletion_archives",
+            null,
+            values
+        )
+
+        return archiveId
+    }
+
     private fun cursorString(
         cursor: Cursor,
         column: String
