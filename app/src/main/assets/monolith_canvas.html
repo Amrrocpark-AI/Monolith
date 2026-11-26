@@ -1356,6 +1356,7 @@ let activeConversationId = null;
       }
 
       function saveCanvasState() {
+        if (!activeStorageKey) return;
         try {
           const stateData = {
             version: 6,
