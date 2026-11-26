@@ -2412,12 +2412,13 @@ class ChatActivity : AppCompatActivity() {
                     return@setPositiveButton
                 }
 
-                val editTime = System.currentTimeMillis()
+                                val editTime = System.currentTimeMillis()
 
                 lifecycleScope.launch {
                     try {
-                        withContext(Dispatchers.IO) {
+                        val updatedRows = withContext(Dispatchers.IO) {
                             appDatabase.updateMessageContent(
+                                conversationId = editConversationId,
                                 messageId = message.id,
                                 newContent = newContent,
                                 originalContent = message.content,
@@ -2426,21 +2427,34 @@ class ChatActivity : AppCompatActivity() {
                             )
                         }
 
-                        val index = messageList.indexOfFirst { it.id == message.id }
-                        if (index >= 0) {
-                            val updated = messageList[index].copy(
-                                content = newContent,
-                                isEdited = true,
-                                originalContent = message.originalContent ?: message.content,
-                                editReason = reason.ifBlank { null },
-                                editedTimestamp = editTime
+                        if (updatedRows != 1) {
+                            throw IllegalStateException(
+                                "لم يتم العثور على الرسالة داخل المحادثة المحددة"
                             )
-                                                        messageList[index] = updated
+                        }
 
-                            messageCardBridge?.submitMessages(
-                                messageList.toList(),
-                                currentConversationId
-                            )
+                        if (currentConversationId == editConversationId) {
+                            val index = messageList.indexOfFirst {
+                                it.id == message.id
+                            }
+
+                            if (index >= 0) {
+                                val updated = messageList[index].copy(
+                                    content = newContent,
+                                    isEdited = true,
+                                    originalContent = message.originalContent
+                                        ?: message.content,
+                                    editReason = reason.ifBlank { null },
+                                    editedTimestamp = editTime
+                                )
+
+                                messageList[index] = updated
+
+                                messageCardBridge?.submitMessages(
+                                    messageList.toList(),
+                                    editConversationId
+                                )
+                            }
                         }
 
                         showToast("تم تعديل الرسالة")
