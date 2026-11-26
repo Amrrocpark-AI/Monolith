@@ -3978,7 +3978,10 @@ function resetConversationCanvasState() {
           return;
         }
         if (!dragState) return;
-
+        if (
+          dragState.pointerId !== undefined &&
+          e.pointerId !== dragState.pointerId
+        ) return;
         if (dragState.type === 'pen-node') {
           if (dragState.pointerId !== undefined && e.pointerId !== dragState.pointerId) return;
           if (pathSession && pathSession.cableId === dragState.cableId && pathSession.draftPoints[dragState.nodeIdx]) {
