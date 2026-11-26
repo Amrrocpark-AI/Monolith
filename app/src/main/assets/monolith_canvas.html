@@ -1554,7 +1554,21 @@ let activeConversationId = null;
               });
                   }
             if (parsed.plugAngles) Object.assign(plugAngles, parsed.plugAngles);
-            if (parsed.primaryDynEffect) Object.assign(primaryDynEffect, parsed.primaryDynEffect);
+                        if (parsed.primaryDynEffect && typeof parsed.primaryDynEffect === 'object') {
+              const savedPrimary = parsed.primaryDynEffect;
+
+              if (DYN_PATTERNS.some(pattern => pattern.id === savedPrimary.pattern)) {
+                primaryDynEffect.pattern = savedPrimary.pattern;
+              }
+
+              if (typeof savedPrimary.speed === 'number' && savedPrimary.speed >= 2 && savedPrimary.speed <= 15) {
+                primaryDynEffect.speed = savedPrimary.speed;
+              }
+
+              if (typeof savedPrimary.intensity === 'number' && savedPrimary.intensity >= 5 && savedPrimary.intensity <= 100) {
+                primaryDynEffect.intensity = savedPrimary.intensity;
+              }
+                        }
                         if (parsed.plugFxConfig && typeof parsed.plugFxConfig === 'object') {
               const savedFx = parsed.plugFxConfig;
 
