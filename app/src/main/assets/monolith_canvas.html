@@ -109,6 +109,14 @@
     .msg-card.card-peer { --drag-accent: var(--accent-peer); border-right: 4px solid var(--accent-peer); }
     .msg-card.card-ai   { --drag-accent: var(--accent-ai);   border-right: 4px solid var(--accent-ai); }
 
+    .msg-card.is-selected {
+      border: 2px solid #38bdf8;
+      box-shadow:
+        0 0 0 2px rgba(56, 189, 248, 0.18),
+        0 0 24px rgba(56, 189, 248, 0.35),
+        0 20px 45px rgba(0, 0, 0, 0.85);
+      }
+
     .card-dyn-layer {
       position: absolute;
       inset: 0;
