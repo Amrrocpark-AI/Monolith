@@ -4209,15 +4209,15 @@ function resetConversationCanvasState() {
               cable[dragState.endKey] = { cardId: nearest.cardId, side: nearest.side, portIdx: nearest.portIdx };
               if (cable.detachedEnds) delete cable.detachedEnds[dragState.endKey];
               triggerPlugEffect('snap', nearest.px, nearest.py, cable.color);
-            } else {
+                        } else {
               cable[dragState.endKey] = null;
               if (!cable.detachedEnds) cable.detachedEnds = {};
               cable.detachedEnds[dragState.endKey] = {
-                x: dragState.curX,
-                y: dragState.curY,
+                x: e.clientX,
+                y: e.clientY,
                 angle: plugAngles[angleKey] ?? 0
               };
-            }
+  }
           }
         }
 
