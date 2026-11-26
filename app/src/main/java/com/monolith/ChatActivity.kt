@@ -459,11 +459,6 @@ class ChatActivity : AppCompatActivity() {
                 )
             )
         }
-
-        messageCardBridge?.submitMessages(
-    messageList,
-    currentConversationId
-)
     }
 
     private fun createTopBarButton(iconResource: Int, tint: Int): ImageButton {
