@@ -1310,9 +1310,27 @@ let activeConversationId = null;
           return true;
         },
 
+        reconcile(messageIds) {
+          if (!Array.isArray(messageIds)) return false;
+
+          const validIds = new Set(
+            messageIds
+              .map(messageId => String(messageId ?? '').trim())
+              .filter(Boolean)
+          );
+
+          for (const selectedId of this.selectedIds) {
+            if (!validIds.has(selectedId)) {
+              this.selectedIds.delete(selectedId);
+            }
+          }
+
+          return true;
+        },
+
         has(messageId) {
           return this.selectedIds.has(
-            String(messageId || '').trim()
+            String(messageId ?? '').trim()
           );
         },
 
