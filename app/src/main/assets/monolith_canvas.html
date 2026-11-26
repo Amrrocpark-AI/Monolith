@@ -2934,23 +2934,21 @@ function resetConversationCanvasState() {
             contextBox.style.borderRadius = '10px';
             contextBox.style.border = '1px solid #1e2d4a';
 
-            contextBox.innerHTML = `
+                        contextBox.innerHTML = `
               <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
                 <div class="thread-form-group">
                   <label class="thread-form-label">عنوان الخيط</label>
-                  <input type="text" class="thread-input thread-title-input" value="${cable.title || ''}" ${!isEditable ? 'disabled' : ''} />
+                  <input type="text" class="thread-input thread-title-input" ${!isEditable ? 'disabled' : ''} />
                 </div>
                 <div class="thread-form-group">
                   <label class="thread-form-label">المفهوم</label>
-                  <select class="thread-select thread-concept-select" ${!isEditable ? 'disabled' : ''}>
-                    ${THREAD_CONCEPTS.map(tc => `<option value="${tc.id}" ${cable.concept === tc.id ? 'selected' : ''}>${tc.label}</option>`).join('')}
-                  </select>
+                  <select class="thread-select thread-concept-select" ${!isEditable ? 'disabled' : ''}></select>
                 </div>
               </div>
 
               <div class="thread-form-group">
                 <label class="thread-form-label">الرسالة الخفية للسياق</label>
-                <textarea class="thread-textarea thread-note-input" ${!isEditable ? 'disabled' : ''}>${cable.hiddenNote || ''}</textarea>
+                <textarea class="thread-textarea thread-note-input" ${!isEditable ? 'disabled' : ''}></textarea>
               </div>
 
               <div class="thread-form-group">
@@ -2958,6 +2956,22 @@ function resetConversationCanvasState() {
                 <div class="color-swatches-row sensitivity-row"></div>
               </div>
             `;
+
+            const safeTitleInput = contextBox.querySelector('.thread-title-input');
+            const safeConceptSelect = contextBox.querySelector('.thread-concept-select');
+            const safeNoteInput = contextBox.querySelector('.thread-note-input');
+
+            safeTitleInput.value = cable.title || '';
+            safeNoteInput.value = cable.hiddenNote || '';
+
+            THREAD_CONCEPTS.forEach(tc => {
+              const option = document.createElement('option');
+              option.value = tc.id;
+              option.textContent = tc.label;
+              safeConceptSelect.appendChild(option);
+            });
+
+            safeConceptSelect.value = cable.concept || '';
 
             const sensitivityRow = contextBox.querySelector('.sensitivity-row');
             SENSITIVITY_COLORS.forEach(sc => {
