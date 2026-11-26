@@ -999,8 +999,7 @@ class ChatAdapter(
         }
     }
 
-        if (content.isEmpty() || (!content.contains("```") && !content.contains("~~~"))) {
-            return emptyList()
+        
         }
 
         val lines = content.split('\n')
