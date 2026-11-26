@@ -99,14 +99,11 @@ class ChatActivity : AppCompatActivity() {
     )
 
     private val selectedImageUris = mutableListOf<Uri>()
-
     private lateinit var etMessage: EditText
     private lateinit var btnSend: ImageButton
     private lateinit var imagePreviewContainer: LinearLayout
     private lateinit var previewListContainer: LinearLayout
-    private lateinit var recyclerViewChat: RecyclerView
     private lateinit var chatContentContainer: FrameLayout
-    
     private var messageCardBridge: MessageCardBridge? = null
     private lateinit var tvAppTitle: TextView
 
