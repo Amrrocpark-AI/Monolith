@@ -725,6 +725,22 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
         val snapshot = JSONObject()
         val modules = JSONObject()
 
+        // Preserve the complete message record before deletion.
+        modules.put(
+            "messageRecord",
+            db.rawQuery(
+                """
+                SELECT *
+                FROM messages
+                WHERE id = ? AND conversationId = ?
+                LIMIT 1
+                """.trimIndent(),
+                arrayOf(messageId, conversationId)
+            ).use { cursor ->
+                cursorToJsonArray(cursor)
+            }
+        )
+
         modules.put(
             "threads",
             db.rawQuery(
