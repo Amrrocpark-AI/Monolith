@@ -788,6 +788,129 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
         )
     }
 
+    // =========================================================
+    // MESSAGE DELETION REVIEW
+    // =========================================================
+
+    fun beginMessageDeletionReview(
+        messageId: String,
+        conversationId: String
+    ): Boolean {
+        val db = writableDatabase
+
+        val messageExists = db.rawQuery(
+            """
+            SELECT 1 FROM messages
+            WHERE id = ? AND conversationId = ?
+            LIMIT 1
+            """,
+            arrayOf(messageId, conversationId)
+        ).use { it.moveToFirst() }
+
+        if (!messageExists) return false
+
+        val now = System.currentTimeMillis()
+
+        val values = ContentValues().apply {
+            put("message_id", messageId)
+            put("conversation_id", conversationId)
+            put("review_state", "PENDING_DELETE")
+            put("content_state", "VISIBLE")
+            put("review_started_at", now)
+            put("updated_at", now)
+        }
+
+        val inserted = db.insertWithOnConflict(
+            "message_deletion_reviews",
+            null,
+            values,
+            SQLiteDatabase.CONFLICT_IGNORE
+        )
+
+        if (inserted != -1L) return true
+
+        return db.rawQuery(
+            """
+            SELECT 1 FROM message_deletion_reviews
+            WHERE message_id = ? AND conversation_id = ?
+            LIMIT 1
+            """,
+            arrayOf(messageId, conversationId)
+        ).use { it.moveToFirst() }
+    }
+
+    fun updateMessageDeletionReview(
+        messageId: String,
+        conversationId: String,
+        reviewState: String,
+        contentState: String,
+        hideAt: Long? = null,
+        durationMs: Long? = null
+    ): Boolean {
+        if (reviewState !in setOf(
+                "PENDING_DELETE",
+                "PERMANENT_DELETE",
+                "CANCELLED"
+            )
+        ) return false
+
+        if (contentState !in setOf(
+                "VISIBLE",
+                "HIDDEN"
+            )
+        ) return false
+
+        val now = System.currentTimeMillis()
+
+        val values = ContentValues().apply {
+            put("review_state", reviewState)
+            put("content_state", contentState)
+            put("hide_at", hideAt)
+            put("duration_ms", durationMs)
+            put("updated_at", now)
+
+            if (reviewState == "PERMANENT_DELETE") {
+                put("finalized_at", now)
+            } else {
+                putNull("finalized_at")
+            }
+        }
+
+        return writableDatabase.update(
+            "message_deletion_reviews",
+            values,
+            "message_id = ? AND conversation_id = ?",
+            arrayOf(messageId, conversationId)
+        ) > 0
+    }
+
+    fun getMessageDeletionReview(
+        messageId: String,
+        conversationId: String
+    ): Map<String, String>? {
+        return queryMaps(
+            """
+            SELECT * FROM message_deletion_reviews
+            WHERE message_id = ? AND conversation_id = ?
+            LIMIT 1
+            """.trimIndent(),
+            arrayOf(messageId, conversationId)
+        ).firstOrNull()
+    }
+
+    fun getDeletionReviewsForConversation(
+        conversationId: String
+    ): List<Map<String, String>> {
+        return queryMaps(
+            """
+            SELECT * FROM message_deletion_reviews
+            WHERE conversation_id = ?
+            ORDER BY review_started_at ASC
+            """.trimIndent(),
+            arrayOf(conversationId)
+        )
+    }
+
     fun updatePinnedStatus(
         messageId: String,
         isPinned: Boolean,
