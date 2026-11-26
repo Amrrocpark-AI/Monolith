@@ -2823,9 +2823,16 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
                 cursor.moveToFirst()
             }
 
-            if (!messageExists) {
+                        if (!messageExists) {
                 return false
             }
+
+            // حفظ بنية العلاقات قبل بدء حذف أي بيانات مرتبطة.
+            saveMessageDeletionArchive(
+                db,
+                messageId,
+                conversationId
+            )
 
             // حذف ملاحظات الخيوط المرتبطة بالرسالة.
             db.delete(
