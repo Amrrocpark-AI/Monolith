@@ -3898,8 +3898,9 @@ function resetConversationCanvasState() {
             plugObj.group.addEventListener('pointerdown', (e) => {
               e.preventDefault();
               e.stopPropagation();
-              dragState = {
-                type: 'plug',
+              dragState = { 
+               type: 'plug',
+                pointerId: e.pointerId,
                 cableId: plugObj.group.getAttribute('data-cable-id'),
                 endKey: plugObj.group.getAttribute('data-end-key'),
                 curX: e.clientX,
