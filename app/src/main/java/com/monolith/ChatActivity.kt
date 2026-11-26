@@ -104,9 +104,9 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var btnSend: ImageButton
     private lateinit var imagePreviewContainer: LinearLayout
     private lateinit var previewListContainer: LinearLayout
-            private lateinit var recyclerViewChat: RecyclerView
+    private lateinit var recyclerViewChat: RecyclerView
     private lateinit var chatContentContainer: FrameLayout
-    private lateinit var chatAdapter: ChatAdapter
+    
     private var messageCardBridge: MessageCardBridge? = null
     private lateinit var tvAppTitle: TextView
 
