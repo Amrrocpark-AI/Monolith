@@ -1545,7 +1545,14 @@ let activeConversationId = null;
             if (typeof parsed.lockFeatureEnabled === 'boolean') lockFeatureEnabled = parsed.lockFeatureEnabled;
             portsEnabled = (typeof parsed.portsEnabled === 'boolean') ? parsed.portsEnabled : false;
             if (parsed.triggerPositionMode) triggerPositionMode = parsed.triggerPositionMode;
-            if (parsed.ENTITY_COLOR_MAP) Object.assign(ENTITY_COLOR_MAP, parsed.ENTITY_COLOR_MAP);
+            if (parsed.ENTITY_COLOR_MAP && typeof parsed.ENTITY_COLOR_MAP === 'object') {
+              ['self', 'peer', 'ai'].forEach(type => {
+              const color = parsed.ENTITY_COLOR_MAP[type];
+              if (PALETTE_CHOICES.includes(color)) {
+              ENTITY_COLOR_MAP[type] = color;
+                }
+              });
+                  }
             if (parsed.plugAngles) Object.assign(plugAngles, parsed.plugAngles);
             if (parsed.primaryDynEffect) Object.assign(primaryDynEffect, parsed.primaryDynEffect);
             if (parsed.plugFxConfig) Object.assign(plugFxConfig, parsed.plugFxConfig);
