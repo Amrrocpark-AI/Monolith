@@ -674,6 +674,48 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
         return result
     }
 
+        private fun cursorToJsonArray(cursor: Cursor): JSONArray {
+        val rows = JSONArray()
+
+        while (cursor.moveToNext()) {
+            val row = JSONObject()
+
+            for (i in 0 until cursor.columnCount) {
+                val columnName = cursor.getColumnName(i)
+
+                val value: Any = when (cursor.getType(i)) {
+                    Cursor.FIELD_TYPE_NULL -> JSONObject.NULL
+
+                    Cursor.FIELD_TYPE_INTEGER ->
+                        cursor.getLong(i)
+
+                    Cursor.FIELD_TYPE_FLOAT ->
+                        cursor.getDouble(i)
+
+                    Cursor.FIELD_TYPE_BLOB ->
+                        JSONObject().apply {
+                            put("_type", "blob")
+                            put(
+                                "base64",
+                                Base64.encodeToString(
+                                    cursor.getBlob(i),
+                                    Base64.NO_WRAP
+                                )
+                            )
+                        }
+
+                    else -> cursor.getString(i)
+                }
+
+                row.put(columnName, value)
+            }
+
+            rows.put(row)
+        }
+
+        return rows
+    }
+
     private fun cursorString(
         cursor: Cursor,
         column: String
@@ -683,7 +725,6 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
             cursor.getString(index)
         } else null
     }
-
     private fun normalizeWorkspaceState(state: String?): String {
         return when (state?.trim()?.uppercase()) {
             WORKSPACE_STATE_ARCHIVED -> WORKSPACE_STATE_ARCHIVED
