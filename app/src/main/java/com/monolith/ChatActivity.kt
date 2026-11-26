@@ -150,8 +150,10 @@ class ChatActivity : AppCompatActivity() {
     private val pendingRequests = mutableMapOf<String, PendingRequest>()
 
     // محادثات حُذفت في هذه الجلسة: يمنع حفظ أي رد متأخر داخلها
-    private val deletedConversationIds: MutableSet<String> = ConcurrentHashMap.newKeySet<String>()
-
+   
+   private val deletedConversationIds: MutableSet<String> = ConcurrentHashMap.newKeySet<String>()
+   // رسائل حُذفت في هذه الجلسة: يمنع إعادتها بواسطة عمليات حفظ أو توليد متأخرة
+    private val deletedMessageIds: MutableSet<String> = ConcurrentHashMap.newKeySet<String>()
     private val historyBackCallback = object : OnBackPressedCallback(false) {
         override fun handleOnBackPressed() {
             hideConversationHistory()
