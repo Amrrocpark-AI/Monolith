@@ -2216,11 +2216,16 @@ function resetConversationCanvasState() {
         if (!id) return false;
 
         try {
-            const storageKey =
+       const storageKey =
                 STORAGE_KEY + '_CONVERSATION_' +
                 encodeURIComponent(id);
 
             localStorage.removeItem(storageKey);
+
+            if (activeConversationId === id) {
+                activeConversationId = null;
+                activeStorageKey = STORAGE_KEY;
+            }
 
             return true;
         } catch (_) {
