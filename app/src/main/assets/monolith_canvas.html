@@ -3675,11 +3675,23 @@ function resetConversationCanvasState() {
 
           const savedEnd = cable.detachedEnds && cable.detachedEnds[endKey];
 
-          if (savedEnd) {
+          if (
+            savedEnd &&
+            Number.isFinite(savedEnd.x) &&
+            Number.isFinite(savedEnd.y)
+          ) {
+            const savedAngle = Number.isFinite(savedEnd.angle)
+              ? savedEnd.angle
+              : (
+                  Number.isFinite(plugAngles[angleKey])
+                    ? plugAngles[angleKey]
+                    : 0
+                );
+
             return {
               x: savedEnd.x,
               y: savedEnd.y,
-              angle: savedEnd.angle ?? (plugAngles[angleKey] || 0)
+              angle: savedAngle
             };
           }
 
