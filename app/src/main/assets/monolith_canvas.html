@@ -2864,16 +2864,11 @@ function resetConversationCanvasState() {
                   w = Math.round(w * scale);
                   h = Math.round(h * scale);
                 }
-                const canvas = document.createElement('canvas');
-                canvas.width = w;
-                canvas.height = h;
                 const ctx = canvas.getContext('2d');
-                if (ctx) {
-                  ctx.drawImage(img, 0, 0, w, h);
-                  card.bgImageData = canvas.toDataURL('image/jpeg', 0.82);
-                } else {
-                  card.bgImageData = reader.result;
-                }
+                if (!ctx) return;
+
+                ctx.drawImage(img, 0, 0, w, h);
+                card.bgImageData = canvas.toDataURL('image/jpeg', 0.82);
                 if (typeof card.bgImageShade !== 'number') card.bgImageShade = 0.65;
                 renderCards();
                 applyGlobalEntityThemes();
