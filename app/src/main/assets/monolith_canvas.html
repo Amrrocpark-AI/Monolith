@@ -4006,17 +4006,11 @@ function resetConversationCanvasState() {
       window.addEventListener('pagehide', saveCanvasState);
       window.addEventListener('beforeunload', saveCanvasState);
 
-      const isLoaded = loadCanvasState();
-      if (!isLoaded) {
-        autoLayoutCards();
-      } else {
-        clampCardsIntoViewport();
       }
 
       svgLayer.style.display = portsEnabled ? 'block' : 'none';
       renderCards();
       applyGlobalEntityThemes();
-      saveCanvasState();
 
       animFrameId = requestAnimationFrame(animateFrame);
     })();
