@@ -1427,32 +1427,81 @@ let activeConversationId = null;
         if (thread.history.length > 20) thread.history.pop();
       }
 
-      function pushThreadUndoState(thread) {
+            function pushThreadUndoState(thread) {
         if (!thread.undoStack) thread.undoStack = [];
+
         const snapshot = {
           title: thread.title,
           concept: thread.concept,
           hiddenNote: thread.hiddenNote,
           sensitivityColor: thread.sensitivityColor,
           color: thread.color,
-          alarm: JSON.parse(JSON.stringify(thread.alarm || { enabled: false, timestamp: null, note: '', triggered: false }))
+
+          alarm: JSON.parse(JSON.stringify(
+            thread.alarm || {
+              enabled: false,
+              timestamp: null,
+              note: '',
+              triggered: false
+            }
+          )),
+
+          from: thread.from ? { ...thread.from } : null,
+          to: thread.to ? { ...thread.to } : null,
+
+          customPoints: clonePoints(thread.customPoints),
+
+          detachedEnds: JSON.parse(JSON.stringify(
+            thread.detachedEnds || {}
+          )),
+
+          relations: JSON.parse(JSON.stringify(
+            thread.relations || []
+          ))
         };
+
         thread.undoStack.push(snapshot);
-        if (thread.undoStack.length > 10) thread.undoStack.shift();
+
+        if (thread.undoStack.length > 10) {
+          thread.undoStack.shift();
+        }
       }
 
       function undoThreadLastChange(thread) {
-        if (!thread.undoStack || thread.undoStack.length === 0) return false;
+        if (!thread.undoStack || thread.undoStack.length === 0) {
+          return false;
+        }
+
         const prev = thread.undoStack.pop();
+
         thread.title = prev.title;
         thread.concept = prev.concept;
         thread.hiddenNote = prev.hiddenNote;
         thread.sensitivityColor = prev.sensitivityColor;
         thread.color = prev.color;
         thread.alarm = prev.alarm;
-        logThreadHistory(thread, 'تراجع', 'تم التراجع عن آخر تعديل على الخيط');
+
+        thread.from = prev.from ? { ...prev.from } : null;
+        thread.to = prev.to ? { ...prev.to } : null;
+
+        thread.customPoints = clonePoints(prev.customPoints);
+
+        thread.detachedEnds = JSON.parse(JSON.stringify(
+          prev.detachedEnds || {}
+        ));
+
+        thread.relations = JSON.parse(JSON.stringify(
+          prev.relations || []
+        ));
+
+        logThreadHistory(
+          thread,
+          'تراجع',
+          'تم استعادة حالة السلك واتصالاته'
+        );
+
         return true;
-      }
+    }
 
       function saveCanvasState() {
         if (!activeStorageKey) return;
