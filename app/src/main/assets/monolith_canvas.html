@@ -1413,6 +1413,7 @@ let activeConversationId = null;
       }
 
       function loadCanvasState() {
+        if (!activeStorageKey) return false;
         try {
           const raw = localStorage.getItem(activeStorageKey);
           if (!raw) return false;
