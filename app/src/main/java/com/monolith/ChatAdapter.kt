@@ -998,11 +998,10 @@ class ChatAdapter(
             )
         }
     }
-
-        
+     
         }
-
-        val lines = content.split('\n')
+    // استخراج الأكواد أصبح مسؤولية CodeAdapter
+        
         val result = mutableListOf<ExtractedCodeBlock>()
 
         var inFence = false
