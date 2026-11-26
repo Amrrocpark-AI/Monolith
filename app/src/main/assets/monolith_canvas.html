@@ -3957,10 +3957,43 @@ function resetConversationCanvasState() {
             const targetCable = cables.find(c => c.id === dragState.cableId);
             if (targetCable) {
               const prevRef = targetCable[dragState.endKey];
+
               if (prevRef) {
-                const prevAnchor = getPortAnchor(prevRef.cardId, prevRef.side || 'left', prevRef.portIdx);
-                triggerPlugEffect('detach', prevAnchor.x, prevAnchor.y, targetCable.color);
+                const linkedCard = cards.find(
+                  card => card.id === prevRef.cardId
+                );
+
+                let prevAnchor = null;
+
+                if (linkedCard) {
+                  prevAnchor = getPortAnchor(
+                    prevRef.cardId,
+                    prevRef.side || 'left',
+                    prevRef.portIdx
+                  );
+                } else {
+                  const savedEnd = targetCable.detachedEnds &&
+                    targetCable.detachedEnds[dragState.endKey];
+
+                  if (
+                    savedEnd &&
+                    Number.isFinite(savedEnd.x) &&
+                    Number.isFinite(savedEnd.y)
+                  ) {
+                    prevAnchor = savedEnd;
+                  }
+                }
+
+                if (prevAnchor) {
+                  triggerPlugEffect(
+                    'detach',
+                    prevAnchor.x,
+                    prevAnchor.y,
+                    targetCable.color
+                  );
+                }
               }
+
               targetCable[dragState.endKey] = null;
             }
           }
