@@ -2763,8 +2763,7 @@ function resetConversationCanvasState() {
         if (!card) return;
         const cardIdx = cards.findIndex(c => c.id === cardId);
         const titleEl = document.getElementById('inspector-card-title');
-        titleEl.innerHTML = `<span>تخصيص البطاقة #${cardIdx + 1} (${card.title})</span>`;
-
+        titleEl.textContent = `تخصيص البطاقة #${cardIdx + 1} (${card.title})`;
         const posBtns = document.querySelectorAll('#trigger-pos-selector .pos-btn');
         posBtns.forEach(btn => {
           const posMode = btn.getAttribute('data-pos');
