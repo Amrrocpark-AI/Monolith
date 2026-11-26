@@ -382,8 +382,7 @@ class ChatActivity : AppCompatActivity() {
         etMessage = findViewById(R.id.etMessage)
         btnSend = findViewById(R.id.btnSend)
         tvAppTitle = findViewById(R.id.tvAppTitle)
-                chatContentContainer = findViewById(R.id.chatContentContainer)
-        recyclerViewChat = findViewById(R.id.recyclerViewChat)
+        chatContentContainer = findViewById(R.id.chatContentContainer)
         imagePreviewContainer = findViewById(R.id.imagePreviewContainer)
         previewListContainer = findViewById(R.id.previewListContainer)
 
