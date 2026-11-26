@@ -3961,12 +3961,54 @@ function resetConversationCanvasState() {
       function handlePointerUp(e) {
         if (pathSession && pathSession.mode === 'paint' && pathSession.isPainting) {
           pathSession.isPainting = false;
-          const cable = cables.find(c => c.id === pathSession.cableId);
-          if (cable && cable.from && cable.to) {
-            const a1 = getPortAnchor(cable.from.cardId, cable.from.side || 'left', cable.from.portIdx);
-            const a2 = getPortAnchor(cable.to.cardId, cable.to.side || 'left', cable.to.portIdx);
-            const generatedPts = simplifyPaintStrokeToControlPoints(pathSession.rawPaintSamples, a1, a2);
-            if (generatedPts.length > 0) pathSession.draftPoints = generatedPts;
+                    const cable = cables.find(c => c.id === pathSession.cableId);
+
+          if (cable) {
+            const getPaintAnchor = (endKey) => {
+              const portRef = cable[endKey];
+
+              if (portRef) {
+                const linkedCard = cards.find(
+                  card => card.id === portRef.cardId
+                );
+
+                if (linkedCard) {
+                  return getPortAnchor(
+                    portRef.cardId,
+                    portRef.side || 'left',
+                    portRef.portIdx
+                  );
+                }
+              }
+
+              const savedEnd = cable.detachedEnds &&
+                cable.detachedEnds[endKey];
+
+              if (
+                savedEnd &&
+                Number.isFinite(savedEnd.x) &&
+                Number.isFinite(savedEnd.y)
+              ) {
+                return savedEnd;
+              }
+
+              return null;
+            };
+
+            const a1 = getPaintAnchor('from');
+            const a2 = getPaintAnchor('to');
+
+            if (a1 && a2) {
+              const generatedPts = simplifyPaintStrokeToControlPoints(
+                pathSession.rawPaintSamples,
+                a1,
+                a2
+              );
+
+              if (generatedPts.length > 0) {
+                pathSession.draftPoints = generatedPts;
+              }
+            }
           }
           pathSession.rawPaintSamples = [];
           renderCablesAndPlugs();
