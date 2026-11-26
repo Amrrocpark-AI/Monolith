@@ -2377,7 +2377,9 @@ class ChatActivity : AppCompatActivity() {
         dialog.show()
     }
 
-    private fun showEditDialog(message: ChatMessage) {
+        private fun showEditDialog(message: ChatMessage) {
+        val editConversationId = currentConversationId
+
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dpToPx(16), dpToPx(16), dpToPx(16), dpToPx(16))
