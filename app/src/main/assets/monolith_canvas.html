@@ -3624,10 +3624,30 @@ function resetConversationCanvasState() {
         const isDragging = dragState && dragState.type === 'plug' && dragState.cableId === cable.id && dragState.endKey === endKey;
 
         if (portRef) {
-          const anchor = getPortAnchor(portRef.cardId, portRef.side || 'left', portRef.portIdx);
-          plugAngles[angleKey] = anchor.angle;
-          if (cable.detachedEnds) delete cable.detachedEnds[endKey];
-          return { x: anchor.x, y: anchor.y, angle: anchor.angle };
+          const linkedCard = cards.find(card => card.id === portRef.cardId);
+
+          if (linkedCard) {
+            const anchor = getPortAnchor(portRef.cardId, portRef.side || 'left', portRef.portIdx);
+            plugAngles[angleKey] = anchor.angle;
+            if (cable.detachedEnds) delete cable.detachedEnds[endKey];
+            return { x: anchor.x, y: anchor.y, angle: anchor.angle };
+          }
+
+          const savedEnd = cable.detachedEnds && cable.detachedEnds[endKey];
+
+          if (savedEnd) {
+            return {
+              x: savedEnd.x,
+              y: savedEnd.y,
+              angle: savedEnd.angle ?? (plugAngles[angleKey] || 0)
+            };
+          }
+
+          return {
+            x: 200,
+            y: 200,
+            angle: plugAngles[angleKey] || 0
+          };
         }
 
         if (isDragging) {
