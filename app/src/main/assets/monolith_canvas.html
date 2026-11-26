@@ -4264,6 +4264,14 @@ function resetConversationCanvasState() {
           }
         }
 
+        const angleKey = `${dragState.cableId}_${dragState.endKey}`;
+
+        if (dragState.hadOriginalPlugAngle) {
+          plugAngles[angleKey] = dragState.originalPlugAngle;
+        } else {
+          delete plugAngles[angleKey];
+        }
+
         if (
           e.pointerId !== undefined &&
           workspace.hasPointerCapture &&
