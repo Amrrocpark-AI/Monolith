@@ -1248,6 +1248,79 @@ let activeConversationId = null;
       let portsEnabled = false;
       let triggerPositionMode = 'header-inline';
 
+      // =========================================================
+      // MESSAGE SELECTION ENGINE
+      // =========================================================
+
+      const messageSelection = {
+
+        conversationId: null,
+        selectedIds: new Set(),
+
+        bindConversation(conversationId) {
+          const nextId = String(conversationId || '').trim();
+
+          if (!nextId) {
+            this.selectedIds.clear();
+            this.conversationId = null;
+            return false;
+          }
+
+          if (this.conversationId !== nextId) {
+            this.selectedIds.clear();
+            this.conversationId = nextId;
+          }
+
+          return true;
+        },
+
+        toggle(messageId) {
+          const id = String(messageId || '').trim();
+
+          if (!id) return false;
+
+          if (this.selectedIds.has(id)) {
+            this.selectedIds.delete(id);
+            return false;
+          }
+
+          this.selectedIds.add(id);
+          return true;
+        },
+
+        select(messageIds) {
+          if (!Array.isArray(messageIds)) return false;
+
+          messageIds.forEach(messageId => {
+            const id = String(messageId || '').trim();
+
+            if (id) {
+              this.selectedIds.add(id);
+            }
+          });
+
+          return true;
+        },
+
+        has(messageId) {
+          return this.selectedIds.has(
+            String(messageId || '').trim()
+          );
+        },
+
+        clear() {
+          this.selectedIds.clear();
+        },
+
+        get count() {
+          return this.selectedIds.size;
+        },
+
+        getIds() {
+          return Array.from(this.selectedIds);
+        }
+      };
+
       const ENTITY_COLOR_MAP = { self: '#f8fafc', peer: '#38bdf8', ai: '#ef4444' };
       const DEFAULT_ENTITY_COLOR_MAP = { self: '#f8fafc', peer: '#38bdf8', ai: '#ef4444' };
       const ENTITY_LABELS = {
