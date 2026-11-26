@@ -1543,7 +1543,34 @@ let activeConversationId = null;
                         )
                         .map(point => ({ x: point.x, y: point.y }))
                     : [],
-                  detachedEnds: cb.detachedEnds || {},
+                                    detachedEnds: (
+                    cb.detachedEnds &&
+                    typeof cb.detachedEnds === 'object' &&
+                    !Array.isArray(cb.detachedEnds)
+                  ) ? {
+                    ...['from', 'to'].reduce((result, endKey) => {
+                      const saved = cb.detachedEnds[endKey];
+
+                      if (
+                        saved &&
+                        typeof saved.x === 'number' &&
+                        Number.isFinite(saved.x) &&
+                        typeof saved.y === 'number' &&
+                        Number.isFinite(saved.y) &&
+                        (saved.angle === undefined ||
+                          (typeof saved.angle === 'number' &&
+                           Number.isFinite(saved.angle)))
+                      ) {
+                        result[endKey] = {
+                          x: saved.x,
+                          y: saved.y,
+                          angle: saved.angle
+                        };
+                      }
+
+                      return result;
+                    }, {})
+                  } : {},
                   relations: Array.isArray(cb.relations) ? cb.relations : [],
                   alarm: cb.alarm || { enabled: false, timestamp: null, note: '', triggered: false },
                   history: Array.isArray(cb.history) ? cb.history : [],
