@@ -2531,7 +2531,7 @@ recyclerViewChat.visibility = View.GONE
         if (::tvCurrentConversation.isInitialized) tvCurrentConversation.setTextColor(themeColor)
         if (::tvHistoryLabel.isInitialized) tvHistoryLabel.setTextColor(themeColor)
 
-        if (previousTheme != themeColorHex && ::chatAdapter.isInitialized) {
+        if (previousTheme != themeColorHex) {
             initializeAdapter()
             if (isConversationHistoryVisible()) refreshConversationHistory()
         }
