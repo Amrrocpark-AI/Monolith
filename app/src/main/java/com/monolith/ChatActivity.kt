@@ -415,32 +415,6 @@ class ChatActivity : AppCompatActivity() {
         }
         messageCardBridge = null
 
-        chatAdapter = ChatAdapter(
-            context = this,
-            onEditClick = { message -> showEditDialog(message) },
-            onReactionClick = { message ->
-                val newReaction = when (message.reactionType) {
-                    "LIKE" -> "DISLIKE"
-                    "DISLIKE" -> null
-                    else -> "LIKE"
-                }
-                updateMessageLocally(message.id) { it.copy(reactionType = newReaction) }
-                findMessage(message.id)?.let { saveMessageToDb(it, touchConversation = false) }
-            },
-            onSpeakClick = { text ->
-                initTtsIfNeeded()
-                ttsManager?.speak(text)
-            },
-            onPinClick = { message ->
-                updateMessageLocally(message.id) { it.copy(isPinned = !it.isPinned) }
-                findMessage(message.id)?.let { updated ->
-                    saveMessageToDb(updated, touchConversation = false)
-                    showToast(if (updated.isPinned) "تم تثبيت الرسالة" else "تم إلغاء تثبيت الرسالة")
-                }
-            },
-                        themeColorHex = themeColorHex,
-        )
-                        recyclerViewChat.adapter = chatAdapter
 recyclerViewChat.visibility = View.GONE
 
         messageCardBridge = MessageCardBridge(this) { action, messageId, _ ->
