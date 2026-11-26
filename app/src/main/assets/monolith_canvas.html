@@ -1239,7 +1239,14 @@ let activeConversationId = null;
       const PORT_OFFSETS = [30, 60, 90, 120];
       const PORT_SIDES = ['left', 'right'];
 
-// Deletion review logic is managed by AppDatabase.kt.
+      let cards = [];
+      const cables = [];
+
+      let dragState = null;
+      let nextCableSeq = cables.length + 1;
+      let lockFeatureEnabled = true;
+      let portsEnabled = false;
+      let triggerPositionMode = 'header-inline';
 
       const ENTITY_COLOR_MAP = { self: '#f8fafc', peer: '#38bdf8', ai: '#ef4444' };
       const DEFAULT_ENTITY_COLOR_MAP = { self: '#f8fafc', peer: '#38bdf8', ai: '#ef4444' };
