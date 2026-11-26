@@ -2304,7 +2304,47 @@ function resetConversationCanvasState() {
     const previousCards = new Map(
         cards.map(card => [card.id, card])
     );
-          cards = messages.map((message, index) => {
+
+    const incomingCardIds = new Set(
+        messages
+            .map(message => message && message.id)
+            .filter(id => typeof id === 'string')
+    );
+
+    cables.forEach(cable => {
+        ['from', 'to'].forEach(endKey => {
+            const portRef = cable[endKey];
+
+            if (
+                !portRef ||
+                typeof portRef.cardId !== 'string' ||
+                incomingCardIds.has(portRef.cardId)
+            ) {
+                return;
+            }
+
+            const previousCard = previousCards.get(portRef.cardId);
+            if (!previousCard) return;
+
+            const anchor = getPortAnchor(
+                portRef.cardId,
+                portRef.side || 'left',
+                portRef.portIdx
+            );
+
+            if (!cable.detachedEnds) {
+                cable.detachedEnds = {};
+            }
+
+            cable.detachedEnds[endKey] = {
+                x: anchor.x,
+                y: anchor.y,
+                angle: anchor.angle
+            };
+        });
+    });
+
+    cards = messages.map((message, index) => {
             const previous = previousCards.get(message.id) || {};
 
             return {
