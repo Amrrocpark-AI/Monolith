@@ -3777,9 +3777,27 @@ function resetConversationCanvasState() {
           return { x: dragState.curX, y: dragState.curY, angle: smoothedAngle };
         }
 
-        if (cable.detachedEnds && cable.detachedEnds[endKey]) {
-          const saved = cable.detachedEnds[endKey];
-          return { x: saved.x, y: saved.y, angle: saved.angle ?? (plugAngles[angleKey] || 0) };
+        const savedDetachedEnd = cable.detachedEnds &&
+          cable.detachedEnds[endKey];
+
+        if (
+          savedDetachedEnd &&
+          Number.isFinite(savedDetachedEnd.x) &&
+          Number.isFinite(savedDetachedEnd.y)
+        ) {
+          const savedAngle = Number.isFinite(savedDetachedEnd.angle)
+            ? savedDetachedEnd.angle
+            : (
+                Number.isFinite(plugAngles[angleKey])
+                  ? plugAngles[angleKey]
+                  : 0
+              );
+
+          return {
+            x: savedDetachedEnd.x,
+            y: savedDetachedEnd.y,
+            angle: savedAngle
+          };
         }
 
         return { x: 200, y: 200, angle: plugAngles[angleKey] || 0 };
