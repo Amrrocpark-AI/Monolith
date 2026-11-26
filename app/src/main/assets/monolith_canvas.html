@@ -4275,8 +4275,7 @@ function resetConversationCanvasState() {
             }
       window.addEventListener('pointermove', handlePointerMove);
       window.addEventListener('pointerup', handlePointerUp);
-      window.addEventListener('pointercancel', handlePointerUp);
-
+      window.addEventListener('pointercancel', handlePointerCancel);
       window.addEventListener('pointerdown', (e) => {
         if (!e.target.closest('#plug-color-popover') && !e.target.closest('.plug-element')) {
           closePlugPopover();
