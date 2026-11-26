@@ -2333,6 +2333,8 @@ function resetConversationCanvasState() {
 
     const nextConversationId = String(conversationId || 'default');
 
+    messageSelection.bindConversation(nextConversationId);
+
     if (activeConversationId !== nextConversationId) {
 
         if (activeConversationId !== null) {
