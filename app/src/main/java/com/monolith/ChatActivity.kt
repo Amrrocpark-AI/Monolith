@@ -1363,69 +1363,45 @@ class ChatActivity : AppCompatActivity() {
         val conversationId = currentConversationId
 
         AlertDialog.Builder(this)
-            .setTitle("حذف الرسالة")
-            .setMessage("هل تريد حذف هذه الرسالة نهائياً؟")
-            .setPositiveButton("حذف") { _, _ ->
+            .setTitle("مراجعة حذف الرسالة")
+            .setMessage(
+                "سيتم نقل الرسالة إلى حالة مراجعة قبل الحذف النهائي.\n\n" +
+                "لن تُحذف الرسالة أو محتوياتها الآن."
+            )
+            .setPositiveButton("بدء المراجعة") { _, _ ->
                 lifecycleScope.launch {
                     try {
-                                val deleted = withContext(Dispatchers.IO) {
-                                databaseMutex.withLock {
-                                val removed = appDatabase.deleteMessage(
-                                 message.id,
-                                 conversationId
+                        val started = withContext(Dispatchers.IO) {
+                            databaseMutex.withLock {
+                                appDatabase.beginMessageDeletionReview(
+                                    message.id,
+                                    conversationId
                                 )
-
-                                if (removed) {
-                                    deletedMessageIds.add(message.id)
-                                }
-
-                                removed
                             }
-                                                }
+                        }
 
-                        if (!deleted) {
-                            showToast("لم يتم العثور على الرسالة في قاعدة البيانات")
+                        if (!started) {
+                            showToast(
+                                "تعذر بدء مراجعة الحذف. تحقق من حالة الرسالة."
+                            )
                             return@launch
                         }
 
-                        synchronized(requestLock) {
-                            activeApiCalls.remove(message.id)?.let { call ->
-                                try {
-                                    call.cancel()
-                                } catch (_: Exception) {
-                                }
-                            }
-
-                            activeLocalJobs.remove(message.id)?.cancel()
-                            pendingRequests.remove(message.id)
-                        }
-
-                        if (currentConversationId == conversationId) {
-                            val index = messageList.indexOfFirst {
-                                it.id == message.id
-                            }
-
-                                                        if (index >= 0) {
-                                messageList.removeAt(index)
-
-                                messageCardBridge?.submitMessages(
-                                    messageList.toList(),
-                                    conversationId
-                                )
-                                                        }
-                        }
-
-                        showToast("تم حذف الرسالة")
+                        showToast(
+                            "بدأت مراجعة الحذف. لم تُحذف الرسالة."
+                        )
 
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
                         android.util.Log.e(
                             "Monolith",
-                            "Message deletion failed",
+                            "Message deletion review failed",
                             e
                         )
-                        showToast("تعذر حذف الرسالة: ${e.message}")
+                        showToast(
+                            "تعذر بدء مراجعة الحذف: ${e.message}"
+                        )
                     }
                 }
             }
