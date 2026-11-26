@@ -1532,7 +1532,17 @@ let activeConversationId = null;
                   color: cb.color || '#29b6f6',
                   from: cb.from || null,
                   to: cb.to || null,
-                  customPoints: cb.customPoints || [],
+                  customPoints: Array.isArray(cb.customPoints)
+                    ? cb.customPoints
+                        .filter(point =>
+                          point &&
+                          typeof point.x === 'number' &&
+                          Number.isFinite(point.x) &&
+                          typeof point.y === 'number' &&
+                          Number.isFinite(point.y)
+                        )
+                        .map(point => ({ x: point.x, y: point.y }))
+                    : [],
                   detachedEnds: cb.detachedEnds || {},
                   relations: Array.isArray(cb.relations) ? cb.relations : [],
                   alarm: cb.alarm || { enabled: false, timestamp: null, note: '', triggered: false },
