@@ -552,15 +552,16 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
     ) {
         db.beginTransaction()
         try {
-            if (oldVersion < 2) {
-                createAgentTables(db)
-            } else {
-                createAgentTables(db)
+                        if (oldVersion < 8) {
+                createMessageArchitecture(db)
+            }
+
+            ensureCodeWorkspaceTables(db)
             }
 
             if (oldVersion < 3) {
                 createMessageArchitecture(db)
-            } else if (oldVersion < 7) {
+            } else if (oldVersion < 8) {
                 createMessageArchitecture(db)
             }
 
