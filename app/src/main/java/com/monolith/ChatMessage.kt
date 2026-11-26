@@ -600,3 +600,31 @@ data class ChatMessage(
             status == ChatMessageStatus.QUEUED ||
             status == ChatMessageStatus.GENERATING
 }
+
+// =============================================================
+// MESSAGE DELETION REVIEW DOMAIN
+// مستقل عن ChatMessage
+// =============================================================
+
+enum class MessageDeletionReviewState {
+    PENDING_DELETE,
+    PERMANENT_DELETE,
+    CANCELLED
+}
+
+enum class MessageDeletionContentState {
+    VISIBLE,
+    HIDDEN
+}
+
+data class MessageDeletionReview(
+    val messageId: String,
+    val conversationId: String,
+    val reviewState: MessageDeletionReviewState,
+    val contentState: MessageDeletionContentState,
+    val reviewStartedAt: Long,
+    val hideAt: Long?,
+    val durationMs: Long?,
+    val updatedAt: Long,
+    val finalizedAt: Long?
+)
