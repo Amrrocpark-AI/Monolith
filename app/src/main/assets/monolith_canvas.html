@@ -3692,8 +3692,17 @@ function resetConversationCanvasState() {
 
         if (isDragging) {
           let targetAngle = plugAngles[angleKey] || 0;
-          if (dragState.nearestPort) {
-            const targetAnchor = getPortAnchor(dragState.nearestPort.cardId, dragState.nearestPort.side, dragState.nearestPort.portIdx);
+
+          const nearestPortCardExists = dragState.nearestPort &&
+            cards.some(card => card.id === dragState.nearestPort.cardId);
+
+          if (nearestPortCardExists) {
+            const targetAnchor = getPortAnchor(
+              dragState.nearestPort.cardId,
+              dragState.nearestPort.side,
+              dragState.nearestPort.portIdx
+            );
+
             targetAngle = targetAnchor.angle;
           } else {
             const speed = Math.hypot(dragState.vx, dragState.vy);
