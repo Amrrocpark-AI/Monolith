@@ -3351,7 +3351,7 @@ function resetConversationCanvasState() {
         globalSettingsBtn.addEventListener('click', (e) => {
           e.stopPropagation();
           closePlugPopover();
-          openInspector(cards[0] ? cards[0].id : 'card-1');
+          if (cards.length > 0) openInspector(cards[0].id);
         });
       }
 
