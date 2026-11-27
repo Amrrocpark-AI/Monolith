@@ -2503,68 +2503,112 @@ private fun sendMessage(overrideText: String? = null) {
         super.onPause()
     }
 
-    private fun applyCurrentTheme() {
-        val settings = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-        val rootLayout = findViewById<LinearLayout>(R.id.rootLayout)
-        val previousTheme = themeColorHex
 
-        themeColorHex = settings.getString("AppThemeColor", "#00D4FF") ?: "#00D4FF"
-        val themeColor = try {
-            Color.parseColor(themeColorHex)
-        } catch (_: Exception) {
-            themeColorHex = "#00D4FF"
-            Color.parseColor(themeColorHex)
+private fun applyCurrentTheme() {
+    val settings = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+    val rootLayout = findViewById<LinearLayout>(R.id.rootLayout)
+    val chatBackgroundView =
+        findViewById<FrameLayout>(R.id.chatContentContainer)
+
+    val previousTheme = themeColorHex
+
+    themeColorHex = settings.getString("AppThemeColor", "#00D4FF") ?: "#00D4FF"
+    val themeColor = try {
+        Color.parseColor(themeColorHex)
+    } catch (_: Exception) {
+        themeColorHex = "#00D4FF"
+        Color.parseColor(themeColorHex)
+    }
+
+    tvAppTitle.setTextColor(themeColor)
+    btnSend.setColorFilter(themeColor, PorterDuff.Mode.SRC_IN)
+    findViewById<ImageButton>(R.id.btnAttach)?.setColorFilter(themeColor, PorterDuff.Mode.SRC_IN)
+    findViewById<ImageButton>(R.id.btnDashboard)?.setColorFilter(themeColor, PorterDuff.Mode.SRC_IN)
+    findViewById<ImageButton>(R.id.btnSettings)?.setColorFilter(themeColor, PorterDuff.Mode.SRC_IN)
+    findViewById<ImageButton>(R.id.btnBack)?.setColorFilter(themeColor, PorterDuff.Mode.SRC_IN)
+    findViewById<ImageButton>(R.id.btnMic)?.setColorFilter(themeColor, PorterDuff.Mode.SRC_IN)
+    findViewById<TextView>(R.id.modelSelector)?.setTextColor(themeColor)
+
+    if (::tvCurrentConversation.isInitialized) {
+        tvCurrentConversation.setTextColor(themeColor)
+    }
+
+    if (::tvHistoryLabel.isInitialized) {
+        tvHistoryLabel.setTextColor(themeColor)
+    }
+
+    if (previousTheme != themeColorHex) {
+        messageCardBridge?.submitMessages(
+            messageList,
+            currentConversationId
+        )
+        if (isConversationHistoryVisible()) {
+            refreshConversationHistory()
         }
+    }
 
-        tvAppTitle.setTextColor(themeColor)
-        btnSend.setColorFilter(themeColor, PorterDuff.Mode.SRC_IN)
-        findViewById<ImageButton>(R.id.btnAttach)?.setColorFilter(themeColor, PorterDuff.Mode.SRC_IN)
-        findViewById<ImageButton>(R.id.btnDashboard)?.setColorFilter(themeColor, PorterDuff.Mode.SRC_IN)
-        findViewById<ImageButton>(R.id.btnSettings)?.setColorFilter(themeColor, PorterDuff.Mode.SRC_IN)
-        findViewById<ImageButton>(R.id.btnBack)?.setColorFilter(themeColor, PorterDuff.Mode.SRC_IN)
-        findViewById<ImageButton>(R.id.btnMic)?.setColorFilter(themeColor, PorterDuff.Mode.SRC_IN)
-        findViewById<TextView>(R.id.modelSelector)?.setTextColor(themeColor)
+    val bgImagePath = settings.getString("AppBackgroundImage", null)
 
-        if (::tvCurrentConversation.isInitialized) tvCurrentConversation.setTextColor(themeColor)
-        if (::tvHistoryLabel.isInitialized) tvHistoryLabel.setTextColor(themeColor)
+    if (!bgImagePath.isNullOrBlank()) {
+        val file = File(bgImagePath)
 
-        if (previousTheme != themeColorHex) {
-                        messageCardBridge?.submitMessages(
-                messageList,
-                currentConversationId
-            )
-            if (isConversationHistoryVisible()) refreshConversationHistory()
-        }
-
-        val bgImagePath = settings.getString("AppBackgroundImage", null)
-        if (!bgImagePath.isNullOrBlank()) {
-            val file = File(bgImagePath)
-            if (file.exists() && file.isFile && file.length() > 0L) {
-                lifecycleScope.launch {
-                    val bitmap = withContext(Dispatchers.IO) {
-                        try {
-                            BitmapFactory.decodeFile(file.absolutePath)
-                        } catch (_: Exception) {
-                            null
-                        }
-                    }
-                    if (isFinishing || isDestroyed) {
-                        bitmap?.recycle()
-                        return@launch
-                    }
-                    if (bitmap != null && rootLayout != null) {
-                        rootLayout.background = BitmapDrawable(resources, bitmap)
-                    } else if (rootLayout != null) {
-                        applyColorBackground(rootLayout, themeColor)
+        if (file.exists() && file.isFile && file.length() > 0L) {
+            lifecycleScope.launch {
+                val bitmap = withContext(Dispatchers.IO) {
+                    try {
+                        BitmapFactory.decodeFile(file.absolutePath)
+                    } catch (_: Exception) {
+                        null
                     }
                 }
-            } else if (rootLayout != null) {
-                applyColorBackground(rootLayout, themeColor)
+
+                if (isFinishing || isDestroyed) {
+                    bitmap?.recycle()
+                    return@launch
+                }
+
+                if (bitmap != null && rootLayout != null) {
+                    rootLayout.background =
+                        BitmapDrawable(resources, bitmap)
+                } else if (rootLayout != null) {
+                    applyColorBackground(rootLayout, themeColor)
+                }
             }
         } else if (rootLayout != null) {
             applyColorBackground(rootLayout, themeColor)
         }
+    } else if (rootLayout != null) {
+        applyColorBackground(rootLayout, themeColor)
     }
+
+    val chatBackground = ChatBackgroundState(this).getBackground()
+
+    if (chatBackground == null) {
+        chatBackgroundView?.setBackgroundColor(Color.TRANSPARENT)
+    } else {
+        lifecycleScope.launch {
+            val bitmap = withContext(Dispatchers.IO) {
+                try {
+                    BitmapFactory.decodeFile(chatBackground.filePath)
+                } catch (_: Exception) {
+                    null
+                }
+            }
+
+            if (isFinishing || isDestroyed) {
+                bitmap?.recycle()
+                return@launch
+            }
+
+            if (bitmap != null && chatBackgroundView != null) {
+                chatBackgroundView.background =
+                    BitmapDrawable(resources, bitmap)
+            } else {
+                chatBackgroundView?.setBackgroundColor(Color.TRANSPARENT)
+            }
+        }
+    }
+}
 
     private fun applyColorBackground(rootLayout: LinearLayout, themeColor: Int) {
         val darkBase = Color.parseColor("#0E0E10")
