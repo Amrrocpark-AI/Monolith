@@ -3,6 +3,7 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.SET_WALLPAPER" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
@@ -22,8 +23,8 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+
     <application
-        
         android:allowBackup="true"
         android:label="@string/app_name"
         android:supportsRtl="true"
@@ -37,12 +38,16 @@
             android:name="com.google.mlkit.vision.DEPENDENCIES"
             android:value="subject_segment" />
 
-        <activity android:name=".SplashActivity" android:exported="true" android:theme="@style/Theme.Monolith">
+        <activity
+            android:name=".SplashActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Monolith">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
         <activity android:name=".MainActivity" android:exported="false" android:windowSoftInputMode="adjustResize" android:configChanges="orientation|screenSize|keyboardHidden" />
         <activity android:name=".LockScreenActivity" android:exported="false" android:configChanges="orientation|screenSize|keyboardHidden" />
         <activity android:name=".FileManagerActivity" android:exported="false" />
@@ -54,25 +59,40 @@
         <activity android:name=".ImageEditorActivity" android:exported="false" android:theme="@style/Theme.Monolith" android:screenOrientation="portrait" />
         <activity android:name=".DispersionEditorActivity" android:exported="false" android:theme="@style/Theme.Monolith" android:screenOrientation="portrait" />
         <activity android:name=".SurgicalLensActivity" android:exported="false" android:theme="@style/Theme.Monolith" android:screenOrientation="portrait" />
+
         <activity
             android:name=".CodeWorkspaceActivity"
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
-        <activity android:name=".CapturePermissionActivity" android:theme="@android:style/Theme.Translucent.NoTitleBar" android:excludeFromRecents="true" android:exported="false" />
 
-        <service android:name=".PlaybackService" android:foregroundServiceType="mediaPlayback" android:exported="true">
+        <activity
+            android:name=".CapturePermissionActivity"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:excludeFromRecents="true"
+            android:exported="false" />
+
+        <service
+            android:name=".PlaybackService"
+            android:foregroundServiceType="mediaPlayback"
+            android:exported="true">
             <intent-filter>
                 <action android:name="androidx.media3.session.MediaSessionService" />
             </intent-filter>
         </service>
-        
-        <service android:name=".FloatingService" android:exported="false" android:foregroundServiceType="specialUse" android:stopWithTask="false" />
-        <service android:name=".ScreenCaptureService" android:exported="false" android:foregroundServiceType="mediaProjection" />
 
-        <!-- خدمة الرسم الجديدة (المؤشر والأرقام) -->
+        <service
+            android:name=".FloatingService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse"
+            android:stopWithTask="false" />
+
+        <service
+            android:name=".ScreenCaptureService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
+
         <service android:name=".AgentOverlayService" android:exported="false" />
 
-        <!-- خدمة الصوت القديمة -->
         <service
             android:name=".VolumeButtonService"
             android:exported="true"
@@ -85,7 +105,6 @@
                 android:resource="@xml/accessibility_service_config" />
         </service>
 
-        <!-- الخدمة الجديدة (الوكيل الذكي) -->
         <service
             android:name=".MonolithAccessibilityService"
             android:exported="true"
@@ -99,7 +118,10 @@
                 android:resource="@xml/accessibility_service_config" />
         </service>
 
-        <receiver android:name=".BootReceiver" android:enabled="true" android:exported="true">
+        <receiver
+            android:name=".BootReceiver"
+            android:enabled="true"
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />
@@ -111,9 +133,15 @@
             android:authorities="com.monolith.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">
-            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
         </provider>
 
-        <activity android:name="com.yalantis.ucrop.UCropActivity" android:screenOrientation="portrait" android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
+        <activity
+            android:name="com.yalantis.ucrop.UCropActivity"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
+
     </application>
 </manifest>
