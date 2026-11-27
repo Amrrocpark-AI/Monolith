@@ -4201,6 +4201,7 @@ function resetConversationCanvasState() {
             closePlugPopover();
             const targetCable = cables.find(c => c.id === dragState.cableId);
             if (targetCable) {
+              pushThreadUndoState(targetCable);
               const prevRef = targetCable[dragState.endKey];
 
               if (prevRef) {
