@@ -1,4 +1,3 @@
-
 package com.monolith
 
 import android.content.Context
@@ -21,7 +20,6 @@ import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
 import com.bumptech.glide.Glide
 import java.io.File
@@ -48,6 +46,8 @@ object FloatingWallpaperWindow {
         WallpaperSearch.MediaFilter.ALL
 
     private var favoritesOnly = false
+
+    private var searchGeneration = 0
 
     private val searchRunnable = Runnable {
         reloadLibrary()
@@ -163,6 +163,7 @@ object FloatingWallpaperWindow {
 
         searchInput.addTextChangedListener(
             object : TextWatcher {
+
                 override fun beforeTextChanged(
                     s: CharSequence?,
                     start: Int,
@@ -177,9 +178,10 @@ object FloatingWallpaperWindow {
                     count: Int
                 ) {
                     handler.removeCallbacks(searchRunnable)
+
                     handler.postDelayed(
                         searchRunnable,
-                        250
+                        300
                     )
                 }
 
@@ -205,19 +207,26 @@ object FloatingWallpaperWindow {
             R.id.etWallpaperSearch
         ).text.toString()
 
+        val selectedMedia = activeMedia
+        val selectedFavorites = favoritesOnly
+
+        searchGeneration++
+        val currentGeneration = searchGeneration
+
         searchJob?.cancel()
 
         searchJob = currentScope.launch {
             try {
                 val result = withContext(Dispatchers.IO) {
+
                     val search = WallpaperSearch(context)
 
                     try {
                         search.search(
                             WallpaperSearch.SearchOptions(
                                 query = query,
-                                media = activeMedia,
-                                favoriteOnly = favoritesOnly,
+                                media = selectedMedia,
+                                favoriteOnly = selectedFavorites,
                                 existingFilesOnly = true
                             )
                         )
@@ -226,14 +235,26 @@ object FloatingWallpaperWindow {
                     }
                 }
 
-                if (wallpaperView !== root) return@launch
+                if (
+                    wallpaperView !== root ||
+                    currentGeneration != searchGeneration
+                ) {
+                    return@launch
+                }
 
-                displayResults(root, result.items)
+                displayResults(
+                    root,
+                    result.items
+                )
 
             } catch (error: Exception) {
+
                 error.printStackTrace()
 
-                if (wallpaperView === root) {
+                if (
+                    wallpaperView === root &&
+                    currentGeneration == searchGeneration
+                ) {
                     displayError(root)
                 }
             }
@@ -262,6 +283,7 @@ object FloatingWallpaperWindow {
             "LOCAL LIBRARY • ${items.size} ITEMS"
 
         if (items.isEmpty()) {
+
             emptyView.text =
                 if (favoritesOnly) {
                     "NO FAVORITE WALLPAPERS"
@@ -275,7 +297,10 @@ object FloatingWallpaperWindow {
 
         items.forEach { item ->
             container.addView(
-                createWallpaperCard(root.context, item)
+                createWallpaperCard(
+                    root.context,
+                    item
+                )
             )
         }
     }
@@ -286,8 +311,10 @@ object FloatingWallpaperWindow {
     ): View {
 
         val card = LinearLayout(context).apply {
+
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
+
             setPadding(
                 dp(context, 9),
                 dp(context, 9),
@@ -296,6 +323,7 @@ object FloatingWallpaperWindow {
             )
 
             background = roundedBackground(
+                context,
                 Color.argb(185, 8, 24, 43),
                 Color.argb(110, 0, 229, 255),
                 18f
@@ -310,12 +338,14 @@ object FloatingWallpaperWindow {
         }
 
         val thumbnailFrame = FrameLayout(context).apply {
+
             layoutParams = LinearLayout.LayoutParams(
                 dp(context, 104),
                 dp(context, 88)
             )
 
             background = roundedBackground(
+                context,
                 Color.rgb(15, 30, 48),
                 Color.argb(100, 0, 229, 255),
                 12f
@@ -325,10 +355,12 @@ object FloatingWallpaperWindow {
         }
 
         val thumbnail = ImageView(context).apply {
+
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
+
             scaleType = ImageView.ScaleType.CENTER_CROP
             contentDescription = item.title
         }
@@ -340,6 +372,7 @@ object FloatingWallpaperWindow {
                 ?: File(item.filePath)
 
         val placeholder = roundedBackground(
+            context,
             Color.rgb(20, 38, 58),
             Color.TRANSPARENT,
             12f
@@ -355,17 +388,22 @@ object FloatingWallpaperWindow {
         thumbnailFrame.addView(thumbnail)
 
         if (item.mediaType == "VIDEO") {
+
             val videoBadge = TextView(context).apply {
+
                 text = "VIDEO"
                 textSize = 9f
                 setTextColor(Color.WHITE)
+
                 setPadding(
                     dp(context, 6),
                     dp(context, 3),
                     dp(context, 6),
                     dp(context, 3)
                 )
+
                 background = roundedBackground(
+                    context,
                     Color.argb(210, 0, 125, 180),
                     Color.TRANSPARENT,
                     7f
@@ -376,7 +414,9 @@ object FloatingWallpaperWindow {
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
             ).apply {
+
                 gravity = Gravity.TOP or Gravity.END
+
                 setMargins(
                     0,
                     dp(context, 5),
@@ -392,6 +432,7 @@ object FloatingWallpaperWindow {
         }
 
         val details = LinearLayout(context).apply {
+
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
 
@@ -405,23 +446,28 @@ object FloatingWallpaperWindow {
         }
 
         val title = TextView(context).apply {
+
             text = item.title
             textSize = 13f
             setTextColor(Color.WHITE)
             maxLines = 2
-            ellipsize = android.text.TextUtils.TruncateAt.END
+
+            ellipsize =
+                android.text.TextUtils.TruncateAt.END
         }
 
         val metadata = TextView(context).apply {
-            val type = item.mediaType
-            val state = if (item.isApplied) {
-                " • APPLIED"
-            } else {
-                ""
-            }
 
-            text = "$type • LOCAL$state"
+            val state =
+                if (item.isApplied) {
+                    " • APPLIED"
+                } else {
+                    ""
+                }
+
+            text = "${item.mediaType} • LOCAL$state"
             textSize = 9f
+
             setTextColor(
                 Color.rgb(0, 210, 235)
             )
@@ -438,6 +484,7 @@ object FloatingWallpaperWindow {
         details.addView(metadata)
 
         val favoriteButton = TextView(context).apply {
+
             text = if (item.isFavorite) "★" else "☆"
             textSize = 25f
 
@@ -452,6 +499,7 @@ object FloatingWallpaperWindow {
             )
 
             background = roundedBackground(
+                context,
                 Color.argb(130, 12, 29, 48),
                 Color.argb(90, 0, 229, 255),
                 30f
@@ -462,8 +510,7 @@ object FloatingWallpaperWindow {
                 dp(context, 42)
             )
 
-            contentDescription =
-                "Toggle favorite"
+            contentDescription = "Toggle favorite"
         }
 
         favoriteButton.setOnClickListener {
@@ -477,13 +524,17 @@ object FloatingWallpaperWindow {
         return card
     }
 
-    private fun toggleFavorite(wallpaperId: String) {
+    private fun toggleFavorite(
+        wallpaperId: String
+    ) {
         val currentScope = scope ?: return
         val context = windowContext ?: return
 
         currentScope.launch {
+
             try {
                 val updated = withContext(Dispatchers.IO) {
+
                     val favorites = WallpaperFavorites(context)
 
                     try {
@@ -493,7 +544,7 @@ object FloatingWallpaperWindow {
                     }
                 }
 
-                if (updated) {
+                if (updated && wallpaperView != null) {
                     reloadLibrary()
                 }
 
@@ -503,7 +554,9 @@ object FloatingWallpaperWindow {
         }
     }
 
-    private fun updateFilterAppearance(root: View) {
+    private fun updateFilterAppearance(
+        root: View
+    ) {
         val filters = listOf(
             R.id.filterAll,
             R.id.filterImages,
@@ -512,7 +565,9 @@ object FloatingWallpaperWindow {
         )
 
         val selected = when {
-            favoritesOnly -> R.id.filterFavorites
+
+            favoritesOnly ->
+                R.id.filterFavorites
 
             activeMedia == WallpaperSearch.MediaFilter.IMAGE ->
                 R.id.filterImages
@@ -520,10 +575,12 @@ object FloatingWallpaperWindow {
             activeMedia == WallpaperSearch.MediaFilter.VIDEO ->
                 R.id.filterVideos
 
-            else -> R.id.filterAll
+            else ->
+                R.id.filterAll
         }
 
         filters.forEach { id ->
+
             val view = root.findViewById<TextView>(id)
 
             view.setTextColor(
@@ -539,7 +596,9 @@ object FloatingWallpaperWindow {
         }
     }
 
-    private fun displayError(root: View) {
+    private fun displayError(
+        root: View
+    ) {
         val container = root.findViewById<LinearLayout>(
             R.id.wallpaperItemsContainer
         )
@@ -550,7 +609,8 @@ object FloatingWallpaperWindow {
 
         container.removeAllViews()
 
-        emptyView.text = "LIBRARY TEMPORARILY UNAVAILABLE"
+        emptyView.text =
+            "LIBRARY TEMPORARILY UNAVAILABLE"
 
         container.addView(emptyView)
 
@@ -560,16 +620,19 @@ object FloatingWallpaperWindow {
     }
 
     private fun roundedBackground(
+        context: Context,
         fillColor: Int,
         strokeColor: Int,
         radius: Float
     ): GradientDrawable {
 
         return GradientDrawable().apply {
+
             setColor(fillColor)
-            cornerRadius = radius
+            cornerRadius = dp(context, radius.toInt()).toFloat()
+
             setStroke(
-                dp(windowContext ?: return@apply, 1),
+                dp(context, 1),
                 strokeColor
             )
         }
@@ -584,8 +647,11 @@ object FloatingWallpaperWindow {
         ).toInt()
     }
 
-    private fun clearImageRequests(view: View) {
+    private fun clearImageRequests(
+        view: View
+    ) {
         if (view is ImageView) {
+
             try {
                 Glide.with(view).clear(view)
             } catch (_: Exception) {
@@ -593,14 +659,20 @@ object FloatingWallpaperWindow {
         }
 
         if (view is ViewGroup) {
+
             for (index in 0 until view.childCount) {
-                clearImageRequests(view.getChildAt(index))
+                clearImageRequests(
+                    view.getChildAt(index)
+                )
             }
         }
     }
 
     fun close() {
+
         handler.removeCallbacks(searchRunnable)
+
+        searchGeneration++
 
         searchJob?.cancel()
         searchJob = null
@@ -609,6 +681,7 @@ object FloatingWallpaperWindow {
         scope = null
 
         wallpaperView?.let { view ->
+
             try {
                 val inputManager =
                     view.context.getSystemService(
