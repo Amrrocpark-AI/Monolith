@@ -1,158 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="340dp"
-    android:layout_height="520dp"
-    android:background="@drawable/bg_glass_inactive"
-    android:elevation="24dp"
-    android:padding="16dp">
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:orientation="vertical">
+    <gradient
+        android:type="linear"
+        android:angle="270"
+        android:startColor="#E6101B32"
+        android:centerColor="#E60A1428"
+        android:endColor="#F0050B1A" />
 
-        <RelativeLayout
-            android:layout_width="match_parent"
-            android:layout_height="48dp">
+    <corners android:radius="34dp" />
 
-            <TextView
-                android:id="@+id/tvWallpaperTitle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_centerVertical="true"
-                android:text="WALLPAPER CORE"
-                android:textColor="#00E5FF"
-                android:textSize="17sp"
-                android:textStyle="bold"
-                android:letterSpacing="0.08" />
+    <stroke
+        android:width="1.2dp"
+        android:color="#6600E5FF" />
 
-            <ImageView
-                android:id="@+id/btnCloseWallpapers"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:layout_alignParentEnd="true"
-                android:padding="9dp"
-                android:src="@drawable/ic_close_modern"
-                android:background="@drawable/bg_circle_dark"
-                android:contentDescription="Close" />
+    <padding
+        android:left="1dp"
+        android:top="1dp"
+        android:right="1dp"
+        android:bottom="1dp" />
 
-        </RelativeLayout>
-
-        <EditText
-            android:id="@+id/etWallpaperSearch"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:layout_marginTop="12dp"
-            android:background="@drawable/bg_glass_inactive"
-            android:hint="Search wallpapers..."
-            android:hintTextColor="#88FFFFFF"
-            android:textColor="#FFFFFF"
-            android:textColorHint="#88FFFFFF"
-            android:singleLine="true"
-            android:paddingStart="16dp"
-            android:paddingEnd="16dp"
-            android:inputType="text" />
-
-        <HorizontalScrollView
-            android:layout_width="match_parent"
-            android:layout_height="52dp"
-            android:layout_marginTop="12dp"
-            android:scrollbars="none">
-
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="match_parent"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <TextView
-                    android:id="@+id/filterAll"
-                    android:layout_width="wrap_content"
-                    android:layout_height="36dp"
-                    android:gravity="center"
-                    android:paddingStart="18dp"
-                    android:paddingEnd="18dp"
-                    android:background="@drawable/bg_circle_dark"
-                    android:text="ALL"
-                    android:textColor="#00E5FF" />
-
-                <TextView
-                    android:id="@+id/filterImages"
-                    android:layout_width="wrap_content"
-                    android:layout_height="36dp"
-                    android:layout_marginStart="8dp"
-                    android:gravity="center"
-                    android:paddingStart="18dp"
-                    android:paddingEnd="18dp"
-                    android:background="@drawable/bg_circle_dark"
-                    android:text="IMAGES"
-                    android:textColor="#FFFFFF" />
-
-                <TextView
-                    android:id="@+id/filterVideos"
-                    android:layout_width="wrap_content"
-                    android:layout_height="36dp"
-                    android:layout_marginStart="8dp"
-                    android:gravity="center"
-                    android:paddingStart="18dp"
-                    android:paddingEnd="18dp"
-                    android:background="@drawable/bg_circle_dark"
-                    android:text="VIDEOS"
-                    android:textColor="#FFFFFF" />
-
-                <TextView
-                    android:id="@+id/filterFavorites"
-                    android:layout_width="wrap_content"
-                    android:layout_height="36dp"
-                    android:layout_marginStart="8dp"
-                    android:gravity="center"
-                    android:paddingStart="18dp"
-                    android:paddingEnd="18dp"
-                    android:background="@drawable/bg_circle_dark"
-                    android:text="FAVORITES"
-                    android:textColor="#FFFFFF" />
-
-            </LinearLayout>
-        </HorizontalScrollView>
-
-        <ScrollView
-            android:id="@+id/scrollWallpaperLibrary"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:layout_marginTop="12dp"
-            android:scrollbars="none">
-
-            <LinearLayout
-                android:id="@+id/wallpaperItemsContainer"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="4dp">
-
-                <TextView
-                    android:id="@+id/tvWallpaperEmpty"
-                    android:layout_width="match_parent"
-                    android:layout_height="180dp"
-                    android:gravity="center"
-                    android:text="YOUR WALLPAPER SPACE"
-                    android:textColor="#88FFFFFF"
-                    android:textSize="13sp" />
-
-            </LinearLayout>
-
-        </ScrollView>
-
-        <TextView
-            android:id="@+id/tvWallpaperCount"
-            android:layout_width="match_parent"
-            android:layout_height="36dp"
-            android:gravity="center"
-            android:text="LOCAL WALLPAPER LIBRARY"
-            android:textColor="#00E5FF"
-            android:textSize="10sp"
-            android:letterSpacing="0.12" />
-
-    </LinearLayout>
-
-</FrameLayout>
+</shape>
