@@ -16,14 +16,15 @@ class WallpaperLibraryReader(context: Context) {
         val mediaType: String,
         val isFavorite: Boolean,
         val isApplied: Boolean,
-        val createdAt: Long
+        val createdAt: Long,
+        val sourceType: String = "USER"
     )
 
     fun getAllWallpapers(): List<WallpaperItem> {
 
         val items = mutableListOf<WallpaperItem>()
 
-        val cursor = database.readableDatabase.rawQuery(
+        database.readableDatabase.rawQuery(
             """
             SELECT
                 id,
@@ -34,31 +35,32 @@ class WallpaperLibraryReader(context: Context) {
                 mediaType,
                 isFavorite,
                 isApplied,
-                createdAt
+                createdAt,
+                sourceType
             FROM wallpaper_assets
             ORDER BY createdAt DESC
             """.trimIndent(),
             null
-        )
+        ).use { cursor ->
 
-        cursor.use {
-            while (it.moveToNext()) {
+            while (cursor.moveToNext()) {
 
                 items.add(
                     WallpaperItem(
-                        id = it.getString(0),
-                        title = it.getString(1),
-                        filePath = it.getString(2),
-                        thumbnailPath = if (it.isNull(3)) {
+                        id = cursor.getString(0),
+                        title = cursor.getString(1),
+                        filePath = cursor.getString(2),
+                        thumbnailPath = if (cursor.isNull(3)) {
                             null
                         } else {
-                            it.getString(3)
+                            cursor.getString(3)
                         },
-                        mimeType = it.getString(4),
-                        mediaType = it.getString(5),
-                        isFavorite = it.getInt(6) == 1,
-                        isApplied = it.getInt(7) == 1,
-                        createdAt = it.getLong(8)
+                        mimeType = cursor.getString(4),
+                        mediaType = cursor.getString(5),
+                        isFavorite = cursor.getInt(6) == 1,
+                        isApplied = cursor.getInt(7) == 1,
+                        createdAt = cursor.getLong(8),
+                        sourceType = cursor.getString(9)
                     )
                 )
             }
