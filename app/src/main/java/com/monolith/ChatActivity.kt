@@ -1480,60 +1480,74 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    private fun sendMessage(overrideText: String? = null) {
-        if (!isActivityReady || isLoadingMessages) return
+    
+private fun sendMessage(overrideText: String? = null) {
+    if (!isActivityReady || isLoadingMessages) return
 
-        val fromInitiative = overrideText != null
-        val text = overrideText ?: etMessage.text.toString()
-        val attachments: List<String> =
-            if (fromInitiative) emptyList() else selectedImageUris.map { it.toString() }
-        if (text.isBlank() && attachments.isEmpty()) return
+    val fromInitiative = overrideText != null
+    val text = overrideText ?: etMessage.text.toString()
 
-        isModelLoaded = modelManager.isTextModelLoaded
-        val apiKey = securePrefs.getString("api_key", null)
-        val selectedModel = securePrefs.getString("selected_model", null)
-
-        if (!isModelLoaded && (apiKey.isNullOrBlank() || selectedModel.isNullOrBlank())) {
-            showToast("حمّل نموذجاً محلياً أو أضف إعدادات الاتصال السحابي أولاً")
-            return
+    val attachments: List<String> =
+        if (fromInitiative) {
+            emptyList()
+        } else {
+            selectedImageUris.map { it.toString() }
         }
 
-        clearInitiatives()
-        resetInputHint()
+    if (text.isBlank() && attachments.isEmpty()) return
 
-        val conversationId = currentConversationId
+    // تحديد المحرك المتاح دون جعله شرطاً لإرسال الرسالة.
+    isModelLoaded = modelManager.isTextModelLoaded
 
-        val userMessage = ChatMessage(
-            role = MessageRole.USER,
-            content = text.ifBlank { "أرسل المستخدم صوراً مرفقة." },
-            attachmentUris = attachments,
-            colorHex = themeColorHex
-        )
+    val apiKey = securePrefs.getString("api_key", null)
+    val selectedModel = securePrefs.getString("selected_model", null)
 
-                messageList.add(userMessage)
+    val cloudReady =
+        !apiKey.isNullOrBlank() &&
+        !selectedModel.isNullOrBlank()
 
-        messageCardBridge?.submitMessages(
-            messageList.toList(),
-            conversationId
-        )
+    clearInitiatives()
+    resetInputHint()
 
-        saveMessageToDb(userMessage, conversationId)
+    val conversationId = currentConversationId
 
-        if (!fromInitiative) {
-            selectedImageUris.clear()
-            updatePreviewUi()
-            etMessage.text.clear()
-        }
-        hideKeyboard()
-        scrollToBottom()
+    val userMessage = ChatMessage(
+        role = MessageRole.USER,
+        content = text.ifBlank { "أرسل المستخدم صوراً مرفقة." },
+        attachmentUris = attachments,
+        colorHex = themeColorHex
+    )
 
-        if (isModelLoaded) {
+    // إضافة الرسالة وعرضها وحفظها دون انتظار أي محرك ذكاء اصطناعي.
+    messageList.add(userMessage)
+
+    messageCardBridge?.submitMessages(
+        messageList.toList(),
+        conversationId
+    )
+
+    saveMessageToDb(userMessage, conversationId)
+
+    if (!fromInitiative) {
+        selectedImageUris.clear()
+        updatePreviewUi()
+        etMessage.text.clear()
+    }
+
+    hideKeyboard()
+    scrollToBottom()
+
+    // توليد الرد اختياري، وليس شرطاً لقبول الرسالة.
+    when {
+        isModelLoaded -> {
             sendToLocalModel(
                 userMessage,
                 conversationId,
                 fromInitiative
             )
-        } else {
+        }
+
+        cloudReady -> {
             sendToCloudModel(
                 userMessage,
                 conversationId,
@@ -1541,7 +1555,13 @@ class ChatActivity : AppCompatActivity() {
                 apiKey!!
             )
         }
+
+        else -> {
+            showToast("تم حفظ الرسالة. لا يوجد محرك رد مفعّل حالياً.")
+        }
     }
+}
+
 
     private fun sendToLocalModel(
         userMessage: ChatMessage,
