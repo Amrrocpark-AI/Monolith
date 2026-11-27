@@ -606,9 +606,15 @@ object FloatingWallpaperWindow {
                 arrayOf(
                     "Home screen",
                     "Lock screen",
-                    "Both screens"
+                    "Both screens",
+                    "Chat screen"
                 )
             ) { _, selected ->
+
+                if (selected == 3) {
+                    applyChatBackground(wallpaperId)
+                    return@setItems
+                }
 
                 val target = when (selected) {
                     0 -> WallpaperDeviceManager.Target.HOME
@@ -625,6 +631,56 @@ object FloatingWallpaperWindow {
             .show()
     }
 
+    private fun applyChatBackground(
+        wallpaperId: String
+    ) {
+        val currentScope = scope ?: return
+        val context = windowContext ?: return
+
+        currentScope.launch {
+            try {
+                val saved = withContext(Dispatchers.IO) {
+
+                    val reader = WallpaperLibraryReader(context)
+
+                    try {
+                        val wallpaper = reader.getAllWallpapers()
+                            .firstOrNull { it.id == wallpaperId }
+
+                        if (wallpaper == null) {
+                            false
+                        } else {
+                            ChatBackgroundState(context).setBackground(
+                                wallpaper.id,
+                                wallpaper.filePath
+                            )
+                        }
+                    } finally {
+                        reader.close()
+                    }
+                }
+
+                Toast.makeText(
+                    context,
+                    if (saved) {
+                        "Chat background saved successfully"
+                    } else {
+                        "Could not save chat background"
+                    },
+                    Toast.LENGTH_LONG
+                ).show()
+
+            } catch (error: Exception) {
+                error.printStackTrace()
+
+                Toast.makeText(
+                    context,
+                    error.message ?: "Chat background failed",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
     private fun applyWallpaper(
         wallpaperId: String,
         target: WallpaperDeviceManager.Target
