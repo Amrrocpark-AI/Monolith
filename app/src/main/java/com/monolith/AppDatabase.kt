@@ -577,9 +577,57 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
         }
     }
 
+
+    // =========================================================
+    // WALLPAPER DATABASE TABLES
+    // =========================================================
+
+    private fun ensureWallpaperTables(db: SQLiteDatabase) {
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS wallpaper_categories (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                createdAt INTEGER NOT NULL
+            )
+        """)
+
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS wallpaper_assets (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                categoryId TEXT,
+                filePath TEXT NOT NULL,
+                thumbnailPath TEXT,
+                mimeType TEXT NOT NULL,
+                mediaType TEXT NOT NULL DEFAULT 'IMAGE',
+                width INTEGER DEFAULT 0,
+                height INTEGER DEFAULT 0,
+                durationMs INTEGER DEFAULT 0,
+                isFavorite INTEGER NOT NULL DEFAULT 0,
+                isApplied INTEGER NOT NULL DEFAULT 0,
+                createdAt INTEGER NOT NULL,
+                updatedAt INTEGER NOT NULL,
+                FOREIGN KEY(categoryId)
+                    REFERENCES wallpaper_categories(id)
+                    ON DELETE SET NULL
+            )
+        """)
+
+        db.execSQL("""
+            CREATE INDEX IF NOT EXISTS
+            idx_wallpaper_assets_category
+            ON wallpaper_assets(categoryId)
+        """)
+
+        db.execSQL("""
+            CREATE INDEX IF NOT EXISTS
+            idx_wallpaper_assets_created
+            ON wallpaper_assets(createdAt DESC)
+        """)
+    }
+
     // =========================================================
     // DATABASE LIFECYCLE
-    // =========================================================
     // =========================================================
 
     override fun onConfigure(db: SQLiteDatabase) {
@@ -587,7 +635,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
         db.setForeignKeyConstraintsEnabled(true)
     }
 
-        override fun onCreate(db: SQLiteDatabase) {
+    override fun onCreate(db: SQLiteDatabase) {
         db.beginTransaction()
         try {
             createCoreTables(db)
@@ -595,6 +643,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
             createMessageArchitecture(db)
             createMessageDeletionArchiveTable(db)
             ensureCodeWorkspaceTables(db)
+            ensureWallpaperTables(db)
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
@@ -618,6 +667,10 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
                 createMessageDeletionArchiveTable(db)
             }
 
+            if (oldVersion < 10) {
+                ensureWallpaperTables(db)
+            }
+
             ensureCodeWorkspaceTables(db)
 
             db.setTransactionSuccessful()
@@ -633,6 +686,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
             ensureCodeWorkspaceTables(db)
         }
     }
+    
 
     // =========================================================
     // INTERNAL HELPERS
