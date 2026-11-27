@@ -21,6 +21,8 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
+import android.app.AlertDialog
 import com.bumptech.glide.Glide
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
@@ -456,16 +458,33 @@ object FloatingWallpaperWindow {
                 android.text.TextUtils.TruncateAt.END
         }
 
+        val state = WallpaperApplicationState(context)
+
+        val homeApplied =
+            state.getHomeWallpaperId() == item.id
+
+        val lockApplied =
+            state.getLockWallpaperId() == item.id
+
+        val appliedLabel = when {
+            homeApplied && lockApplied -> "HOME • LOCK"
+            homeApplied -> "HOME"
+            lockApplied -> "LOCK"
+            else -> ""
+        }
+
         val metadata = TextView(context).apply {
 
-            val state =
-                if (item.isApplied) {
-                    " • APPLIED"
-                } else {
-                    ""
-                }
+            text = buildString {
+                append(item.mediaType)
+                append(" • LOCAL")
 
-            text = "${item.mediaType} • LOCAL$state"
+                if (appliedLabel.isNotEmpty()) {
+                    append(" • ")
+                    append(appliedLabel)
+                }
+            }
+
             textSize = 9f
 
             setTextColor(
@@ -482,6 +501,56 @@ object FloatingWallpaperWindow {
 
         details.addView(title)
         details.addView(metadata)
+
+        val actions = LinearLayout(context).apply {
+
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        val applyButton = TextView(context).apply {
+
+            text = if (item.mediaType == "IMAGE") {
+                "SET"
+            } else {
+                "VIDEO"
+            }
+
+            textSize = 10f
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+
+            background = roundedBackground(
+                context,
+                Color.argb(190, 0, 115, 155),
+                Color.argb(180, 0, 229, 255),
+                12f
+            )
+
+            layoutParams = LinearLayout.LayoutParams(
+                dp(context, 48),
+                dp(context, 42)
+            ).apply {
+                marginEnd = dp(context, 6)
+            }
+
+            isEnabled = item.mediaType == "IMAGE"
+
+            if (!isEnabled) {
+                alpha = 0.45f
+            }
+
+            contentDescription = "Apply wallpaper"
+        }
+
+        applyButton.setOnClickListener {
+            if (item.mediaType == "IMAGE") {
+                showApplyTargetDialog(
+                    context,
+                    item.id
+                )
+            }
+        }
 
         val favoriteButton = TextView(context).apply {
 
@@ -517,11 +586,85 @@ object FloatingWallpaperWindow {
             toggleFavorite(item.id)
         }
 
+        actions.addView(applyButton)
+        actions.addView(favoriteButton)
+
         card.addView(thumbnailFrame)
         card.addView(details)
-        card.addView(favoriteButton)
+        card.addView(actions)
 
         return card
+    }
+
+    private fun showApplyTargetDialog(
+        context: Context,
+        wallpaperId: String
+    ) {
+        AlertDialog.Builder(context)
+            .setTitle("APPLY WALLPAPER")
+            .setItems(
+                arrayOf(
+                    "Home screen",
+                    "Lock screen",
+                    "Both screens"
+                )
+            ) { _, selected ->
+
+                val target = when (selected) {
+                    0 -> WallpaperDeviceManager.Target.HOME
+                    1 -> WallpaperDeviceManager.Target.LOCK
+                    else -> WallpaperDeviceManager.Target.BOTH
+                }
+
+                applyWallpaper(
+                    wallpaperId,
+                    target
+                )
+            }
+            .setNegativeButton("CANCEL", null)
+            .show()
+    }
+
+    private fun applyWallpaper(
+        wallpaperId: String,
+        target: WallpaperDeviceManager.Target
+    ) {
+        val currentScope = scope ?: return
+        val context = windowContext ?: return
+
+        currentScope.launch {
+
+            try {
+                val result = withContext(Dispatchers.IO) {
+
+                    WallpaperLibraryApplyManager(context)
+                        .apply(
+                            wallpaperId,
+                            target
+                        )
+                }
+
+                Toast.makeText(
+                    context,
+                    result.message,
+                    Toast.LENGTH_LONG
+                ).show()
+
+                if (result.success && wallpaperView != null) {
+                    reloadLibrary()
+                }
+
+            } catch (error: Exception) {
+
+                error.printStackTrace()
+
+                Toast.makeText(
+                    context,
+                    error.message ?: "Wallpaper application failed",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
     }
 
     private fun toggleFavorite(
