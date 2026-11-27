@@ -14,6 +14,12 @@ class WallpaperSearch(context: Context) {
         VIDEO
     }
 
+    enum class SourceFilter {
+        ALL,
+        BUILT_IN,
+        USER
+    }
+
     enum class SortOrder {
         NEWEST,
         OLDEST,
@@ -31,7 +37,8 @@ class WallpaperSearch(context: Context) {
         val sort: SortOrder = SortOrder.NEWEST,
         val limit: Int? = null,
         val offset: Int = 0,
-        val existingFilesOnly: Boolean = false
+        val existingFilesOnly: Boolean = false,
+        val source: SourceFilter = SourceFilter.ALL
     )
 
     data class SearchResult(
@@ -64,6 +71,20 @@ class WallpaperSearch(context: Context) {
             MediaFilter.VIDEO -> {
                 conditions.add("mediaType = ?")
                 arguments.add("VIDEO")
+            }
+        }
+
+        when (options.source) {
+            SourceFilter.ALL -> Unit
+
+            SourceFilter.BUILT_IN -> {
+                conditions.add("sourceType = ?")
+                arguments.add("BUILT_IN")
+            }
+
+            SourceFilter.USER -> {
+                conditions.add("sourceType = ?")
+                arguments.add("USER")
             }
         }
 
