@@ -1,4 +1,3 @@
-
 package com.monolith
 
 import android.content.Context
@@ -172,7 +171,8 @@ class WallpaperSearch(context: Context) {
                 mediaType,
                 isFavorite,
                 isApplied,
-                createdAt
+                createdAt,
+                sourceType
             FROM wallpaper_assets
             $whereClause
             ORDER BY $orderClause
@@ -198,7 +198,8 @@ class WallpaperSearch(context: Context) {
                         mediaType = cursor.getString(5),
                         isFavorite = cursor.getInt(6) == 1,
                         isApplied = cursor.getInt(7) == 1,
-                        createdAt = cursor.getLong(8)
+                        createdAt = cursor.getLong(8),
+                        sourceType = cursor.getString(9)
                     )
 
                 if (
