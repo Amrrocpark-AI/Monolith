@@ -612,7 +612,21 @@ private fun ensureWallpaperTables(db: SQLiteDatabase) {
                 ON DELETE SET NULL
         )
     """)
+    val wallpaperColumns = mutableSetOf<String>()
 
+    db.rawQuery("PRAGMA table_info(wallpaper_assets)", null).use { cursor ->
+        val nameIndex = cursor.getColumnIndex("name")
+        while (cursor.moveToNext()) {
+            wallpaperColumns.add(cursor.getString(nameIndex))
+        }
+    }
+
+    if ("sourceType" !in wallpaperColumns) {
+        db.execSQL("""
+            ALTER TABLE wallpaper_assets
+            ADD COLUMN sourceType TEXT NOT NULL DEFAULT 'USER'
+        """)
+    }
     db.execSQL("""
         CREATE TABLE IF NOT EXISTS wallpaper_tags (
             id TEXT PRIMARY KEY,
