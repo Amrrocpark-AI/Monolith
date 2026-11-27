@@ -1,3 +1,4 @@
+
 name: Build Monolith APK
 
 on: [push, workflow_dispatch]
@@ -55,22 +56,12 @@ jobs:
         set -euo pipefail
 
         APK="app/build/outputs/apk/debug/app-debug.apk"
-
-        echo "Checking APK file..."
         test -s "$APK"
 
-        echo "Locating Android Build Tools..."
-        BUILD_TOOLS_VERSION="$(find "$ANDROID_SDK_ROOT/build-tools" \
-          -mindepth 1 -maxdepth 1 -type d \
-          -printf '%f\n' | sort -V | tail -n 1)"
-
-        if [ -z "$BUILD_TOOLS_VERSION" ]; then
-          echo "::error::Android Build Tools were not found."
-          exit 1
-        fi
+        BUILD_TOOLS_VERSION="$(find "$ANDROID_SDK_ROOT/build-tools" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort -V | tail -n 1)"
+        test -n "$BUILD_TOOLS_VERSION"
 
         BUILD_TOOLS="$ANDROID_SDK_ROOT/build-tools/$BUILD_TOOLS_VERSION"
-
         ZIPALIGN="$BUILD_TOOLS/zipalign"
         APKSIGNER="$BUILD_TOOLS/apksigner"
         AAPT="$BUILD_TOOLS/aapt"
@@ -79,50 +70,91 @@ jobs:
         test -x "$APKSIGNER"
         test -x "$AAPT"
 
-        echo "Checking APK alignment..."
         "$ZIPALIGN" -c -v 4 "$APK"
-
-        echo "Verifying APK signature..."
         "$APKSIGNER" verify --verbose --print-certs "$APK"
 
-        echo "Checking APK package and Android versions..."
         "$AAPT" dump badging "$APK" > "$RUNNER_TEMP/apk-badging.txt"
 
-        if ! grep -Eq "^package: name='com\.monolith'([[:space:]]|$)" \
-          "$RUNNER_TEMP/apk-badging.txt"; then
-          echo "::error::Invalid application ID."
-          cat "$RUNNER_TEMP/apk-badging.txt"
-          exit 1
-        fi
+        grep -Eq "^package: name='com\.monolith'([[:space:]]|$)" "$RUNNER_TEMP/apk-badging.txt"
+        grep -Eq "^sdkVersion:'26'$" "$RUNNER_TEMP/apk-badging.txt"
+        grep -Eq "^native-code:.*'arm64-v8a'" "$RUNNER_TEMP/apk-badging.txt"
 
-        if ! grep -Eq "^sdkVersion:'26'$" "$RUNNER_TEMP/apk-badging.txt"; then
-          echo "::error::Unexpected minimum Android SDK."
-          cat "$RUNNER_TEMP/apk-badging.txt"
-          exit 1
-        fi
-
-        if ! grep -Eq "^native-code:.*'arm64-v8a'" "$RUNNER_TEMP/apk-badging.txt"; then
-          echo "::error::APK does not contain the required arm64-v8a ABI."
-          cat "$RUNNER_TEMP/apk-badging.txt"
-          exit 1
-        fi
-
-        echo "Checking native libraries..."
         unzip -Z1 "$APK" > "$RUNNER_TEMP/apk-files.txt"
 
         for LIB in \
           "lib/arm64-v8a/libmonolith.so" \
           "lib/arm64-v8a/libc++_shared.so"; do
-          if ! grep -Fxq "$LIB" "$RUNNER_TEMP/apk-files.txt"; then
-            echo "::error::Missing native library: $LIB"
-            exit 1
-          fi
+          grep -Fxq "$LIB" "$RUNNER_TEMP/apk-files.txt"
         done
 
-        echo "APK validation passed."
-        sha256sum "$APK"
+        sha256sum "$APK" | tee "$RUNNER_TEMP/apk-sha256.txt"
+        echo "Static APK validation passed."
+
+    - name: Prepare installation diagnostics
+      if: always()
+      run: |
+        mkdir -p "$RUNNER_TEMP/monolith-install-test"
+        {
+          echo "Commit: $GITHUB_SHA"
+          echo "Run: $GITHUB_RUN_ID"
+        } > "$RUNNER_TEMP/monolith-install-test/run-info.txt"
+
+    - name: Install APK on ARM64 Android emulator
+      uses: reactivecircus/android-emulator-runner@v2
+      with:
+        api-level: 30
+        target: google_apis
+        arch: arm64-v8a
+        profile: pixel_2
+        emulator-boot-timeout: 900
+        disable-linux-hw-accel: true
+        emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+        script: |
+          set -euo pipefail
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          LOG_DIR="$RUNNER_TEMP/monolith-install-test"
+
+          test -s "$APK"
+
+          adb devices -l 2>&1 | tee "$LOG_DIR/device-info.log"
+          adb shell getprop ro.build.version.release | tee -a "$LOG_DIR/device-info.log"
+          adb shell getprop ro.build.version.sdk | tee -a "$LOG_DIR/device-info.log"
+          adb shell getprop ro.product.cpu.abilist | tee -a "$LOG_DIR/device-info.log"
+
+          if adb install -r "$APK" 2>&1 | tee "$LOG_DIR/adb-install.log"; then
+            PACKAGE_PATH="$(adb shell pm path com.monolith | tr -d '\r')"
+            test -n "$PACKAGE_PATH"
+            printf '%s\n' "$PACKAGE_PATH" | tee "$LOG_DIR/package-check.log"
+            adb shell dumpsys package com.monolith | grep -E 'versionCode|versionName|primaryCpuAbi|codePath' | tee -a "$LOG_DIR/package-check.log"
+            echo "APK installation test passed."
+          else
+            echo "::error::Android Package Manager rejected the APK."
+            adb logcat -d -t 4000 > "$LOG_DIR/logcat-on-install-failure.txt" || true
+            adb shell dumpsys package com.monolith > "$LOG_DIR/package-state-on-install-failure.txt" 2>&1 || true
+            exit 1
+          fi
+
+    - name: Upload installation diagnostics
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: monolith-install-diagnostics-${{ github.run_number }}
+        path: ${{ runner.temp }}/monolith-install-test/
+        if-no-files-found: warn
+        retention-days: 30
+
+    - name: Upload validated APK as workflow artifact
+      if: success()
+      uses: actions/upload-artifact@v4
+      with:
+        name: monolith-apk-validated-${{ github.run_number }}
+        path: app/build/outputs/apk/debug/app-debug.apk
+        if-no-files-found: error
+        retention-days: 30
+        compression-level: 0
 
     - name: Create Release and Upload APK
+      if: success()
       uses: softprops/action-gh-release@v2
       with:
         files: app/build/outputs/apk/debug/app-debug.apk
