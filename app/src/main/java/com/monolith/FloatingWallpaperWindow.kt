@@ -47,7 +47,9 @@ object FloatingWallpaperWindow {
     private var activeMedia =
         WallpaperSearch.MediaFilter.ALL
 
-    private var favoritesOnly = false
+        private var favoritesOnly = false
+
+    private val selectedTagIds = linkedSetOf<String>()
 
     private var searchGeneration = 0
 
