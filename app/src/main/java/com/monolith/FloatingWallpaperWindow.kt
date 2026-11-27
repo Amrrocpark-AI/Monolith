@@ -195,10 +195,29 @@ object FloatingWallpaperWindow {
 
         activeMedia = WallpaperSearch.MediaFilter.ALL
         favoritesOnly = false
+updateFilterAppearance(root)
 
-        updateFilterAppearance(root)
-        reloadLibrary()
+val currentScope = scope ?: return
+
+currentScope.launch {
+    try {
+        withContext(Dispatchers.IO) {
+            val repository = WallpaperTagRepository(context)
+
+            try {
+                repository.initializeSystemTags()
+            } finally {
+                repository.close()
+            }
+        }
+    } catch (error: Exception) {
+        error.printStackTrace()
+    } finally {
+        if (wallpaperView === root) {
+            reloadLibrary()
+        }
     }
+}
 
     private fun reloadLibrary() {
         val root = wallpaperView ?: return
