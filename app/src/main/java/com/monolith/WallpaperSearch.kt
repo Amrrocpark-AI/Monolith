@@ -1,3 +1,4 @@
+
 package com.monolith
 
 import android.content.Context
@@ -5,7 +6,8 @@ import java.io.File
 
 class WallpaperSearch(context: Context) {
 
-    private val database = AppDatabase(context.applicationContext)
+    private val database =
+        AppDatabase(context.applicationContext)
 
     enum class MediaFilter {
         ALL,
@@ -24,6 +26,7 @@ class WallpaperSearch(context: Context) {
         val query: String = "",
         val media: MediaFilter = MediaFilter.ALL,
         val categoryId: String? = null,
+        val tagIds: List<String> = emptyList(),
         val favoriteOnly: Boolean = false,
         val appliedOnly: Boolean = false,
         val sort: SortOrder = SortOrder.NEWEST,
@@ -37,7 +40,9 @@ class WallpaperSearch(context: Context) {
         val totalCount: Int
     )
 
-    fun search(options: SearchOptions = SearchOptions()): SearchResult {
+    fun search(
+        options: SearchOptions = SearchOptions()
+    ): SearchResult {
 
         val conditions = mutableListOf<String>()
         val arguments = mutableListOf<String>()
@@ -70,6 +75,30 @@ class WallpaperSearch(context: Context) {
                 arguments.add(it)
             }
 
+        val selectedTags = options.tagIds
+            .filter { it.isNotBlank() }
+            .distinct()
+
+        if (selectedTags.isNotEmpty()) {
+            val placeholders =
+                selectedTags.joinToString(",") { "?" }
+
+            conditions.add(
+                """
+                id IN (
+                    SELECT wallpaperId
+                    FROM wallpaper_asset_tags
+                    WHERE tagId IN ($placeholders)
+                    GROUP BY wallpaperId
+                    HAVING COUNT(DISTINCT tagId) = ?
+                )
+                """.trimIndent()
+            )
+
+            arguments.addAll(selectedTags)
+            arguments.add(selectedTags.size.toString())
+        }
+
         if (options.favoriteOnly) {
             conditions.add("isFavorite = 1")
         }
@@ -78,11 +107,12 @@ class WallpaperSearch(context: Context) {
             conditions.add("isApplied = 1")
         }
 
-        val whereClause = if (conditions.isEmpty()) {
-            ""
-        } else {
-            "WHERE " + conditions.joinToString(" AND ")
-        }
+        val whereClause =
+            if (conditions.isEmpty()) {
+                ""
+            } else {
+                "WHERE " + conditions.joinToString(" AND ")
+            }
 
         val orderClause = when (options.sort) {
             SortOrder.NEWEST ->
@@ -111,7 +141,8 @@ class WallpaperSearch(context: Context) {
             else -> ""
         }
 
-        val items = mutableListOf<WallpaperLibraryReader.WallpaperItem>()
+        val items =
+            mutableListOf<WallpaperLibraryReader.WallpaperItem>()
 
         val db = database.readableDatabase
 
@@ -123,7 +154,11 @@ class WallpaperSearch(context: Context) {
             """.trimIndent(),
             arguments.toTypedArray()
         ).use { cursor ->
-            if (cursor.moveToFirst()) cursor.getInt(0) else 0
+            if (cursor.moveToFirst()) {
+                cursor.getInt(0)
+            } else {
+                0
+            }
         }
 
         db.rawQuery(
@@ -148,21 +183,23 @@ class WallpaperSearch(context: Context) {
 
             while (cursor.moveToNext()) {
 
-                val item = WallpaperLibraryReader.WallpaperItem(
-                    id = cursor.getString(0),
-                    title = cursor.getString(1),
-                    filePath = cursor.getString(2),
-                    thumbnailPath = if (cursor.isNull(3)) {
-                        null
-                    } else {
-                        cursor.getString(3)
-                    },
-                    mimeType = cursor.getString(4),
-                    mediaType = cursor.getString(5),
-                    isFavorite = cursor.getInt(6) == 1,
-                    isApplied = cursor.getInt(7) == 1,
-                    createdAt = cursor.getLong(8)
-                )
+                val item =
+                    WallpaperLibraryReader.WallpaperItem(
+                        id = cursor.getString(0),
+                        title = cursor.getString(1),
+                        filePath = cursor.getString(2),
+                        thumbnailPath =
+                            if (cursor.isNull(3)) {
+                                null
+                            } else {
+                                cursor.getString(3)
+                            },
+                        mimeType = cursor.getString(4),
+                        mediaType = cursor.getString(5),
+                        isFavorite = cursor.getInt(6) == 1,
+                        isApplied = cursor.getInt(7) == 1,
+                        createdAt = cursor.getLong(8)
+                    )
 
                 if (
                     !options.existingFilesOnly ||
