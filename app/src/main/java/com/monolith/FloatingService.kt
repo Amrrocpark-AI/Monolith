@@ -566,6 +566,8 @@ class FloatingService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        FloatingWallpaperWindow.close()
+
         if (::floatingBubbleView.isInitialized) {
             windowManager.removeView(floatingBubbleView)
         }
@@ -575,6 +577,5 @@ class FloatingService : Service() {
         streamSelectorView?.let { windowManager.removeView(it) }
         agentChatView?.let { windowManager.removeView(it) }
     }
-
     override fun onBind(intent: Intent?): IBinder? = null
 }
