@@ -344,11 +344,6 @@ object FloatingWallpaperWindow {
         }
     }
     
-                }
-            }
-        }
-    }
-
     private fun displayResults(
         root: View,
         items: List<WallpaperLibraryReader.WallpaperItem>
