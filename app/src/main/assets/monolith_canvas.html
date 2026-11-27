@@ -4463,6 +4463,14 @@ function resetConversationCanvasState() {
           } else if (cable.detachedEnds) {
             delete cable.detachedEnds[dragState.endKey];
           }
+
+          if (
+            dragState.detachedOnMove &&
+            cable.undoStack &&
+            cable.undoStack.length > 0
+          ) {
+            cable.undoStack.pop();
+          }
         }
 
         const angleKey = `${dragState.cableId}_${dragState.endKey}`;
