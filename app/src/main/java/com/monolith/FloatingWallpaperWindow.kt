@@ -112,14 +112,14 @@ object FloatingWallpaperWindow {
         }
     }
 
+
     private fun initializeLibrary(
         root: View,
         context: Context
     ) {
-        val searchInput =
-            root.findViewById<EditText>(
-                R.id.etWallpaperSearch
-            )
+        val searchInput = root.findViewById<EditText>(
+            R.id.etWallpaperSearch
+        )
 
         root.findViewById<ImageView>(
             R.id.btnCloseWallpapers
@@ -127,36 +127,28 @@ object FloatingWallpaperWindow {
             close()
         }
 
-        root.findViewById<View>(
-            R.id.filterAll
-        ).setOnClickListener {
+        root.findViewById<View>(R.id.filterAll).setOnClickListener {
             activeMedia = WallpaperSearch.MediaFilter.ALL
             favoritesOnly = false
             updateFilterAppearance(root)
             reloadLibrary()
         }
 
-        root.findViewById<View>(
-            R.id.filterImages
-        ).setOnClickListener {
+        root.findViewById<View>(R.id.filterImages).setOnClickListener {
             activeMedia = WallpaperSearch.MediaFilter.IMAGE
             favoritesOnly = false
             updateFilterAppearance(root)
             reloadLibrary()
         }
 
-        root.findViewById<View>(
-            R.id.filterVideos
-        ).setOnClickListener {
+        root.findViewById<View>(R.id.filterVideos).setOnClickListener {
             activeMedia = WallpaperSearch.MediaFilter.VIDEO
             favoritesOnly = false
             updateFilterAppearance(root)
             reloadLibrary()
         }
 
-        root.findViewById<View>(
-            R.id.filterFavorites
-        ).setOnClickListener {
+        root.findViewById<View>(R.id.filterFavorites).setOnClickListener {
             activeMedia = WallpaperSearch.MediaFilter.ALL
             favoritesOnly = true
             updateFilterAppearance(root)
@@ -165,7 +157,6 @@ object FloatingWallpaperWindow {
 
         searchInput.addTextChangedListener(
             object : TextWatcher {
-
                 override fun beforeTextChanged(
                     s: CharSequence?,
                     start: Int,
@@ -180,44 +171,115 @@ object FloatingWallpaperWindow {
                     count: Int
                 ) {
                     handler.removeCallbacks(searchRunnable)
-
-                    handler.postDelayed(
-                        searchRunnable,
-                        300
-                    )
+                    handler.postDelayed(searchRunnable, 300)
                 }
 
-                override fun afterTextChanged(
-                    s: Editable?
-                ) {}
+                override fun afterTextChanged(s: Editable?) {}
             }
         )
 
         activeMedia = WallpaperSearch.MediaFilter.ALL
         favoritesOnly = false
-updateFilterAppearance(root)
+        selectedTagIds.clear()
+        updateFilterAppearance(root)
 
-val currentScope = scope ?: return
+        val currentScope = scope ?: return
 
-currentScope.launch {
-    try {
-        withContext(Dispatchers.IO) {
-            val repository = WallpaperTagRepository(context)
-
+        currentScope.launch {
             try {
-                repository.initializeSystemTags()
+                val tags = withContext(Dispatchers.IO) {
+                    val repository = WallpaperTagRepository(context)
+
+                    try {
+                        repository.initializeSystemTags()
+                        repository.getAllTags()
+                    } finally {
+                        repository.close()
+                    }
+                }
+
+                if (wallpaperView === root) {
+                    renderTagFilters(root, context, tags)
+                }
+            } catch (error: Exception) {
+                error.printStackTrace()
             } finally {
-                repository.close()
-            }
-        }
-    } catch (error: Exception) {
-        error.printStackTrace()
-            } finally {
-            if (wallpaperView === root) {
-                reloadLibrary()
+                if (wallpaperView === root) {
+                    reloadLibrary()
+                }
             }
         }
     }
+
+    private fun renderTagFilters(
+        root: View,
+        context: Context,
+        tags: List<WallpaperTagRepository.Tag>
+    ) {
+        val container = root.findViewById<LinearLayout>(
+            R.id.wallpaperTagsContainer
+        )
+
+        container.removeAllViews()
+
+        tags.forEach { tag ->
+            val selected = selectedTagIds.contains(tag.id)
+
+            val chip = TextView(context).apply {
+                text = tag.nameEn
+                textSize = 12f
+                gravity = Gravity.CENTER
+                setPadding(
+                    dp(context, 14),
+                    0,
+                    dp(context, 14),
+                    0
+                )
+
+                setTextColor(
+                    if (selected) {
+                        Color.rgb(0, 229, 255)
+                    } else {
+                        Color.WHITE
+                    }
+                )
+
+                background = roundedBackground(
+                    context,
+                    if (selected) {
+                        Color.rgb(0, 55, 68)
+                    } else {
+                        Color.rgb(25, 35, 50)
+                    },
+                    if (selected) {
+                        Color.rgb(0, 229, 255)
+                    } else {
+                        Color.argb(90, 255, 255, 255)
+                    },
+                    18f
+                )
+
+                alpha = if (selected) 1f else 0.75f
+
+                setOnClickListener {
+                    if (!selectedTagIds.add(tag.id)) {
+                        selectedTagIds.remove(tag.id)
+                    }
+
+                    renderTagFilters(root, context, tags)
+                    reloadLibrary()
+                }
+            }
+
+            val params = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                dp(context, 34)
+            ).apply {
+                marginEnd = dp(context, 8)
+            }
+
+            container.addView(chip, params)
+        }
     }
 
     private fun reloadLibrary() {
@@ -231,6 +293,7 @@ currentScope.launch {
 
         val selectedMedia = activeMedia
         val selectedFavorites = favoritesOnly
+        val selectedTags = selectedTagIds.toList()
 
         searchGeneration++
         val currentGeneration = searchGeneration
@@ -240,7 +303,6 @@ currentScope.launch {
         searchJob = currentScope.launch {
             try {
                 val result = withContext(Dispatchers.IO) {
-
                     val search = WallpaperSearch(context)
 
                     try {
@@ -248,6 +310,7 @@ currentScope.launch {
                             WallpaperSearch.SearchOptions(
                                 query = query,
                                 media = selectedMedia,
+                                tagIds = selectedTags,
                                 favoriteOnly = selectedFavorites,
                                 existingFilesOnly = true
                             )
@@ -264,13 +327,9 @@ currentScope.launch {
                     return@launch
                 }
 
-                displayResults(
-                    root,
-                    result.items
-                )
+                displayResults(root, result.items)
 
             } catch (error: Exception) {
-
                 error.printStackTrace()
 
                 if (
@@ -278,6 +337,11 @@ currentScope.launch {
                     currentGeneration == searchGeneration
                 ) {
                     displayError(root)
+                }
+            }
+        }
+    }
+    
                 }
             }
         }
