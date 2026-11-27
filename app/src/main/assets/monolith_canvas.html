@@ -4369,22 +4369,56 @@ function resetConversationCanvasState() {
             }
           } else if (dragState.detachedOnMove && cableIdx !== -1) {
             const cable = cables[cableIdx];
-            const nearest = findNearestPort(e.clientX, e.clientY, dragState.cableId, dragState.endKey);
+            const nearest = findNearestPort(
+              e.clientX,
+              e.clientY,
+              dragState.cableId,
+              dragState.endKey
+            );
             const angleKey = `${cable.id}_${dragState.endKey}`;
 
             if (nearest) {
-              cable[dragState.endKey] = { cardId: nearest.cardId, side: nearest.side, portIdx: nearest.portIdx };
-              if (cable.detachedEnds) delete cable.detachedEnds[dragState.endKey];
-              triggerPlugEffect('snap', nearest.px, nearest.py, cable.color);
-                        } else {
+              cable[dragState.endKey] = {
+                cardId: nearest.cardId,
+                side: nearest.side,
+                portIdx: nearest.portIdx
+              };
+
+              if (cable.detachedEnds) {
+                delete cable.detachedEnds[dragState.endKey];
+              }
+
+              triggerPlugEffect(
+                'snap',
+                nearest.px,
+                nearest.py,
+                cable.color
+              );
+
+              logThreadHistory(
+                cable,
+                'إعادة توصيل',
+                `تم ربط الطرف ${dragState.endKey} بمنفذ جديد`
+              );
+            } else {
               cable[dragState.endKey] = null;
-              if (!cable.detachedEnds) cable.detachedEnds = {};
+
+              if (!cable.detachedEnds) {
+                cable.detachedEnds = {};
+              }
+
               cable.detachedEnds[dragState.endKey] = {
                 x: e.clientX,
                 y: e.clientY,
                 angle: plugAngles[angleKey] ?? 0
               };
-  }
+
+              logThreadHistory(
+                cable,
+                'فصل اتصال',
+                `تم فصل الطرف ${dragState.endKey} وتركه معلقاً`
+              );
+            }
           }
         }
 
