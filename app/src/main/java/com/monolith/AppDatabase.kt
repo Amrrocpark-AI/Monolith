@@ -25,7 +25,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
 ) {
 
     companion object {
-        private const val DB_VERSION = 9
+        private const val DB_VERSION = 10
         /** معرّف المحادثة الرئيسية المحمية من الحذف الاعتيادي. */
         const val MAIN_CONVERSATION_ID = "main_chat"
 
