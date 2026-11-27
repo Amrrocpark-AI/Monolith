@@ -679,13 +679,14 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
         }
     }
 
-    override fun onOpen(db: SQLiteDatabase) {
+        override fun onOpen(db: SQLiteDatabase) {
         super.onOpen(db)
         db.setForeignKeyConstraintsEnabled(true)
         if (!db.isReadOnly) {
             ensureCodeWorkspaceTables(db)
+            ensureWallpaperTables(db)
         }
-    }
+        }
     
 
     // =========================================================
