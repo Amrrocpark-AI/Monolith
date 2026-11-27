@@ -1,3 +1,4 @@
+
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="340dp"
@@ -11,7 +12,6 @@
         android:layout_height="match_parent"
         android:orientation="vertical">
 
-        <!-- الرأس الهولوغرافي -->
         <RelativeLayout
             android:layout_width="match_parent"
             android:layout_height="48dp">
@@ -39,7 +39,6 @@
 
         </RelativeLayout>
 
-        <!-- البحث -->
         <EditText
             android:id="@+id/etWallpaperSearch"
             android:layout_width="match_parent"
@@ -47,7 +46,6 @@
             android:layout_marginTop="12dp"
             android:background="@drawable/bg_glass_inactive"
             android:hint="Search wallpapers..."
-            android:hintTextColor="#88FFFFFF"
             android:textColor="#FFFFFF"
             android:textColorHint="#88FFFFFF"
             android:singleLine="true"
@@ -55,7 +53,6 @@
             android:paddingEnd="16dp"
             android:inputType="text" />
 
-        <!-- أدوات التصفية -->
         <HorizontalScrollView
             android:layout_width="match_parent"
             android:layout_height="52dp"
@@ -118,7 +115,6 @@
             </LinearLayout>
         </HorizontalScrollView>
 
-        <!-- مساحة عرض الخلفيات -->
         <ScrollView
             android:id="@+id/scrollWallpaperLibrary"
             android:layout_width="match_parent"
@@ -147,7 +143,6 @@
 
         </ScrollView>
 
-        <!-- الشريط السفلي -->
         <TextView
             android:id="@+id/tvWallpaperCount"
             android:layout_width="match_parent"
