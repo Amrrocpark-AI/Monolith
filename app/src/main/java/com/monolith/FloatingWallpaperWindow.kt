@@ -212,12 +212,13 @@ currentScope.launch {
         }
     } catch (error: Exception) {
         error.printStackTrace()
-    } finally {
-        if (wallpaperView === root) {
-            reloadLibrary()
+            } finally {
+            if (wallpaperView === root) {
+                reloadLibrary()
+            }
         }
     }
-}
+    }
 
     private fun reloadLibrary() {
         val root = wallpaperView ?: return
