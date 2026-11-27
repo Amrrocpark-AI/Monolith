@@ -140,7 +140,6 @@
                     android:textSize="13sp" />
 
             </LinearLayout>
-
         </ScrollView>
 
         <TextView
@@ -154,5 +153,4 @@
             android:letterSpacing="0.12" />
 
     </LinearLayout>
-
 </FrameLayout>
