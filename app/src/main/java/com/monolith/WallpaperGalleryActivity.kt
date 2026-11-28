@@ -357,6 +357,7 @@ class WallpaperGalleryActivity : AppCompatActivity() {
     private fun loadWallpapers() {
         val query = searchInput.text.toString()
         val keywordIds = selectedKeywordIds.toList()
+        val categoryIds = selectedCategoryIds.toList()
         val currentTab = selectedTab
         val preferredLanguageCode =
             resources.configuration.locales[0].toLanguageTag()
