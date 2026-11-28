@@ -583,13 +583,66 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(
     // =========================================================
 
 private fun ensureWallpaperTables(db: SQLiteDatabase) {
+
+    // =====================================================
+    // CATEGORY TREE
+    // =====================================================
+
     db.execSQL("""
         CREATE TABLE IF NOT EXISTS wallpaper_categories (
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL UNIQUE,
-            createdAt INTEGER NOT NULL
+            parentId TEXT,
+            description TEXT,
+            sortOrder INTEGER NOT NULL DEFAULT 0,
+            isVisible INTEGER NOT NULL DEFAULT 1,
+            createdAt INTEGER NOT NULL,
+            FOREIGN KEY(parentId)
+                REFERENCES wallpaper_categories(id)
+                ON DELETE SET NULL
         )
     """)
+
+    val categoryColumns = mutableSetOf<String>()
+
+    db.rawQuery("PRAGMA table_info(wallpaper_categories)", null).use { cursor ->
+        val nameIndex = cursor.getColumnIndex("name")
+        while (cursor.moveToNext()) {
+            categoryColumns.add(cursor.getString(nameIndex))
+        }
+    }
+
+    if ("parentId" !in categoryColumns) {
+        db.execSQL("""
+            ALTER TABLE wallpaper_categories
+            ADD COLUMN parentId TEXT
+        """)
+    }
+
+    if ("description" !in categoryColumns) {
+        db.execSQL("""
+            ALTER TABLE wallpaper_categories
+            ADD COLUMN description TEXT
+        """)
+    }
+
+    if ("sortOrder" !in categoryColumns) {
+        db.execSQL("""
+            ALTER TABLE wallpaper_categories
+            ADD COLUMN sortOrder INTEGER NOT NULL DEFAULT 0
+        """)
+    }
+
+    if ("isVisible" !in categoryColumns) {
+        db.execSQL("""
+            ALTER TABLE wallpaper_categories
+            ADD COLUMN isVisible INTEGER NOT NULL DEFAULT 1
+        """)
+    }
+
+    // =====================================================
+    // WALLPAPER ASSETS
+    // =====================================================
 
     db.execSQL("""
         CREATE TABLE IF NOT EXISTS wallpaper_assets (
@@ -612,6 +665,7 @@ private fun ensureWallpaperTables(db: SQLiteDatabase) {
                 ON DELETE SET NULL
         )
     """)
+
     val wallpaperColumns = mutableSetOf<String>()
 
     db.rawQuery("PRAGMA table_info(wallpaper_assets)", null).use { cursor ->
@@ -627,6 +681,42 @@ private fun ensureWallpaperTables(db: SQLiteDatabase) {
             ADD COLUMN sourceType TEXT NOT NULL DEFAULT 'USER'
         """)
     }
+
+    // =====================================================
+    // MANY-TO-MANY CATEGORY RELATIONSHIPS
+    // =====================================================
+
+    db.execSQL("""
+        CREATE TABLE IF NOT EXISTS wallpaper_asset_categories (
+            wallpaperId TEXT NOT NULL,
+            categoryId TEXT NOT NULL,
+            createdAt INTEGER NOT NULL,
+            PRIMARY KEY(wallpaperId, categoryId),
+            FOREIGN KEY(wallpaperId)
+                REFERENCES wallpaper_assets(id)
+                ON DELETE CASCADE,
+            FOREIGN KEY(categoryId)
+                REFERENCES wallpaper_categories(id)
+                ON DELETE CASCADE
+        )
+    """)
+
+    // Preserve existing primary category assignments.
+    db.execSQL("""
+        INSERT OR IGNORE INTO wallpaper_asset_categories (
+            wallpaperId,
+            categoryId,
+            createdAt
+        )
+        SELECT id, categoryId, createdAt
+        FROM wallpaper_assets
+        WHERE categoryId IS NOT NULL
+    """)
+
+    // =====================================================
+    // EXISTING TAG SYSTEM - PRESERVED
+    // =====================================================
+
     db.execSQL("""
         CREATE TABLE IF NOT EXISTS wallpaper_tags (
             id TEXT PRIMARY KEY,
@@ -653,6 +743,55 @@ private fun ensureWallpaperTables(db: SQLiteDatabase) {
         )
     """)
 
+    // =====================================================
+    // INDEPENDENT KEYWORD ENGINE
+    // =====================================================
+
+    db.execSQL("""
+        CREATE TABLE IF NOT EXISTS wallpaper_keywords (
+            id TEXT PRIMARY KEY,
+            keyword TEXT NOT NULL,
+            normalizedKeyword TEXT NOT NULL UNIQUE,
+            languageCode TEXT NOT NULL DEFAULT 'und',
+            createdAt INTEGER NOT NULL,
+            updatedAt INTEGER NOT NULL
+        )
+    """)
+
+    db.execSQL("""
+        CREATE TABLE IF NOT EXISTS wallpaper_keyword_aliases (
+            id TEXT PRIMARY KEY,
+            keywordId TEXT NOT NULL,
+            alias TEXT NOT NULL,
+            normalizedAlias TEXT NOT NULL,
+            languageCode TEXT NOT NULL DEFAULT 'und',
+            createdAt INTEGER NOT NULL,
+            UNIQUE(normalizedAlias, languageCode),
+            FOREIGN KEY(keywordId)
+                REFERENCES wallpaper_keywords(id)
+                ON DELETE CASCADE
+        )
+    """)
+
+    db.execSQL("""
+        CREATE TABLE IF NOT EXISTS wallpaper_asset_keywords (
+            wallpaperId TEXT NOT NULL,
+            keywordId TEXT NOT NULL,
+            createdAt INTEGER NOT NULL,
+            PRIMARY KEY(wallpaperId, keywordId),
+            FOREIGN KEY(wallpaperId)
+                REFERENCES wallpaper_assets(id)
+                ON DELETE CASCADE,
+            FOREIGN KEY(keywordId)
+                REFERENCES wallpaper_keywords(id)
+                ON DELETE CASCADE
+        )
+    """)
+
+    // =====================================================
+    // PERFORMANCE INDEXES
+    // =====================================================
+
     db.execSQL("""
         CREATE INDEX IF NOT EXISTS
         idx_wallpaper_assets_category
@@ -670,8 +809,37 @@ private fun ensureWallpaperTables(db: SQLiteDatabase) {
         idx_wallpaper_asset_tags_tag
         ON wallpaper_asset_tags(tagId)
     """)
-}
 
+    db.execSQL("""
+        CREATE INDEX IF NOT EXISTS
+        idx_wallpaper_categories_parent
+        ON wallpaper_categories(parentId, sortOrder)
+    """)
+
+    db.execSQL("""
+        CREATE INDEX IF NOT EXISTS
+        idx_wallpaper_asset_categories_category
+        ON wallpaper_asset_categories(categoryId)
+    """)
+
+    db.execSQL("""
+        CREATE INDEX IF NOT EXISTS
+        idx_wallpaper_keywords_normalized
+        ON wallpaper_keywords(normalizedKeyword)
+    """)
+
+    db.execSQL("""
+        CREATE INDEX IF NOT EXISTS
+        idx_wallpaper_keyword_aliases_keyword
+        ON wallpaper_keyword_aliases(keywordId)
+    """)
+
+    db.execSQL("""
+        CREATE INDEX IF NOT EXISTS
+        idx_wallpaper_asset_keywords_keyword
+        ON wallpaper_asset_keywords(keywordId)
+    """)
+}
     // =========================================================
     // DATABASE LIFECYCLE
     // =========================================================
