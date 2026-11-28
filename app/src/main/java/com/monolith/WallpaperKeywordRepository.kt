@@ -41,39 +41,56 @@ class WallpaperKeywordRepository(context: Context) {
 
         val db = database.writableDatabase
         val now = System.currentTimeMillis()
-
-        val existingId = db.rawQuery(
-            """
-            SELECT id
-            FROM wallpaper_keywords
-            WHERE normalizedKeyword = ?
-            LIMIT 1
-            """.trimIndent(),
-            arrayOf(normalized)
-        ).use {
-            if (it.moveToFirst()) it.getString(0) else null
-        }
-
-        if (existingId != null) {
-            return existingId
-        }
-
         val id = UUID.randomUUID().toString()
 
-        val values = ContentValues().apply {
-            put("id", id)
-            put("keyword", cleanKeyword)
-            put("normalizedKeyword", normalized)
-            put("languageCode", cleanLanguage)
-            put("createdAt", now)
-            put("updatedAt", now)
-        }
+        db.beginTransaction()
 
-        db.insertOrThrow(
-            "wallpaper_keywords",
-            null,
-            values
-        )
+        try {
+            val existing = db.rawQuery(
+                """
+                SELECT id, languageCode
+                FROM wallpaper_keywords
+                WHERE normalizedKeyword = ?
+                LIMIT 1
+                """.trimIndent(),
+                arrayOf(normalized)
+            ).use { cursor ->
+                if (cursor.moveToFirst()) {
+                    Pair(cursor.getString(0), cursor.getString(1))
+                } else {
+                    null
+                }
+            }
+
+            if (existing != null) {
+                require(existing.second == cleanLanguage) {
+                    "This keyword already exists in another language"
+                }
+
+                db.setTransactionSuccessful()
+                return existing.first
+            }
+
+            val values = ContentValues().apply {
+                put("id", id)
+                put("keyword", cleanKeyword)
+                put("normalizedKeyword", normalized)
+                put("languageCode", cleanLanguage)
+                put("createdAt", now)
+                put("updatedAt", now)
+            }
+
+            db.insertOrThrow(
+                "wallpaper_keywords",
+                null,
+                values
+            )
+
+            db.setTransactionSuccessful()
+
+        } finally {
+            db.endTransaction()
+        }
 
         return id
     }
