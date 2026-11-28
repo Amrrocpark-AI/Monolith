@@ -88,10 +88,18 @@ class WallpaperSearch(context: Context) {
             }
         }
 
-        options.categoryId
+                options.categoryId
             ?.takeIf { it.isNotBlank() }
             ?.let {
-                conditions.add("categoryId = ?")
+                conditions.add(
+                    """
+                    id IN (
+                        SELECT wallpaperId
+                        FROM wallpaper_asset_categories
+                        WHERE categoryId = ?
+                    )
+                    """.trimIndent()
+                )
                 arguments.add(it)
             }
 
