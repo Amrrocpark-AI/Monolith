@@ -51,6 +51,12 @@ class WallpaperGalleryActivity : AppCompatActivity() {
         resultCount = findViewById(R.id.tvWallpaperResultCount)
         searchInput = findViewById(R.id.etGallerySearch)
 
+        dimensionContainer =
+            findViewById(R.id.wallpaperDimensionContainer)
+
+        categoryContainer =
+            findViewById(R.id.wallpaperCategoryContainer)
+
         val gridColumns = if (
             resources.configuration.screenWidthDp >= 600
         ) 3 else 2
