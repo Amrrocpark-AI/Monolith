@@ -328,7 +328,8 @@ object FloatingWallpaperWindow {
                                 media = selectedMedia,
                                 tagIds = selectedTags,
                                 favoriteOnly = selectedFavorites,
-                                existingFilesOnly = true
+                                existingFilesOnly = true,
+                                source = selectedSource
                             )
                         )
                     } finally {
