@@ -501,16 +501,32 @@ class WallpaperKeywordRepository(context: Context) {
         database.readableDatabase.rawQuery(
             """
             SELECT
-                k.id,
-                k.keyword,
-                k.languageCode,
+                c.id,
+                t.term,
+                t.languageCode,
                 0,
                 0
-            FROM wallpaper_keywords k
-            INNER JOIN wallpaper_asset_keywords ak
-                ON ak.keywordId = k.id
-            WHERE ak.wallpaperId = ?
-            ORDER BY k.keyword COLLATE NOCASE ASC
+            FROM wallpaper_asset_concepts ac
+            INNER JOIN wallpaper_keyword_concepts c
+                ON c.id = ac.conceptId
+            INNER JOIN wallpaper_keyword_terms t
+                ON t.id = (
+                    SELECT selected.id
+                    FROM wallpaper_keyword_terms selected
+                    WHERE selected.conceptId = c.id
+                    ORDER BY
+                        selected.isPrimary DESC,
+                        CASE
+                            WHEN selected.languageCode = 'und'
+                            THEN 0
+                            ELSE 1
+                        END,
+                        selected.languageCode ASC,
+                        selected.createdAt ASC
+                    LIMIT 1
+                )
+            WHERE ac.wallpaperId = ?
+            ORDER BY t.term COLLATE NOCASE ASC
             """.trimIndent(),
             arrayOf(wallpaperId)
         ).use { cursor ->
