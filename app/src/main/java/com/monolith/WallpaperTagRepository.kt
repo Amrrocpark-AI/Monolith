@@ -125,17 +125,55 @@ class WallpaperTagRepository(context: Context) {
         wallpaperId: String,
         tagIds: List<String>
     ) {
+        require(wallpaperId.isNotBlank()) {
+            "Wallpaper ID cannot be empty"
+        }
+
+        val selectedIds = tagIds
+            .filter { it.isNotBlank() }
+            .distinct()
+
         val db = database.writableDatabase
         db.beginTransaction()
 
         try {
+            val wallpaperExists = db.rawQuery(
+                """
+                SELECT 1
+                FROM wallpaper_assets
+                WHERE id = ?
+                LIMIT 1
+                """.trimIndent(),
+                arrayOf(wallpaperId)
+            ).use { it.moveToFirst() }
+
+            require(wallpaperExists) {
+                "Wallpaper does not exist"
+            }
+
+            selectedIds.forEach { tagId ->
+                val tagExists = db.rawQuery(
+                    """
+                    SELECT 1
+                    FROM wallpaper_tags
+                    WHERE id = ?
+                    LIMIT 1
+                    """.trimIndent(),
+                    arrayOf(tagId)
+                ).use { it.moveToFirst() }
+
+                require(tagExists) {
+                    "Tag does not exist: $tagId"
+                }
+            }
+
             db.delete(
                 "wallpaper_asset_tags",
                 "wallpaperId = ?",
                 arrayOf(wallpaperId)
             )
 
-            tagIds.distinct().forEach { tagId ->
+            selectedIds.forEach { tagId ->
                 val values = ContentValues().apply {
                     put("wallpaperId", wallpaperId)
                     put("tagId", tagId)
@@ -149,6 +187,7 @@ class WallpaperTagRepository(context: Context) {
             }
 
             db.setTransactionSuccessful()
+
         } finally {
             db.endTransaction()
         }
