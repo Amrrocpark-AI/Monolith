@@ -886,8 +886,10 @@ object FloatingWallpaperWindow {
                 }
             )
 
-            view.alpha =
+                        view.alpha =
                 if (id == selected) 1f else 0.68f
+        }
+
         val sourceFilters = listOf(
             R.id.filterSourceAll,
             R.id.filterSourceBuiltIn,
@@ -918,7 +920,7 @@ object FloatingWallpaperWindow {
 
             view.alpha =
                 if (id == selectedSourceId) 1f else 0.68f
-        }        }
+        }
     }
 
     private fun displayError(
