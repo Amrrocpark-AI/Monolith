@@ -67,10 +67,47 @@ class WallpaperKeywordRepository(context: Context) {
                     "This keyword already exists in another language"
                 }
 
-                db.setTransactionSuccessful()
-                return existing.first
-            }
+                val existingId = existing.first
 
+                val conceptExists = db.rawQuery(
+                    """
+                    SELECT 1
+                    FROM wallpaper_keyword_concepts
+                    WHERE id = ?
+                    LIMIT 1
+                    """.trimIndent(),
+                    arrayOf(existingId)
+                ).use { it.moveToFirst() }
+
+                check(conceptExists) {
+                    "Existing keyword has no matching concept"
+                }
+
+                val termExists = db.rawQuery(
+                    """
+                    SELECT 1
+                    FROM wallpaper_keyword_terms
+                    WHERE id = ?
+                      AND conceptId = ?
+                      AND normalizedTerm = ?
+                      AND languageCode = ?
+                    LIMIT 1
+                    """.trimIndent(),
+                    arrayOf(
+                        existingId,
+                        existingId,
+                        normalized,
+                        cleanLanguage
+                    )
+                ).use { it.moveToFirst() }
+
+                check(termExists) {
+                    "Existing keyword has no matching concept term"
+                }
+
+                db.setTransactionSuccessful()
+                return existingId
+            }
             val values = ContentValues().apply {
                 put("id", id)
                 put("keyword", cleanKeyword)
