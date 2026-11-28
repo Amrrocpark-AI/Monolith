@@ -1,18 +1,34 @@
-
 package com.monolith
 
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.View
+import android.widget.EditText
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class WallpaperGalleryActivity : AppCompatActivity() {
 
     private lateinit var galleryRecycler: RecyclerView
     private lateinit var emptyState: View
     private lateinit var resultCount: TextView
+    private lateinit var searchInput: EditText
+    private lateinit var adapter: WallpaperGalleryAdapter
+
+    private var selectedTab = GalleryTab.EXPLORE
+
+    private enum class GalleryTab {
+        EXPLORE,
+        FAVORITES,
+        MY_WALLPAPERS
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -21,6 +37,7 @@ class WallpaperGalleryActivity : AppCompatActivity() {
         galleryRecycler = findViewById(R.id.wallpaperGalleryRecycler)
         emptyState = findViewById(R.id.wallpaperEmptyState)
         resultCount = findViewById(R.id.tvWallpaperResultCount)
+        searchInput = findViewById(R.id.etGallerySearch)
 
         val gridColumns = if (
             resources.configuration.screenWidthDp >= 600
@@ -31,12 +48,177 @@ class WallpaperGalleryActivity : AppCompatActivity() {
 
         galleryRecycler.setHasFixedSize(true)
 
-        showEmptyGallery()
+        adapter = WallpaperGalleryAdapter(
+            onFavoriteClick = { item ->
+                toggleFavorite(item.id)
+            },
+            onWallpaperClick = { item ->
+                showWallpaperDetails(item)
+            }
+        )
+
+        galleryRecycler.adapter = adapter
+
+        setupTabs()
+        setupSearch()
+        loadWallpapers()
     }
 
-    private fun showEmptyGallery() {
-        galleryRecycler.visibility = View.GONE
-        emptyState.visibility = View.VISIBLE
-        resultCount.text = "0 wallpapers"
+    private fun setupTabs() {
+        val explore = findViewById<TextView>(R.id.tabExplore)
+        val favorites = findViewById<TextView>(R.id.tabFavorites)
+        val myWallpapers = findViewById<TextView>(R.id.tabMyWallpapers)
+
+        explore.setOnClickListener {
+            selectedTab = GalleryTab.EXPLORE
+            updateTabAppearance()
+            loadWallpapers()
+        }
+
+        favorites.setOnClickListener {
+            selectedTab = GalleryTab.FAVORITES
+            updateTabAppearance()
+            loadWallpapers()
+        }
+
+        myWallpapers.setOnClickListener {
+            selectedTab = GalleryTab.MY_WALLPAPERS
+            updateTabAppearance()
+            loadWallpapers()
+        }
+
+        updateTabAppearance()
+    }
+
+    private fun updateTabAppearance() {
+        val tabs = listOf(
+            R.id.tabExplore to GalleryTab.EXPLORE,
+            R.id.tabFavorites to GalleryTab.FAVORITES,
+            R.id.tabMyWallpapers to GalleryTab.MY_WALLPAPERS
+        )
+
+        tabs.forEach { (viewId, tab) ->
+            val view = findViewById<TextView>(viewId)
+            val selected = selectedTab == tab
+
+            view.setBackgroundResource(
+                if (selected) {
+                    R.drawable.bg_circle_dark
+                } else {
+                    android.R.color.transparent
+                }
+            )
+
+            view.setTextColor(
+                if (selected) {
+                    android.graphics.Color.rgb(197, 138, 255)
+                } else {
+                    android.graphics.Color.rgb(170, 170, 170)
+                }
+            )
+        }
+    }
+
+    private fun setupSearch() {
+        searchInput.addTextChangedListener(
+            object : TextWatcher {
+
+                override fun beforeTextChanged(
+                    s: CharSequence?,
+                    start: Int,
+                    count: Int,
+                    after: Int
+                ) = Unit
+
+                override fun onTextChanged(
+                    s: CharSequence?,
+                    start: Int,
+                    before: Int,
+                    count: Int
+                ) {
+                    loadWallpapers()
+                }
+
+                override fun afterTextChanged(
+                    s: Editable?
+                ) = Unit
+            }
+        )
+    }
+
+    private fun loadWallpapers() {
+        val query = searchInput.text.toString()
+
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                val search = WallpaperSearch(applicationContext)
+
+                try {
+                    val options = WallpaperSearch.SearchOptions(
+                        query = query,
+                        favoriteOnly =
+                            selectedTab == GalleryTab.FAVORITES,
+                        existingFilesOnly = true,
+                        source = when (selectedTab) {
+                            GalleryTab.EXPLORE ->
+                                WallpaperSearch.SourceFilter.ALL
+
+                            GalleryTab.FAVORITES ->
+                                WallpaperSearch.SourceFilter.ALL
+
+                            GalleryTab.MY_WALLPAPERS ->
+                                WallpaperSearch.SourceFilter.USER
+                        }
+                    )
+
+                    search.search(options)
+                } finally {
+                    search.close()
+                }
+            }
+
+            adapter.submitList(result.items)
+
+            resultCount.text =
+                "${result.items.size} wallpapers"
+
+            if (result.items.isEmpty()) {
+                galleryRecycler.visibility = View.GONE
+                emptyState.visibility = View.VISIBLE
+            } else {
+                galleryRecycler.visibility = View.VISIBLE
+                emptyState.visibility = View.GONE
+            }
+        }
+    }
+
+    private fun toggleFavorite(wallpaperId: String) {
+        lifecycleScope.launch {
+            withContext(Dispatchers.IO) {
+                val favorites = WallpaperFavorites(applicationContext)
+
+                try {
+                    favorites.toggleFavorite(wallpaperId)
+                } finally {
+                    favorites.close()
+                }
+            }
+
+            loadWallpapers()
+        }
+    }
+
+    private fun showWallpaperDetails(
+        item: WallpaperLibraryReader.WallpaperItem
+    ) {
+        android.app.AlertDialog.Builder(this)
+            .setTitle(item.title)
+            .setMessage(
+                "Source: ${item.sourceType}\n" +
+                "Type: ${item.mediaType}\n" +
+                "Favorite: ${if (item.isFavorite) "Yes" else "No"}"
+            )
+            .setPositiveButton("OK", null)
+            .show()
     }
 }
