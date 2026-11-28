@@ -308,9 +308,9 @@ object FloatingWallpaperWindow {
         ).text.toString()
 
         val selectedMedia = activeMedia
+        val selectedSource = activeSource
         val selectedFavorites = favoritesOnly
         val selectedTags = selectedTagIds.toList()
-
         searchGeneration++
         val currentGeneration = searchGeneration
 
