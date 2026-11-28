@@ -20,9 +20,21 @@ class SplashActivity : AppCompatActivity() {
 
             installerExecutor.execute {
 
+                try {
+                    WallpaperUserIdentityRepository(applicationContext)
+                        .getOrCreateCurrentUser()
+                } catch (error: Exception) {
+                    Log.e(
+                        "MonolithIdentity",
+                        "Local user identity initialization failed",
+                        error
+                    )
+                }
+
                 val installer = BuiltInWallpaperInstaller(this)
 
                 try {
+                    installer.install()
                     installer.install()
                                 } catch (error: Exception) {
                     Log.e(
