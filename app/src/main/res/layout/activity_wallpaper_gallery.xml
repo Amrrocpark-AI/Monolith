@@ -102,19 +102,23 @@
         </LinearLayout>
     </HorizontalScrollView>
 
-    <!-- SEARCH FIELD -->
-    <EditText
-        android:id="@+id/etGallerySearch"
+    <!-- VISUAL KEYWORD CARDS -->
+    <TextView
         android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:layout_marginTop="10dp"
-        android:background="@drawable/bg_glass_inactive"
-        android:hint="Search wallpapers..."
-        android:textColorHint="#77717F"
+        android:layout_height="40dp"
+        android:gravity="center_vertical"
+        android:text="Discover by Keywords"
         android:textColor="#FFFFFF"
-        android:paddingHorizontal="16dp"
-        android:singleLine="true"
-        android:inputType="text" />
+        android:textSize="17sp"
+        android:textStyle="bold" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/keywordCardsRecycler"
+        android:layout_width="match_parent"
+        android:layout_height="142dp"
+        android:clipToPadding="false"
+        android:overScrollMode="never"
+        android:paddingBottom="6dp" />
 
     <!-- CATEGORY FILTERS -->
     <HorizontalScrollView
@@ -131,8 +135,6 @@
             android:orientation="horizontal" />
 
     </HorizontalScrollView>
-
-    <!-- FEATURED SECTION -->
     <TextView
         android:layout_width="match_parent"
         android:layout_height="42dp"
