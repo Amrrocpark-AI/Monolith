@@ -205,17 +205,14 @@ class WallpaperGalleryActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) {
-                val search = WallpaperSearch(applicationContext)
-
-                try {
                     val options = WallpaperSearch.SearchOptions(
                         query = query,
+                        preferredLanguageCode =
+                            resources.configuration.locales[0].toLanguageTag(),
                         keywordIds = keywordIds,
                         favoriteOnly =
                             currentTab == GalleryTab.FAVORITES,
                         existingFilesOnly = true,
-                        source = when (currentTab) {
-                            GalleryTab.EXPLORE ->
                                 WallpaperSearch.SourceFilter.ALL
 
                             GalleryTab.FAVORITES ->
