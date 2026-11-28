@@ -139,8 +139,6 @@ class WallpaperKeywordRepository(context: Context) {
         }
     }
 
-    }
-
     fun getAllKeywords(): List<Keyword> {
         return queryKeywords(null)
     }
