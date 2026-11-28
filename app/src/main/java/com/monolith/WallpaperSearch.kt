@@ -55,11 +55,44 @@ class WallpaperSearch(context: Context) {
         val conditions = mutableListOf<String>()
         val arguments = mutableListOf<String>()
 
-        val cleanQuery = options.query.trim()
+        val cleanQuery =
+            WallpaperTextNormalizer.normalize(options.query)
 
         if (cleanQuery.isNotEmpty()) {
-            conditions.add("title LIKE ? COLLATE NOCASE")
-            arguments.add("%$cleanQuery%")
+            val escapedQuery = cleanQuery
+                .replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_")
+
+            val searchPattern = "%$escapedQuery%"
+
+            conditions.add(
+                """
+                (
+                    title LIKE ? ESCAPE '\'
+                    OR EXISTS (
+                        SELECT 1
+                        FROM wallpaper_asset_concepts AS assetConcept
+                        INNER JOIN wallpaper_keyword_terms AS keywordTerm
+                            ON keywordTerm.conceptId = assetConcept.conceptId
+                        WHERE assetConcept.wallpaperId = wallpaper_assets.id
+                            AND keywordTerm.normalizedTerm LIKE ? ESCAPE '\'
+                    )
+                    OR EXISTS (
+                        SELECT 1
+                        FROM wallpaper_asset_concepts AS assetConcept
+                        INNER JOIN wallpaper_keyword_concept_aliases AS keywordAlias
+                            ON keywordAlias.conceptId = assetConcept.conceptId
+                        WHERE assetConcept.wallpaperId = wallpaper_assets.id
+                            AND keywordAlias.normalizedAlias LIKE ? ESCAPE '\'
+                    )
+                )
+                """.trimIndent()
+            )
+
+            arguments.add(searchPattern)
+            arguments.add(searchPattern)
+            arguments.add(searchPattern)
         }
 
         when (options.media) {
