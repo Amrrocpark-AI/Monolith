@@ -493,10 +493,14 @@ class WallpaperKeywordRepository(context: Context) {
     }}
 
     fun getKeywordsForWallpaper(
-        wallpaperId: String
+        wallpaperId: String,
+        preferredLanguageCode: String = "und"
     ): List<Keyword> {
 
         require(wallpaperId.isNotBlank())
+
+        val cleanLanguage = preferredLanguageCode.trim()
+            .ifEmpty { "und" }
 
         val keywords = mutableListOf<Keyword>()
 
@@ -517,11 +521,14 @@ class WallpaperKeywordRepository(context: Context) {
                     FROM wallpaper_keyword_terms selected
                     WHERE selected.conceptId = c.id
                     ORDER BY
-                        selected.isPrimary DESC,
                         CASE
-                            WHEN selected.languageCode = 'und'
+                            WHEN selected.languageCode = ?
                             THEN 0
-                            ELSE 1
+                            WHEN selected.languageCode = 'und'
+                            THEN 1
+                            WHEN selected.isPrimary = 1
+                            THEN 2
+                            ELSE 3
                         END,
                         selected.languageCode ASC,
                         selected.createdAt ASC
@@ -530,7 +537,7 @@ class WallpaperKeywordRepository(context: Context) {
             WHERE ac.wallpaperId = ?
             ORDER BY t.term COLLATE NOCASE ASC
             """.trimIndent(),
-            arrayOf(wallpaperId)
+            arrayOf(cleanLanguage, wallpaperId)
         ).use { cursor ->
 
             while (cursor.moveToNext()) {
@@ -548,7 +555,6 @@ class WallpaperKeywordRepository(context: Context) {
 
         return keywords
     }
-
     fun setKeywordsForWallpaper(
         wallpaperId: String,
         keywordIds: List<String>
