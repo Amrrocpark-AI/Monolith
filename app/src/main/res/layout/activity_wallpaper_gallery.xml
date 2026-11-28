@@ -110,7 +110,7 @@
         android:layout_marginTop="10dp"
         android:background="@drawable/bg_glass_inactive"
         android:hint="Search wallpapers..."
-        android:hintTextColor="#77717F"
+        android:textColorHint="#77717F"
         android:textColor="#FFFFFF"
         android:paddingHorizontal="16dp"
         android:singleLine="true"
