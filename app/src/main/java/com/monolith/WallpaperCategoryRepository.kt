@@ -32,32 +32,46 @@ class WallpaperCategoryRepository(context: Context) {
             "Category name cannot be empty"
         }
 
-        val db = database.writableDatabase
-
-        if (parentId != null) {
-            require(categoryExists(db, parentId)) {
-                "Parent category does not exist"
+        val cleanParentId = parentId?.trim()?.also {
+            require(it.isNotEmpty()) {
+                "Parent category ID cannot be empty"
             }
         }
 
+        val db = database.writableDatabase
         val id = UUID.randomUUID().toString()
         val now = System.currentTimeMillis()
 
-        val values = ContentValues().apply {
-            put("id", id)
-            put("name", cleanName)
-            put("parentId", parentId)
-            put("description", description?.trim())
-            put("sortOrder", sortOrder)
-            put("isVisible", 1)
-            put("createdAt", now)
-        }
+        db.beginTransaction()
 
-        db.insertOrThrow(
-            "wallpaper_categories",
-            null,
-            values
-        )
+        try {
+            if (cleanParentId != null) {
+                require(categoryExists(db, cleanParentId)) {
+                    "Parent category does not exist"
+                }
+            }
+
+            val values = ContentValues().apply {
+                put("id", id)
+                put("name", cleanName)
+                put("parentId", cleanParentId)
+                put("description", description?.trim())
+                put("sortOrder", sortOrder)
+                put("isVisible", 1)
+                put("createdAt", now)
+            }
+
+            db.insertOrThrow(
+                "wallpaper_categories",
+                null,
+                values
+            )
+
+            db.setTransactionSuccessful()
+
+        } finally {
+            db.endTransaction()
+        }
 
         return id
     }
