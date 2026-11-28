@@ -86,6 +86,36 @@ class WallpaperKeywordRepository(context: Context) {
                 values
             )
 
+            val conceptValues = ContentValues().apply {
+                put("id", id)
+                put("createdAt", now)
+                put("updatedAt", now)
+            }
+
+            db.insertOrThrow(
+                "wallpaper_keyword_concepts",
+                null,
+                conceptValues
+            )
+
+            val termValues = ContentValues().apply {
+                put("id", id)
+                put("conceptId", id)
+                put("term", cleanKeyword)
+                put("normalizedTerm", normalized)
+                put("languageCode", cleanLanguage)
+                put("isPrimary", 1)
+                put("normalizationVersion", 1)
+                put("createdAt", now)
+                put("updatedAt", now)
+            }
+
+            db.insertOrThrow(
+                "wallpaper_keyword_terms",
+                null,
+                termValues
+            )
+
             db.setTransactionSuccessful()
 
         } finally {
@@ -95,6 +125,109 @@ class WallpaperKeywordRepository(context: Context) {
         return id
     }
 
+    fun addTranslation(
+        conceptId: String,
+        term: String,
+        languageCode: String
+    ): String {
+
+        require(conceptId.isNotBlank())
+        require(languageCode.isNotBlank())
+
+        val cleanTerm = term.trim()
+        val normalized = normalize(cleanTerm)
+        val cleanLanguage = languageCode.trim()
+
+        require(normalized.isNotEmpty()) {
+            "Translation cannot be empty"
+        }
+
+        val db = database.writableDatabase
+        val now = System.currentTimeMillis()
+
+        db.beginTransaction()
+
+        try {
+            val conceptExists = db.rawQuery(
+                """
+                SELECT 1
+                FROM wallpaper_keyword_concepts
+                WHERE id = ?
+                LIMIT 1
+                """.trimIndent(),
+                arrayOf(conceptId)
+            ).use { it.moveToFirst() }
+
+            require(conceptExists) {
+                "Keyword concept does not exist"
+            }
+
+            val existing = db.rawQuery(
+                """
+                SELECT id
+                FROM wallpaper_keyword_terms
+                WHERE conceptId = ?
+                  AND languageCode = ?
+                  AND normalizedTerm = ?
+                LIMIT 1
+                """.trimIndent(),
+                arrayOf(
+                    conceptId,
+                    cleanLanguage,
+                    normalized
+                )
+            ).use { cursor ->
+                if (cursor.moveToFirst()) {
+                    cursor.getString(0)
+                } else {
+                    null
+                }
+            }
+
+            if (existing != null) {
+                db.setTransactionSuccessful()
+                return existing
+            }
+
+            val hasPrimary = db.rawQuery(
+                """
+                SELECT 1
+                FROM wallpaper_keyword_terms
+                WHERE conceptId = ?
+                  AND languageCode = ?
+                  AND isPrimary = 1
+                LIMIT 1
+                """.trimIndent(),
+                arrayOf(conceptId, cleanLanguage)
+            ).use { it.moveToFirst() }
+
+            val id = UUID.randomUUID().toString()
+
+            val values = ContentValues().apply {
+                put("id", id)
+                put("conceptId", conceptId)
+                put("term", cleanTerm)
+                put("normalizedTerm", normalized)
+                put("languageCode", cleanLanguage)
+                put("isPrimary", if (hasPrimary) 0 else 1)
+                put("normalizationVersion", 1)
+                put("createdAt", now)
+                put("updatedAt", now)
+            }
+
+            db.insertOrThrow(
+                "wallpaper_keyword_terms",
+                null,
+                values
+            )
+
+            db.setTransactionSuccessful()
+            return id
+
+        } finally {
+            db.endTransaction()
+        }
+    }
     fun addAlias(
         keywordId: String,
         alias: String,
