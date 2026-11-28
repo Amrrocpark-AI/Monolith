@@ -153,9 +153,20 @@ object FloatingWallpaperWindow {
             reloadLibrary()
         }
 
-        root.findViewById<View>(R.id.filterFavorites).setOnClickListener {
-            activeMedia = WallpaperSearch.MediaFilter.ALL
-            favoritesOnly = true
+        root.findViewById<View>(R.id.filterSourceAll).setOnClickListener {
+            activeSource = WallpaperSearch.SourceFilter.ALL
+            updateFilterAppearance(root)
+            reloadLibrary()
+        }
+
+        root.findViewById<View>(R.id.filterSourceBuiltIn).setOnClickListener {
+            activeSource = WallpaperSearch.SourceFilter.BUILT_IN
+            updateFilterAppearance(root)
+            reloadLibrary()
+        }
+
+        root.findViewById<View>(R.id.filterSourceUser).setOnClickListener {
+            activeSource = WallpaperSearch.SourceFilter.USER
             updateFilterAppearance(root)
             reloadLibrary()
         }
