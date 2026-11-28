@@ -138,8 +138,7 @@ class WallpaperKeywordRepository(context: Context) {
             cursor.getString(0)
         }
     }
-        val values = ContentValues().apply {
-            put("id", id)
+        
             put("keywordId", keywordId)
             put("alias", cleanAlias)
             put("normalizedAlias", normalized)
