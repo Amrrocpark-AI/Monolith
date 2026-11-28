@@ -276,7 +276,10 @@ class WallpaperKeywordRepository(context: Context) {
         val cleanLanguage = languageCode.trim()
             .ifEmpty { "und" }
 
-        require(keywordId.isNotBlank())
+        require(keywordId.isNotBlank()) {
+            "Keyword ID cannot be empty"
+        }
+
         require(normalized.isNotEmpty()) {
             "Alias cannot be empty"
         }
@@ -288,65 +291,40 @@ class WallpaperKeywordRepository(context: Context) {
 
         try {
             require(keywordExists(db, keywordId)) {
-                "Keyword does not exist"
+                "Keyword concept does not exist"
             }
 
-            val conceptExists = db.rawQuery(
+            val existingId = db.rawQuery(
                 """
-                SELECT 1
-                FROM wallpaper_keyword_concepts
-                WHERE id = ?
+                SELECT id
+                FROM wallpaper_keyword_concept_aliases
+                WHERE conceptId = ?
+                  AND languageCode = ?
+                  AND normalizedAlias = ?
                 LIMIT 1
                 """.trimIndent(),
-                arrayOf(keywordId)
-            ).use { it.moveToFirst() }
+                arrayOf(
+                    keywordId,
+                    cleanLanguage,
+                    normalized
+                )
+            ).use { cursor ->
+                if (cursor.moveToFirst()) {
+                    cursor.getString(0)
+                } else {
+                    null
+                }
+            }
 
-            require(conceptExists) {
-                "Keyword concept does not exist"
+            if (existingId != null) {
+                db.setTransactionSuccessful()
+                return existingId
             }
 
             val id = UUID.randomUUID().toString()
 
-            val legacyValues = ContentValues().apply {
+            val values = ContentValues().apply {
                 put("id", id)
-                put("keywordId", keywordId)
-                put("alias", cleanAlias)
-                put("normalizedAlias", normalized)
-                put("languageCode", cleanLanguage)
-                put("createdAt", now)
-            }
-
-            db.insertWithOnConflict(
-                "wallpaper_keyword_aliases",
-                null,
-                legacyValues,
-                SQLiteDatabase.CONFLICT_IGNORE
-            )
-
-            val result = db.rawQuery(
-                """
-                SELECT id, keywordId
-                FROM wallpaper_keyword_aliases
-                WHERE normalizedAlias = ?
-                  AND languageCode = ?
-                LIMIT 1
-                """.trimIndent(),
-                arrayOf(normalized, cleanLanguage)
-            ).use { cursor ->
-
-                require(cursor.moveToFirst()) {
-                    "Could not save alias"
-                }
-
-                require(cursor.getString(1) == keywordId) {
-                    "Alias already belongs to another keyword"
-                }
-
-                cursor.getString(0)
-            }
-
-            val conceptAliasValues = ContentValues().apply {
-                put("id", result)
                 put("conceptId", keywordId)
                 put("alias", cleanAlias)
                 put("normalizedAlias", normalized)
@@ -357,38 +335,34 @@ class WallpaperKeywordRepository(context: Context) {
             db.insertWithOnConflict(
                 "wallpaper_keyword_concept_aliases",
                 null,
-                conceptAliasValues,
+                values,
                 SQLiteDatabase.CONFLICT_IGNORE
             )
 
-            val conceptAliasId = db.rawQuery(
+            val savedId = db.rawQuery(
                 """
                 SELECT id
                 FROM wallpaper_keyword_concept_aliases
                 WHERE conceptId = ?
-                  AND normalizedAlias = ?
                   AND languageCode = ?
+                  AND normalizedAlias = ?
                 LIMIT 1
                 """.trimIndent(),
                 arrayOf(
                     keywordId,
-                    normalized,
-                    cleanLanguage
+                    cleanLanguage,
+                    normalized
                 )
             ).use { cursor ->
-                if (cursor.moveToFirst()) {
-                    cursor.getString(0)
-                } else {
-                    null
+                require(cursor.moveToFirst()) {
+                    "Could not save alias"
                 }
-            }
 
-            require(conceptAliasId == result) {
-                "Alias data is inconsistent between legacy and concept tables"
+                cursor.getString(0)
             }
 
             db.setTransactionSuccessful()
-            return result
+            return savedId
 
         } finally {
             db.endTransaction()
