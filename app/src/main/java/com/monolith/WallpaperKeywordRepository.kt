@@ -41,90 +41,45 @@ class WallpaperKeywordRepository(context: Context) {
 
         val db = database.writableDatabase
         val now = System.currentTimeMillis()
-        val id = UUID.randomUUID().toString()
 
         db.beginTransaction()
 
         try {
-            val existing = db.rawQuery(
+            val existingConceptIds = mutableListOf<String>()
+
+            db.rawQuery(
                 """
-                SELECT id, languageCode
-                FROM wallpaper_keywords
-                WHERE normalizedKeyword = ?
-                LIMIT 1
+                SELECT DISTINCT t.conceptId
+                FROM wallpaper_keyword_terms t
+                INNER JOIN wallpaper_keyword_concepts c
+                    ON c.id = t.conceptId
+                WHERE t.normalizedTerm = ?
+                  AND t.languageCode = ?
+                ORDER BY t.conceptId ASC
                 """.trimIndent(),
-                arrayOf(normalized)
+                arrayOf(normalized, cleanLanguage)
             ).use { cursor ->
-                if (cursor.moveToFirst()) {
-                    Pair(cursor.getString(0), cursor.getString(1))
-                } else {
-                    null
+                while (cursor.moveToNext()) {
+                    existingConceptIds.add(cursor.getString(0))
                 }
             }
 
-            if (existing != null) {
-                require(existing.second == cleanLanguage) {
-                    "This keyword already exists in another language"
-                }
-
-                val existingId = existing.first
-
-                val conceptExists = db.rawQuery(
-                    """
-                    SELECT 1
-                    FROM wallpaper_keyword_concepts
-                    WHERE id = ?
-                    LIMIT 1
-                    """.trimIndent(),
-                    arrayOf(existingId)
-                ).use { it.moveToFirst() }
-
-                check(conceptExists) {
-                    "Existing keyword has no matching concept"
-                }
-
-                val termExists = db.rawQuery(
-                    """
-                    SELECT 1
-                    FROM wallpaper_keyword_terms
-                    WHERE id = ?
-                      AND conceptId = ?
-                      AND normalizedTerm = ?
-                      AND languageCode = ?
-                    LIMIT 1
-                    """.trimIndent(),
-                    arrayOf(
-                        existingId,
-                        existingId,
-                        normalized,
-                        cleanLanguage
-                    )
-                ).use { it.moveToFirst() }
-
-                check(termExists) {
-                    "Existing keyword has no matching concept term"
-                }
+            if (existingConceptIds.size == 1) {
+                val existingId = existingConceptIds.first()
 
                 db.setTransactionSuccessful()
                 return existingId
             }
-            val values = ContentValues().apply {
-                put("id", id)
-                put("keyword", cleanKeyword)
-                put("normalizedKeyword", normalized)
-                put("languageCode", cleanLanguage)
-                put("createdAt", now)
-                put("updatedAt", now)
+
+            require(existingConceptIds.isEmpty()) {
+                "Ambiguous keyword: multiple concepts use this term in the same language"
             }
 
-            db.insertOrThrow(
-                "wallpaper_keywords",
-                null,
-                values
-            )
+            val conceptId = UUID.randomUUID().toString()
+            val termId = UUID.randomUUID().toString()
 
             val conceptValues = ContentValues().apply {
-                put("id", id)
+                put("id", conceptId)
                 put("createdAt", now)
                 put("updatedAt", now)
             }
@@ -136,8 +91,8 @@ class WallpaperKeywordRepository(context: Context) {
             )
 
             val termValues = ContentValues().apply {
-                put("id", id)
-                put("conceptId", id)
+                put("id", termId)
+                put("conceptId", conceptId)
                 put("term", cleanKeyword)
                 put("normalizedTerm", normalized)
                 put("languageCode", cleanLanguage)
@@ -154,12 +109,11 @@ class WallpaperKeywordRepository(context: Context) {
             )
 
             db.setTransactionSuccessful()
+            return conceptId
 
         } finally {
             db.endTransaction()
         }
-
-        return id
     }
 
     fun addTranslation(
