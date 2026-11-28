@@ -716,10 +716,8 @@ class WallpaperKeywordRepository(context: Context) {
         return db.rawQuery(
             """
             SELECT 1
-            FROM wallpaper_keywords AS legacy
-            INNER JOIN wallpaper_keyword_concepts AS concept
-                ON concept.id = legacy.id
-            WHERE legacy.id = ?
+            FROM wallpaper_keyword_concepts
+            WHERE id = ?
             LIMIT 1
             """.trimIndent(),
             arrayOf(keywordId)
