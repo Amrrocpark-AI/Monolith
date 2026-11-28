@@ -306,6 +306,7 @@ object FloatingWallpaperWindow {
         }
     }
 
+
     private fun reloadLibrary() {
         val root = wallpaperView ?: return
         val context = windowContext ?: return
@@ -319,6 +320,9 @@ object FloatingWallpaperWindow {
         val selectedSource = activeSource
         val selectedFavorites = favoritesOnly
         val selectedTags = selectedTagIds.toList()
+        val preferredLanguageCode =
+            context.resources.configuration.locales[0].toLanguageTag()
+
         searchGeneration++
         val currentGeneration = searchGeneration
 
@@ -333,6 +337,7 @@ object FloatingWallpaperWindow {
                         search.search(
                             WallpaperSearch.SearchOptions(
                                 query = query,
+                                preferredLanguageCode = preferredLanguageCode,
                                 media = selectedMedia,
                                 tagIds = selectedTags,
                                 favoriteOnly = selectedFavorites,
@@ -366,6 +371,7 @@ object FloatingWallpaperWindow {
             }
         }
     }
+
     
     private fun displayResults(
         root: View,
