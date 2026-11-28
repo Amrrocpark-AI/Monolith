@@ -600,6 +600,10 @@ class WallpaperKeywordRepository(context: Context) {
         keywordIds: List<String>
     ) {
 
+        require(wallpaperId.isNotBlank()) {
+            "Wallpaper ID cannot be empty"
+        }
+
         val selectedIds = keywordIds
             .filter { it.isNotBlank() }
             .distinct()
@@ -609,37 +613,15 @@ class WallpaperKeywordRepository(context: Context) {
         db.beginTransaction()
 
         try {
-
             require(wallpaperExists(db, wallpaperId)) {
                 "Wallpaper does not exist"
             }
 
-            selectedIds.forEach { keywordId ->
-
-                require(keywordExists(db, keywordId)) {
-                    "Keyword does not exist: $keywordId"
-                }
-
-                val conceptExists = db.rawQuery(
-                    """
-                    SELECT 1
-                    FROM wallpaper_keyword_concepts
-                    WHERE id = ?
-                    LIMIT 1
-                    """.trimIndent(),
-                    arrayOf(keywordId)
-                ).use { it.moveToFirst() }
-
-                require(conceptExists) {
-                    "Keyword concept does not exist: $keywordId"
+            selectedIds.forEach { conceptId ->
+                require(keywordExists(db, conceptId)) {
+                    "Keyword concept does not exist: $conceptId"
                 }
             }
-
-            db.delete(
-                "wallpaper_asset_keywords",
-                "wallpaperId = ?",
-                arrayOf(wallpaperId)
-            )
 
             db.delete(
                 "wallpaper_asset_concepts",
@@ -649,30 +631,18 @@ class WallpaperKeywordRepository(context: Context) {
 
             val now = System.currentTimeMillis()
 
-            selectedIds.forEach { keywordId ->
+            selectedIds.forEach { conceptId ->
 
-                val legacyValues = ContentValues().apply {
+                val values = ContentValues().apply {
                     put("wallpaperId", wallpaperId)
-                    put("keywordId", keywordId)
-                    put("createdAt", now)
-                }
-
-                db.insertOrThrow(
-                    "wallpaper_asset_keywords",
-                    null,
-                    legacyValues
-                )
-
-                val conceptValues = ContentValues().apply {
-                    put("wallpaperId", wallpaperId)
-                    put("conceptId", keywordId)
+                    put("conceptId", conceptId)
                     put("createdAt", now)
                 }
 
                 db.insertOrThrow(
                     "wallpaper_asset_concepts",
                     null,
-                    conceptValues
+                    values
                 )
             }
 
