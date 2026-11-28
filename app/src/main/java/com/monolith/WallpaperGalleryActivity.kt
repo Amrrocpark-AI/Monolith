@@ -94,17 +94,7 @@ class WallpaperGalleryActivity : AppCompatActivity() {
 
         keywordRecycler.adapter = keywordAdapter
 
-        lifecycleScope.launch {
-            val keywords = withContext(Dispatchers.IO) {
-                val repository =
-                    WallpaperKeywordRepository(applicationContext)
-
-                try {
-                    repository.getAllKeywords()
-                } finally {
-                    repository.close()
-                }
-            }
+lifecycleScope.launch
 
             keywordAdapter.submitList(keywords)
             keywordAdapter.setSelectedIds(
