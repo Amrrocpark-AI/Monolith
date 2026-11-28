@@ -1141,13 +1141,12 @@ private fun ensureWallpaperTables(db: SQLiteDatabase) {
         idx_wallpaper_ratings_wallpaper
         ON wallpaper_image_ratings(wallpaperId, rating)
     """)
-
     db.execSQL("""
         CREATE INDEX IF NOT EXISTS
         idx_wallpaper_comment_reactions
         ON wallpaper_comment_reactions(commentId, reactionKey)
     """)
-    
+}
     // =========================================================
     // DATABASE LIFECYCLE
     // =========================================================
