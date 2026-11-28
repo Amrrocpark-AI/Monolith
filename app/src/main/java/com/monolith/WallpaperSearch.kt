@@ -103,7 +103,6 @@ class WallpaperSearch(context: Context) {
                 )
                 arguments.add(it)
             }
-
         val selectedTags = options.tagIds
             .filter { it.isNotBlank() }
             .distinct()
@@ -126,6 +125,30 @@ class WallpaperSearch(context: Context) {
 
             arguments.addAll(selectedTags)
             arguments.add(selectedTags.size.toString())
+        }
+
+        val selectedKeywords = options.keywordIds
+            .filter { it.isNotBlank() }
+            .distinct()
+
+        if (selectedKeywords.isNotEmpty()) {
+            val placeholders =
+                selectedKeywords.joinToString(",") { "?" }
+
+            conditions.add(
+                """
+                id IN (
+                    SELECT wallpaperId
+                    FROM wallpaper_asset_keywords
+                    WHERE keywordId IN ($placeholders)
+                    GROUP BY wallpaperId
+                    HAVING COUNT(DISTINCT keywordId) = ?
+                )
+                """.trimIndent()
+            )
+
+            arguments.addAll(selectedKeywords)
+            arguments.add(selectedKeywords.size.toString())
         }
 
         if (options.favoriteOnly) {
