@@ -178,22 +178,27 @@ class WallpaperKeywordRepository(context: Context) {
         val keywords = linkedMapOf<String, Keyword>()
         val db = database.readableDatabase
 
-        val selection = if (query == null) {
+        val escapedQuery = query
+            ?.replace("\\", "\\\\")
+            ?.replace("%", "\\%")
+            ?.replace("_", "\\_")
+
+        val selection = if (escapedQuery == null) {
             ""
         } else {
             """
             WHERE
-                LOWER(k.keyword) LIKE ?
+                LOWER(k.keyword) LIKE ? ESCAPE '\'
                 OR EXISTS (
                     SELECT 1
                     FROM wallpaper_keyword_aliases a
                     WHERE a.keywordId = k.id
-                      AND LOWER(a.alias) LIKE ?
+                      AND LOWER(a.alias) LIKE ? ESCAPE '\'
                 )
             """.trimIndent()
         }
 
-        val arguments = query?.let {
+        val arguments = escapedQuery?.let {
             arrayOf("%$it%", "%$it%")
         }
 
