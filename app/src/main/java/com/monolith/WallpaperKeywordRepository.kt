@@ -99,8 +99,6 @@ class WallpaperKeywordRepository(context: Context) {
             "Keyword does not exist"
         }
 
-        val id = UUID.randomUUID().toString()
-
         val values = ContentValues().apply {
             put("id", id)
             put("keywordId", keywordId)
