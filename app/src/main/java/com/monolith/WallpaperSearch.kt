@@ -152,6 +152,30 @@ class WallpaperSearch(context: Context) {
             arguments.add(selectedKeywords.size.toString())
         }
 
+        val selectedTraits = options.traitIds
+            .filter { it.isNotBlank() }
+            .distinct()
+
+        if (selectedTraits.isNotEmpty()) {
+            val placeholders =
+                selectedTraits.joinToString(",") { "?" }
+
+            conditions.add(
+                """
+                id IN (
+                    SELECT wallpaperId
+                    FROM wallpaper_asset_traits
+                    WHERE traitId IN ($placeholders)
+                    GROUP BY wallpaperId
+                    HAVING COUNT(DISTINCT traitId) = ?
+                )
+                """.trimIndent()
+            )
+
+            arguments.addAll(selectedTraits)
+            arguments.add(selectedTraits.size.toString())
+        }
+
         if (options.favoriteOnly) {
             conditions.add("isFavorite = 1")
         }
