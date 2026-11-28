@@ -158,8 +158,7 @@ class WallpaperKeywordRepository(context: Context) {
         query: String?
     ): List<Keyword> {
 
-        val keywords = mutableListOf<Keyword>()
-
+        val keywords = linkedMapOf<String, Keyword>()
         val db = database.readableDatabase
 
         val selection = if (query == null) {
@@ -194,44 +193,78 @@ class WallpaperKeywordRepository(context: Context) {
                 ),
                 (
                     SELECT COUNT(*)
-                    FROM wallpaper_asset_keywords ak
-                    WHERE ak.keywordId = k.id
+                    FROM wallpaper_asset_keywords countLinks
+                    WHERE countLinks.keywordId = k.id
                 ),
-                (
-                    SELECT COALESCE(
-                        NULLIF(w.thumbnailPath, ''),
-                        w.filePath
-                    )
-                    FROM wallpaper_asset_keywords ak
-                    INNER JOIN wallpaper_assets w
-                        ON w.id = ak.wallpaperId
-                    WHERE ak.keywordId = k.id
-                      AND w.mediaType = 'IMAGE'
-                    ORDER BY w.createdAt DESC
-                    LIMIT 1
-                )
+                w.thumbnailPath,
+                w.filePath
             FROM wallpaper_keywords k
+            LEFT JOIN wallpaper_asset_keywords ak
+                ON ak.keywordId = k.id
+            LEFT JOIN wallpaper_assets w
+                ON w.id = ak.wallpaperId
+               AND w.mediaType = 'IMAGE'
             $selection
-            ORDER BY k.keyword COLLATE NOCASE ASC
+            ORDER BY
+                k.keyword COLLATE NOCASE ASC,
+                w.createdAt DESC,
+                w.id ASC
             """.trimIndent(),
             arguments
         ).use { cursor ->
 
             while (cursor.moveToNext()) {
-                keywords.add(
-                    Keyword(
-                        id = cursor.getString(0),
+
+                val id = cursor.getString(0)
+
+                val current = keywords[id]
+
+                val previewPath = if (
+                    current?.previewPath == null
+                ) {
+
+                    val thumbnailPath = cursor.getString(5)
+                    val originalPath = cursor.getString(6)
+
+                    val validThumbnail = thumbnailPath
+                        ?.takeIf {
+                            java.io.File(it).isFile &&
+                                java.io.File(it).canRead()
+                        }
+
+                    validThumbnail ?: originalPath?.takeIf {
+                        java.io.File(it).isFile &&
+                            java.io.File(it).canRead()
+                    }
+
+                } else {
+                    current.previewPath
+                }
+
+                if (current == null) {
+
+                    keywords[id] = Keyword(
+                        id = id,
                         keyword = cursor.getString(1),
                         languageCode = cursor.getString(2),
                         aliasCount = cursor.getInt(3),
                         wallpaperCount = cursor.getInt(4),
-                        previewPath = cursor.getString(5)
+                        previewPath = previewPath
                     )
-                )
+
+                } else if (
+                    current.previewPath == null &&
+                    previewPath != null
+                ) {
+
+                    keywords[id] = current.copy(
+                        previewPath = previewPath
+                    )
+                }
             }
         }
 
-        return keywords
+        return keywords.values.toList()
     }
 
     fun getKeywordsForWallpaper(
