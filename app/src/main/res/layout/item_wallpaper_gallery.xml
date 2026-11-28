@@ -32,7 +32,7 @@
                 android:layout_gravity="top|end"
                 android:layout_margin="9dp"
                 android:padding="8dp"
-                android:src="@drawable/ic_settings"
+                android:src="@drawable/ic_favorite"
                 android:background="@drawable/bg_circle_dark"
                 android:contentDescription="Favorite" />
 
