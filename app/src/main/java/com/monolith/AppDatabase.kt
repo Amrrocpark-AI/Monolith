@@ -786,6 +786,145 @@ private fun ensureWallpaperTables(db: SQLiteDatabase) {
                 ON DELETE CASCADE
         )
     """)
+    // =====================================================
+    // MULTILINGUAL CATEGORY SYSTEM
+    // =====================================================
+
+    db.execSQL("""
+        CREATE TABLE IF NOT EXISTS wallpaper_category_translations (
+            categoryId TEXT NOT NULL,
+            languageCode TEXT NOT NULL,
+            name TEXT NOT NULL,
+            normalizedName TEXT NOT NULL,
+            description TEXT,
+            PRIMARY KEY(categoryId, languageCode),
+            FOREIGN KEY(categoryId)
+                REFERENCES wallpaper_categories(id)
+                ON DELETE CASCADE
+        )
+    """)
+
+    db.execSQL("""
+        CREATE TABLE IF NOT EXISTS wallpaper_category_aliases (
+            id TEXT PRIMARY KEY,
+            categoryId TEXT NOT NULL,
+            alias TEXT NOT NULL,
+            normalizedAlias TEXT NOT NULL,
+            languageCode TEXT NOT NULL,
+            UNIQUE(normalizedAlias, languageCode),
+            FOREIGN KEY(categoryId)
+                REFERENCES wallpaper_categories(id)
+                ON DELETE CASCADE
+        )
+    """)
+
+    db.execSQL("""
+        CREATE TABLE IF NOT EXISTS wallpaper_category_appearance (
+            categoryId TEXT PRIMARY KEY,
+            colorHex TEXT NOT NULL,
+            updatedAt INTEGER NOT NULL,
+            FOREIGN KEY(categoryId)
+                REFERENCES wallpaper_categories(id)
+                ON DELETE CASCADE
+        )
+    """)
+
+    // =====================================================
+    // SHARED VISUAL TRAITS
+    // =====================================================
+
+    db.execSQL("""
+        CREATE TABLE IF NOT EXISTS wallpaper_traits (
+            id TEXT PRIMARY KEY,
+            traitKey TEXT NOT NULL UNIQUE,
+            colorHex TEXT NOT NULL DEFAULT '#8B5CF6',
+            sortOrder INTEGER NOT NULL DEFAULT 0,
+            isVisible INTEGER NOT NULL DEFAULT 1,
+            createdAt INTEGER NOT NULL,
+            updatedAt INTEGER NOT NULL
+        )
+    """)
+
+    db.execSQL("""
+        CREATE TABLE IF NOT EXISTS wallpaper_trait_translations (
+            traitId TEXT NOT NULL,
+            languageCode TEXT NOT NULL,
+            name TEXT NOT NULL,
+            normalizedName TEXT NOT NULL,
+            description TEXT,
+            PRIMARY KEY(traitId, languageCode),
+            FOREIGN KEY(traitId)
+                REFERENCES wallpaper_traits(id)
+                ON DELETE CASCADE
+        )
+    """)
+
+    db.execSQL("""
+        CREATE TABLE IF NOT EXISTS wallpaper_trait_aliases (
+            id TEXT PRIMARY KEY,
+            traitId TEXT NOT NULL,
+            alias TEXT NOT NULL,
+            normalizedAlias TEXT NOT NULL,
+            languageCode TEXT NOT NULL,
+            UNIQUE(normalizedAlias, languageCode),
+            FOREIGN KEY(traitId)
+                REFERENCES wallpaper_traits(id)
+                ON DELETE CASCADE
+        )
+    """)
+
+    // =====================================================
+    // WALLPAPER TRAIT RELATIONSHIPS
+    // =====================================================
+
+    db.execSQL("""
+        CREATE TABLE IF NOT EXISTS wallpaper_asset_traits (
+            wallpaperId TEXT NOT NULL,
+            traitId TEXT NOT NULL,
+            createdAt INTEGER NOT NULL,
+            PRIMARY KEY(wallpaperId, traitId),
+            FOREIGN KEY(wallpaperId)
+                REFERENCES wallpaper_assets(id)
+                ON DELETE CASCADE,
+            FOREIGN KEY(traitId)
+                REFERENCES wallpaper_traits(id)
+                ON DELETE CASCADE
+        )
+    """)
+
+    // =====================================================
+    // MULTILINGUAL AND TRAIT PERFORMANCE INDEXES
+    // =====================================================
+
+    db.execSQL("""
+        CREATE INDEX IF NOT EXISTS
+        idx_wallpaper_category_translations_language
+        ON wallpaper_category_translations(languageCode, normalizedName)
+    """)
+
+    db.execSQL("""
+        CREATE INDEX IF NOT EXISTS
+        idx_wallpaper_category_aliases_lookup
+        ON wallpaper_category_aliases(languageCode, normalizedAlias)
+    """)
+
+    db.execSQL("""
+        CREATE INDEX IF NOT EXISTS
+        idx_wallpaper_trait_translations_language
+        ON wallpaper_trait_translations(languageCode, normalizedName)
+    """)
+
+    db.execSQL("""
+        CREATE INDEX IF NOT EXISTS
+        idx_wallpaper_trait_aliases_lookup
+        ON wallpaper_trait_aliases(languageCode, normalizedAlias)
+    """)
+
+    db.execSQL("""
+        CREATE INDEX IF NOT EXISTS
+        idx_wallpaper_asset_traits_trait
+        ON wallpaper_asset_traits(traitId)
+    """)
 
     // =====================================================
     // PERFORMANCE INDEXES
