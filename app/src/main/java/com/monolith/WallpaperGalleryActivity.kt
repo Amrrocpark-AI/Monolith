@@ -78,6 +78,7 @@ class WallpaperGalleryActivity : AppCompatActivity() {
         galleryRecycler.adapter = adapter
 
         setupKeywordCards()
+        setupCategoryDimensions()
         setupTabs()
         setupSearch()
         loadWallpapers()
