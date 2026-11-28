@@ -130,20 +130,31 @@ class WallpaperSearch(context: Context) {
             }
         }
 
-                options.categoryId
-            ?.takeIf { it.isNotBlank() }
-            ?.let {
-                conditions.add(
-                    """
-                    id IN (
-                        SELECT wallpaperId
-                        FROM wallpaper_asset_categories
-                        WHERE categoryId = ?
-                    )
-                    """.trimIndent()
+           val selectedCategories = (
+            listOfNotNull(options.categoryId) + options.categoryIds
+        )
+            .filter { it.isNotBlank() }
+            .distinct()
+
+        if (selectedCategories.isNotEmpty()) {
+            val placeholders =
+                selectedCategories.joinToString(",") { "?" }
+
+            conditions.add(
+                """
+                id IN (
+                    SELECT wallpaperId
+                    FROM wallpaper_asset_categories
+                    WHERE categoryId IN ($placeholders)
+                    GROUP BY wallpaperId
+                    HAVING COUNT(DISTINCT categoryId) = ?
                 )
-                arguments.add(it)
-            }
+                """.trimIndent()
+            )
+
+            arguments.addAll(selectedCategories)
+            arguments.add(selectedCategories.size.toString())
+        }
         val selectedTags = options.tagIds
             .filter { it.isNotBlank() }
             .distinct()
