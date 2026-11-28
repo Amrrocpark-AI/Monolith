@@ -120,11 +120,27 @@
         android:overScrollMode="never"
         android:paddingBottom="6dp" />
 
-    <!-- CATEGORY FILTERS -->
+    <!-- DIMENSION SELECTOR -->
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="42dp"
+        android:layout_marginTop="8dp"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:id="@+id/wallpaperDimensionContainer"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:gravity="center_vertical"
+            android:orientation="horizontal" />
+
+    </HorizontalScrollView>
+
+    <!-- VALUES OF SELECTED DIMENSION -->
     <HorizontalScrollView
         android:layout_width="match_parent"
         android:layout_height="48dp"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="4dp"
         android:scrollbars="none">
 
         <LinearLayout
