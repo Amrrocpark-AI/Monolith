@@ -10,12 +10,13 @@ class WallpaperKeywordRepository(context: Context) {
 
     private val database = AppDatabase(context.applicationContext)
 
-    data class Keyword(
+        data class Keyword(
         val id: String,
         val keyword: String,
         val languageCode: String,
         val aliasCount: Int,
-        val wallpaperCount: Int
+        val wallpaperCount: Int,
+        val previewPath: String? = null
     )
 
     private fun normalize(value: String): String {
