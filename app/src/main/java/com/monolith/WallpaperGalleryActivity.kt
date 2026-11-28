@@ -369,8 +369,9 @@ class WallpaperGalleryActivity : AppCompatActivity() {
                 try {
                     val options = WallpaperSearch.SearchOptions(
                         query = query,
-                        preferredLanguageCode = preferredLanguageCode,
+                                                preferredLanguageCode = preferredLanguageCode,
                         keywordIds = keywordIds,
+                        categoryIds = categoryIds,
                         favoriteOnly =
                             currentTab == GalleryTab.FAVORITES,
                         existingFilesOnly = true,
