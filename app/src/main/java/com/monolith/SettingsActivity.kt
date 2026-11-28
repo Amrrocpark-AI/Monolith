@@ -65,7 +65,7 @@ class SettingsActivity : AppCompatActivity() {
         val etCustomBaseUrl = findViewById<EditText>(R.id.etCustomBaseUrl)
         val btnFetchModels = findViewById<Button>(R.id.btnFetchModels)
 
-        val providers = arrayOf("Groq (سريع ومجاني)", "OpenAI (مدفوع)", "Custom (محلي)")
+        val providers = arrayOf("الخادم الافتراضي", "الخادم البديل", "خادم مخصص")
         providerSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, providers)
 
         val savedKey = securePrefs.getString("api_key", "")
