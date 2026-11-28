@@ -35,7 +35,6 @@ class SplashActivity : AppCompatActivity() {
 
                 try {
                     installer.install()
-                    installer.install()
                                 } catch (error: Exception) {
                     Log.e(
                         "MonolithWallpapers",
