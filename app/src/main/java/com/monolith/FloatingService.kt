@@ -228,8 +228,6 @@ class FloatingService : Service() {
 
                 startActivity(intent)
                         }
-        )
-    }
             floatingHubView?.findViewById<LinearLayout>(R.id.btnCustomize)?.setOnClickListener { Toast.makeText(this, "شاشة التخصيص (قريباً)", Toast.LENGTH_SHORT).show() }
             floatingHubView?.findViewById<LinearLayout>(R.id.btnHome)?.setOnClickListener { Toast.makeText(this, "الرئيسية", Toast.LENGTH_SHORT).show() }
             floatingHubView?.findViewById<LinearLayout>(R.id.btnCode)?.setOnClickListener { Toast.makeText(this, "الأكواد", Toast.LENGTH_SHORT).show() }
