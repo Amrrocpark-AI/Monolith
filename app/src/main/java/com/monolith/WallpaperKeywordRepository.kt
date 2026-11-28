@@ -19,12 +19,9 @@ class WallpaperKeywordRepository(context: Context) {
         val previewPath: String? = null
     )
 
-    private fun normalize(value: String): String {
-        return value.trim()
-            .lowercase(Locale.ROOT)
-            .replace(Regex("\\s+"), " ")
-    }
-
+        private fun normalize(value: String): String {
+        return WallpaperTextNormalizer.normalize(value)
+        }
     fun createKeyword(
         keyword: String,
         languageCode: String = "und"
