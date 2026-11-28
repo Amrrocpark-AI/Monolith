@@ -113,47 +113,58 @@ class WallpaperKeywordRepository(context: Context) {
 
         val db = database.writableDatabase
 
-        require(keywordExists(db, keywordId)) {
-            "Keyword does not exist"
-        }
-        val id = UUID.randomUUID().toString()
+        db.beginTransaction()
 
-        val values = ContentValues().apply {
-            put("id", id)
-            put("keywordId", keywordId)
-            put("alias", cleanAlias)
-            put("normalizedAlias", normalized)
-            put("languageCode", cleanLanguage)
-            put("createdAt", System.currentTimeMillis())
-        }
-
-        db.insertWithOnConflict(
-            "wallpaper_keyword_aliases",
-            null,
-            values,
-            SQLiteDatabase.CONFLICT_IGNORE
-        )
-
-        return db.rawQuery(
-            """
-            SELECT id, keywordId
-            FROM wallpaper_keyword_aliases
-            WHERE normalizedAlias = ?
-              AND languageCode = ?
-            LIMIT 1
-            """.trimIndent(),
-            arrayOf(normalized, cleanLanguage)
-        ).use { cursor ->
-
-            require(cursor.moveToFirst()) {
-                "Could not save alias"
+        try {
+            require(keywordExists(db, keywordId)) {
+                "Keyword does not exist"
             }
 
-            require(cursor.getString(1) == keywordId) {
-                "Alias already belongs to another keyword"
+            val id = UUID.randomUUID().toString()
+
+            val values = ContentValues().apply {
+                put("id", id)
+                put("keywordId", keywordId)
+                put("alias", cleanAlias)
+                put("normalizedAlias", normalized)
+                put("languageCode", cleanLanguage)
+                put("createdAt", System.currentTimeMillis())
             }
 
-            cursor.getString(0)
+            db.insertWithOnConflict(
+                "wallpaper_keyword_aliases",
+                null,
+                values,
+                SQLiteDatabase.CONFLICT_IGNORE
+            )
+
+            val result = db.rawQuery(
+                """
+                SELECT id, keywordId
+                FROM wallpaper_keyword_aliases
+                WHERE normalizedAlias = ?
+                  AND languageCode = ?
+                LIMIT 1
+                """.trimIndent(),
+                arrayOf(normalized, cleanLanguage)
+            ).use { cursor ->
+
+                require(cursor.moveToFirst()) {
+                    "Could not save alias"
+                }
+
+                require(cursor.getString(1) == keywordId) {
+                    "Alias already belongs to another keyword"
+                }
+
+                cursor.getString(0)
+            }
+
+            db.setTransactionSuccessful()
+            return result
+
+        } finally {
+            db.endTransaction()
         }
     }
 
