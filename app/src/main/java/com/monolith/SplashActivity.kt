@@ -24,12 +24,20 @@ class SplashActivity : AppCompatActivity() {
 
                 try {
                     installer.install()
-                } catch (error: Exception) {
+                                } catch (error: Exception) {
                     Log.e(
                         "MonolithWallpapers",
                         "Built-in wallpaper installation failed",
                         error
                     )
+
+                    runOnUiThread {
+                        android.widget.Toast.makeText(
+                            this@SplashActivity,
+                            "Wallpaper installation failed: ${error.message}",
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
+                    }
                 } finally {
                     installer.close()
                     installerExecutor.shutdown()
