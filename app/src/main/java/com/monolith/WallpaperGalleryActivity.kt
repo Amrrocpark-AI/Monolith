@@ -24,8 +24,14 @@ class WallpaperGalleryActivity : AppCompatActivity() {
     private lateinit var searchInput: EditText
     private lateinit var adapter: WallpaperGalleryAdapter
     private lateinit var keywordAdapter: WallpaperKeywordCardAdapter
-
     private val selectedKeywordIds = mutableSetOf<String>()
+
+    // Wallpaper dimensions and multi-value selection
+    private lateinit var dimensionContainer: android.widget.LinearLayout
+    private lateinit var categoryContainer: android.widget.LinearLayout
+
+    private val selectedCategoryIds = mutableSetOf<String>()
+    private var selectedDimensionId: String? = null
 
     private var selectedTab = GalleryTab.EXPLORE
 
