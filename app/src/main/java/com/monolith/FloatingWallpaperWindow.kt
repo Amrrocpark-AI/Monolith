@@ -126,10 +126,18 @@ object FloatingWallpaperWindow {
             R.id.etWallpaperSearch
         )
 
-        root.findViewById<ImageView>(
-            R.id.btnCloseWallpapers
-        ).setOnClickListener {
-            close()
+            root.findViewById<View>(R.id.filterVideos).setOnClickListener {
+            activeMedia = WallpaperSearch.MediaFilter.VIDEO
+            favoritesOnly = false
+            updateFilterAppearance(root)
+            reloadLibrary()
+        }
+
+        root.findViewById<View>(R.id.filterFavorites).setOnClickListener {
+            favoritesOnly = !favoritesOnly
+            activeMedia = WallpaperSearch.MediaFilter.ALL
+            updateFilterAppearance(root)
+            reloadLibrary()
         }
 
         root.findViewById<View>(R.id.filterAll).setOnClickListener {
