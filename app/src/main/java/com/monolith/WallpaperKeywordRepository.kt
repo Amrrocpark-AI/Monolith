@@ -138,13 +138,6 @@ class WallpaperKeywordRepository(context: Context) {
             cursor.getString(0)
         }
     }
-        
-            put("keywordId", keywordId)
-            put("alias", cleanAlias)
-            put("normalizedAlias", normalized)
-            put("languageCode", cleanLanguage)
-            put("createdAt", System.currentTimeMillis())
-        }
 
         db.insertWithOnConflict(
             "wallpaper_keyword_aliases",
