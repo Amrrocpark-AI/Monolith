@@ -1051,6 +1051,104 @@ private fun ensureWallpaperTables(db: SQLiteDatabase) {
         ON wallpaper_asset_usage_scores(usageTypeId)
     """)
 }
+
+    // =====================================================
+    // WALLPAPER COMMENTS AND USER FEEDBACK
+    // =====================================================
+
+    db.execSQL("""
+        CREATE TABLE IF NOT EXISTS wallpaper_comments (
+            id TEXT PRIMARY KEY,
+            wallpaperId TEXT NOT NULL,
+            authorId TEXT NOT NULL,
+            authorName TEXT,
+            authorAvatarUri TEXT,
+            content TEXT NOT NULL,
+            parentCommentId TEXT,
+            isEdited INTEGER NOT NULL DEFAULT 0,
+            createdAt INTEGER NOT NULL,
+            updatedAt INTEGER NOT NULL,
+            FOREIGN KEY(wallpaperId)
+                REFERENCES wallpaper_assets(id)
+                ON DELETE CASCADE,
+            FOREIGN KEY(parentCommentId)
+                REFERENCES wallpaper_comments(id)
+                ON DELETE CASCADE
+        )
+    """)
+
+    db.execSQL("""
+        CREATE TABLE IF NOT EXISTS wallpaper_reactions (
+            wallpaperId TEXT NOT NULL,
+            userId TEXT NOT NULL,
+            reactionKey TEXT NOT NULL,
+            createdAt INTEGER NOT NULL,
+            updatedAt INTEGER NOT NULL,
+            PRIMARY KEY(wallpaperId, userId),
+            FOREIGN KEY(wallpaperId)
+                REFERENCES wallpaper_assets(id)
+                ON DELETE CASCADE
+        )
+    """)
+
+    db.execSQL("""
+        CREATE TABLE IF NOT EXISTS wallpaper_image_ratings (
+            wallpaperId TEXT NOT NULL,
+            userId TEXT NOT NULL,
+            rating INTEGER NOT NULL
+                CHECK(rating BETWEEN 1 AND 5),
+            createdAt INTEGER NOT NULL,
+            updatedAt INTEGER NOT NULL,
+            PRIMARY KEY(wallpaperId, userId),
+            FOREIGN KEY(wallpaperId)
+                REFERENCES wallpaper_assets(id)
+                ON DELETE CASCADE
+        )
+    """)
+
+    db.execSQL("""
+        CREATE TABLE IF NOT EXISTS wallpaper_comment_reactions (
+            commentId TEXT NOT NULL,
+            userId TEXT NOT NULL,
+            reactionKey TEXT NOT NULL,
+            createdAt INTEGER NOT NULL,
+            PRIMARY KEY(commentId, userId),
+            FOREIGN KEY(commentId)
+                REFERENCES wallpaper_comments(id)
+                ON DELETE CASCADE
+        )
+    """)
+
+    db.execSQL("""
+        CREATE INDEX IF NOT EXISTS
+        idx_wallpaper_comments_wallpaper
+        ON wallpaper_comments(wallpaperId, createdAt DESC)
+    """)
+
+    db.execSQL("""
+        CREATE INDEX IF NOT EXISTS
+        idx_wallpaper_comments_author
+        ON wallpaper_comments(authorId, createdAt DESC)
+    """)
+
+    db.execSQL("""
+        CREATE INDEX IF NOT EXISTS
+        idx_wallpaper_reactions_type
+        ON wallpaper_reactions(reactionKey, wallpaperId)
+    """)
+
+    db.execSQL("""
+        CREATE INDEX IF NOT EXISTS
+        idx_wallpaper_ratings_wallpaper
+        ON wallpaper_image_ratings(wallpaperId, rating)
+    """)
+
+    db.execSQL("""
+        CREATE INDEX IF NOT EXISTS
+        idx_wallpaper_comment_reactions
+        ON wallpaper_comment_reactions(commentId, reactionKey)
+    """)
+    
     // =========================================================
     // DATABASE LIFECYCLE
     // =========================================================
