@@ -213,21 +213,26 @@ class SettingsActivity : AppCompatActivity() {
             finish()
         }
 
-        when (sharedPreferences.getString("AppBackground", "#0A0A0A")) {
-    "#FFFFFF" -> backgroundGroup.check(R.id.rbLight)
-    "#001A00" -> backgroundGroup.check(R.id.rbCyber)
-    else -> backgroundGroup.check(R.id.rbDark)
-}
+                when (sharedPreferences.getString("AppBackground", "#0A0A0A")) {
+            "#FFFFFF" -> backgroundGroup.check(R.id.rbLight)
+            "#001A00" -> backgroundGroup.check(R.id.rbCyber)
+            "#000000" -> backgroundGroup.check(R.id.rbTechBlack)
+            else -> backgroundGroup.check(R.id.rbDark)
+        }
 
-backgroundGroup.setOnCheckedChangeListener { _, checkedId ->
-    val editor = sharedPreferences.edit()
-    when (checkedId) {
-        R.id.rbDark -> editor.putString("AppBackground", "#0A0A0A")
-        R.id.rbLight -> editor.putString("AppBackground", "#FFFFFF")
-        R.id.rbCyber -> editor.putString("AppBackground", "#001A00")
-    }
-    editor.apply()
-}
+        backgroundGroup.setOnCheckedChangeListener { _, checkedId ->
+            val backgroundHex = when (checkedId) {
+                R.id.rbDark -> "#0A0A0A"
+                R.id.rbLight -> "#FFFFFF"
+                R.id.rbCyber -> "#001A00"
+                R.id.rbTechBlack -> "#000000"
+                else -> return@setOnCheckedChangeListener
+            }
+
+            sharedPreferences.edit()
+                .putString("AppBackground", backgroundHex)
+                .apply()
+        }
 
         val pickImageLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
             if (uri != null) {
