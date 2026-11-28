@@ -1282,6 +1282,126 @@ private fun ensureWallpaperTables(db: SQLiteDatabase) {
             "Wallpaper concept relation migration count mismatch"
         }
 
+        fun assertEquivalent(
+            label: String,
+            legacyQuery: String,
+            conceptQuery: String
+        ) {
+            val missingFromNew = db.rawQuery(
+                """
+                SELECT 1
+                FROM (
+                    $legacyQuery
+                    EXCEPT
+                    $conceptQuery
+                )
+                LIMIT 1
+                """.trimIndent(),
+                null
+            ).use { it.moveToFirst() }
+
+            val unexpectedInNew = db.rawQuery(
+                """
+                SELECT 1
+                FROM (
+                    $conceptQuery
+                    EXCEPT
+                    $legacyQuery
+                )
+                LIMIT 1
+                """.trimIndent(),
+                null
+            ).use { it.moveToFirst() }
+
+            check(!missingFromNew && !unexpectedInNew) {
+                "$label migration data mismatch"
+            }
+        }
+
+        assertEquivalent(
+            "Keyword concepts",
+            """
+            SELECT id, createdAt, updatedAt
+            FROM wallpaper_keywords
+            """.trimIndent(),
+            """
+            SELECT id, createdAt, updatedAt
+            FROM wallpaper_keyword_concepts
+            """.trimIndent()
+        )
+
+        assertEquivalent(
+            "Keyword terms",
+            """
+            SELECT
+                id,
+                id,
+                keyword,
+                normalizedKeyword,
+                languageCode,
+                1,
+                1,
+                createdAt,
+                updatedAt
+            FROM wallpaper_keywords
+            """.trimIndent(),
+            """
+            SELECT
+                id,
+                conceptId,
+                term,
+                normalizedTerm,
+                languageCode,
+                isPrimary,
+                normalizationVersion,
+                createdAt,
+                updatedAt
+            FROM wallpaper_keyword_terms
+            """.trimIndent()
+        )
+
+        assertEquivalent(
+            "Keyword aliases",
+            """
+            SELECT
+                id,
+                keywordId,
+                alias,
+                normalizedAlias,
+                languageCode,
+                createdAt
+            FROM wallpaper_keyword_aliases
+            """.trimIndent(),
+            """
+            SELECT
+                id,
+                conceptId,
+                alias,
+                normalizedAlias,
+                languageCode,
+                createdAt
+            FROM wallpaper_keyword_concept_aliases
+            """.trimIndent()
+        )
+
+        assertEquivalent(
+            "Wallpaper concept relations",
+            """
+            SELECT
+                wallpaperId,
+                keywordId,
+                createdAt
+            FROM wallpaper_asset_keywords
+            """.trimIndent(),
+            """
+            SELECT
+                wallpaperId,
+                conceptId,
+                createdAt
+            FROM wallpaper_asset_concepts
+            """.trimIndent()
+        )
+
         val tablesToCheck = listOf(
             "wallpaper_keyword_terms",
             "wallpaper_keyword_concept_aliases",
