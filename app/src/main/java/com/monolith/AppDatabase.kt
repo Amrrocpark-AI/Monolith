@@ -1050,7 +1050,6 @@ private fun ensureWallpaperTables(db: SQLiteDatabase) {
         idx_wallpaper_usage_scores_type
         ON wallpaper_asset_usage_scores(usageTypeId)
     """)
-}
 
     // =====================================================
     // WALLPAPER COMMENTS AND USER FEEDBACK
