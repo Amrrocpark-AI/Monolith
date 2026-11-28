@@ -213,15 +213,21 @@ class SettingsActivity : AppCompatActivity() {
             finish()
         }
 
-        backgroundGroup.setOnCheckedChangeListener { _, checkedId ->
-            val editor = sharedPreferences.edit()
-            when (checkedId) {
-                R.id.rbDark -> editor.putString("AppBackground", "#0A0A0A")
-                R.id.rbLight -> editor.putString("AppBackground", "#FFFFFF")
-                R.id.rbCyber -> editor.putString("AppBackground", "#001A00")
-            }
-            editor.apply()
-        }
+        when (sharedPreferences.getString("AppBackground", "#0A0A0A")) {
+    "#FFFFFF" -> backgroundGroup.check(R.id.rbLight)
+    "#001A00" -> backgroundGroup.check(R.id.rbCyber)
+    else -> backgroundGroup.check(R.id.rbDark)
+}
+
+backgroundGroup.setOnCheckedChangeListener { _, checkedId ->
+    val editor = sharedPreferences.edit()
+    when (checkedId) {
+        R.id.rbDark -> editor.putString("AppBackground", "#0A0A0A")
+        R.id.rbLight -> editor.putString("AppBackground", "#FFFFFF")
+        R.id.rbCyber -> editor.putString("AppBackground", "#001A00")
+    }
+    editor.apply()
+}
 
         val pickImageLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
             if (uri != null) {
