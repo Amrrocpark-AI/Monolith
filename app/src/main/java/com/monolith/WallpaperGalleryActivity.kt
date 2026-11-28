@@ -127,7 +127,150 @@ class WallpaperGalleryActivity : AppCompatActivity() {
             )
         }
     }
+    private fun setupCategoryDimensions() {
+        lifecycleScope.launch {
+            val categoryData = withContext(Dispatchers.IO) {
+                val repository =
+                    WallpaperCategoryRepository(applicationContext)
 
+                try {
+                    val roots = repository
+                        .getRootCategories()
+                        .filter { it.isVisible }
+
+                    val childrenByRoot = roots.associate { root ->
+                        root.id to repository
+                            .getChildren(root.id)
+                            .filter { it.isVisible }
+                    }
+
+                    roots to childrenByRoot
+                } finally {
+                    repository.close()
+                }
+            }
+
+            val roots = categoryData.first
+            val childrenByRoot = categoryData.second
+
+            dimensionContainer.removeAllViews()
+
+            roots.forEach { root ->
+                val button = android.widget.Button(this@WallpaperGalleryActivity).apply {
+                    text = root.name
+                    tag = root.id
+                    isAllCaps = false
+                    textSize = 12f
+                    setPadding(20, 0, 20, 0)
+                    setTextColor(android.graphics.Color.WHITE)
+                    setBackgroundColor(
+                        if (selectedDimensionId == root.id) {
+                            android.graphics.Color.rgb(105, 55, 150)
+                        } else {
+                            android.graphics.Color.rgb(38, 32, 48)
+                        }
+                    )
+
+                    setOnClickListener {
+                        selectedDimensionId = root.id
+
+                        for (index in 0 until dimensionContainer.childCount) {
+                            val item = dimensionContainer.getChildAt(index)
+                            val selected = item.tag == root.id
+
+                            (item as? android.widget.Button)?.setBackgroundColor(
+                                if (selected) {
+                                    android.graphics.Color.rgb(105, 55, 150)
+                                } else {
+                                    android.graphics.Color.rgb(38, 32, 48)
+                                }
+                            )
+                        }
+
+                        showCategoryValues(
+                            root,
+                            childrenByRoot[root.id].orEmpty()
+                        )
+                    }
+                }
+
+                dimensionContainer.addView(
+                    button,
+                    android.widget.LinearLayout.LayoutParams(
+                        android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+                        android.widget.LinearLayout.LayoutParams.MATCH_PARENT
+                    )
+                )
+            }
+
+            val selectedRoot = roots.firstOrNull {
+                it.id == selectedDimensionId
+            } ?: roots.firstOrNull()
+
+            selectedDimensionId = selectedRoot?.id
+
+            if (selectedRoot != null) {
+                showCategoryValues(
+                    selectedRoot,
+                    childrenByRoot[selectedRoot.id].orEmpty()
+                )
+            } else {
+                categoryContainer.removeAllViews()
+            }
+        }
+    }
+
+    private fun showCategoryValues(
+        root: WallpaperCategoryRepository.Category,
+        children: List<WallpaperCategoryRepository.Category>
+    ) {
+        categoryContainer.removeAllViews()
+
+        val values = mutableListOf<WallpaperCategoryRepository.Category>()
+
+        if (children.isEmpty() || root.wallpaperCount > 0) {
+            values.add(root)
+        }
+
+        values.addAll(children)
+
+        values.forEach { category ->
+            val selected = category.id in selectedCategoryIds
+
+            val button = android.widget.Button(this).apply {
+                text = category.name
+                tag = category.id
+                isAllCaps = false
+                textSize = 12f
+                setPadding(18, 0, 18, 0)
+                setTextColor(android.graphics.Color.WHITE)
+                setBackgroundColor(
+                    if (selected) {
+                        android.graphics.Color.rgb(145, 65, 190)
+                    } else {
+                        android.graphics.Color.rgb(38, 32, 48)
+                    }
+                )
+
+                setOnClickListener {
+                    if (!selectedCategoryIds.add(category.id)) {
+                        selectedCategoryIds.remove(category.id)
+                    }
+
+                    showCategoryValues(root, children)
+                    loadWallpapers()
+                }
+            }
+
+            categoryContainer.addView(
+                button,
+                android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT
+                )
+            )
+        }
+    }
     private fun setupTabs() {
         val explore = findViewById<TextView>(R.id.tabExplore)
         val favorites = findViewById<TextView>(R.id.tabFavorites)
