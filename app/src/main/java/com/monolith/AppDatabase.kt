@@ -977,6 +977,79 @@ private fun ensureWallpaperTables(db: SQLiteDatabase) {
         idx_wallpaper_asset_keywords_keyword
         ON wallpaper_asset_keywords(keywordId)
     """)
+
+    // =====================================================
+    // WALLPAPER USAGE SUITABILITY
+    // =====================================================
+
+    db.execSQL("""
+        CREATE TABLE IF NOT EXISTS wallpaper_usage_types (
+            id TEXT PRIMARY KEY,
+            usageKey TEXT NOT NULL UNIQUE,
+            sortOrder INTEGER NOT NULL DEFAULT 0,
+            isVisible INTEGER NOT NULL DEFAULT 1,
+            createdAt INTEGER NOT NULL,
+            updatedAt INTEGER NOT NULL
+        )
+    """)
+
+    db.execSQL("""
+        CREATE TABLE IF NOT EXISTS wallpaper_usage_type_translations (
+            usageTypeId TEXT NOT NULL,
+            languageCode TEXT NOT NULL,
+            name TEXT NOT NULL,
+            normalizedName TEXT NOT NULL,
+            description TEXT,
+            PRIMARY KEY(usageTypeId, languageCode),
+            FOREIGN KEY(usageTypeId)
+                REFERENCES wallpaper_usage_types(id)
+                ON DELETE CASCADE
+        )
+    """)
+
+    db.execSQL("""
+        CREATE TABLE IF NOT EXISTS wallpaper_asset_usage_scores (
+            wallpaperId TEXT NOT NULL,
+            usageTypeId TEXT NOT NULL,
+            aiSuitabilityScore REAL,
+            userSuitabilityScore INTEGER,
+            aiEvaluatedAt INTEGER,
+            userRatedAt INTEGER,
+            updatedAt INTEGER NOT NULL,
+            PRIMARY KEY(wallpaperId, usageTypeId),
+            CHECK(
+                aiSuitabilityScore IS NULL OR
+                (aiSuitabilityScore >= 0 AND
+                 aiSuitabilityScore <= 1)
+            ),
+            CHECK(
+                userSuitabilityScore IS NULL OR
+                (userSuitabilityScore >= 0 AND
+                 userSuitabilityScore <= 100)
+            ),
+            FOREIGN KEY(wallpaperId)
+                REFERENCES wallpaper_assets(id)
+                ON DELETE CASCADE,
+            FOREIGN KEY(usageTypeId)
+                REFERENCES wallpaper_usage_types(id)
+                ON DELETE CASCADE
+        )
+    """)
+
+    db.execSQL("""
+        CREATE INDEX IF NOT EXISTS
+        idx_wallpaper_usage_translations_language
+        ON wallpaper_usage_type_translations(
+            languageCode,
+            normalizedName
+        )
+    """)
+
+    db.execSQL("""
+        CREATE INDEX IF NOT EXISTS
+        idx_wallpaper_usage_scores_type
+        ON wallpaper_asset_usage_scores(usageTypeId)
+    """)
 }
     // =========================================================
     // DATABASE LIFECYCLE
