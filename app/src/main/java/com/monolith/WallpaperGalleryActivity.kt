@@ -271,6 +271,33 @@ class WallpaperGalleryActivity : AppCompatActivity() {
                 )
             )
         }
+
+        if (selectedCategoryIds.isNotEmpty()) {
+            val clearButton = android.widget.Button(this).apply {
+                text = "Clear selections"
+                isAllCaps = false
+                textSize = 11f
+                setPadding(18, 0, 18, 0)
+                setTextColor(android.graphics.Color.WHITE)
+                setBackgroundColor(
+                    android.graphics.Color.rgb(120, 45, 55)
+                )
+
+                setOnClickListener {
+                    selectedCategoryIds.clear()
+                    showCategoryValues(root, children)
+                    loadWallpapers()
+                }
+            }
+
+            categoryContainer.addView(
+                clearButton,
+                android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT
+                )
+            )
+        }
     }
     private fun setupTabs() {
         val explore = findViewById<TextView>(R.id.tabExplore)
