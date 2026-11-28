@@ -9,6 +9,7 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -17,10 +18,14 @@ import kotlinx.coroutines.withContext
 class WallpaperGalleryActivity : AppCompatActivity() {
 
     private lateinit var galleryRecycler: RecyclerView
+    private lateinit var keywordRecycler: RecyclerView
     private lateinit var emptyState: View
     private lateinit var resultCount: TextView
     private lateinit var searchInput: EditText
     private lateinit var adapter: WallpaperGalleryAdapter
+    private lateinit var keywordAdapter: WallpaperKeywordCardAdapter
+
+    private val selectedKeywordIds = mutableSetOf<String>()
 
     private var selectedTab = GalleryTab.EXPLORE
 
@@ -35,6 +40,7 @@ class WallpaperGalleryActivity : AppCompatActivity() {
         setContentView(R.layout.activity_wallpaper_gallery)
 
         galleryRecycler = findViewById(R.id.wallpaperGalleryRecycler)
+        keywordRecycler = findViewById(R.id.keywordCardsRecycler)
         emptyState = findViewById(R.id.wallpaperEmptyState)
         resultCount = findViewById(R.id.tvWallpaperResultCount)
         searchInput = findViewById(R.id.etGallerySearch)
@@ -59,9 +65,52 @@ class WallpaperGalleryActivity : AppCompatActivity() {
 
         galleryRecycler.adapter = adapter
 
+        setupKeywordCards()
         setupTabs()
         setupSearch()
         loadWallpapers()
+    }
+
+    private fun setupKeywordCards() {
+        keywordRecycler.layoutManager =
+            LinearLayoutManager(
+                this,
+                LinearLayoutManager.HORIZONTAL,
+                false
+            )
+
+        keywordAdapter = WallpaperKeywordCardAdapter { keyword ->
+
+            if (!selectedKeywordIds.add(keyword.id)) {
+                selectedKeywordIds.remove(keyword.id)
+            }
+
+            keywordAdapter.setSelectedIds(
+                selectedKeywordIds.toSet()
+            )
+
+            loadWallpapers()
+        }
+
+        keywordRecycler.adapter = keywordAdapter
+
+        lifecycleScope.launch {
+            val keywords = withContext(Dispatchers.IO) {
+                val repository =
+                    WallpaperKeywordRepository(applicationContext)
+
+                try {
+                    repository.getAllKeywords()
+                } finally {
+                    repository.close()
+                }
+            }
+
+            keywordAdapter.submitList(keywords)
+            keywordAdapter.setSelectedIds(
+                selectedKeywordIds.toSet()
+            )
+        }
     }
 
     private fun setupTabs() {
@@ -148,6 +197,8 @@ class WallpaperGalleryActivity : AppCompatActivity() {
 
     private fun loadWallpapers() {
         val query = searchInput.text.toString()
+        val keywordIds = selectedKeywordIds.toList()
+        val currentTab = selectedTab
 
         lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) {
@@ -156,10 +207,11 @@ class WallpaperGalleryActivity : AppCompatActivity() {
                 try {
                     val options = WallpaperSearch.SearchOptions(
                         query = query,
+                        keywordIds = keywordIds,
                         favoriteOnly =
-                            selectedTab == GalleryTab.FAVORITES,
+                            currentTab == GalleryTab.FAVORITES,
                         existingFilesOnly = true,
-                        source = when (selectedTab) {
+                        source = when (currentTab) {
                             GalleryTab.EXPLORE ->
                                 WallpaperSearch.SourceFilter.ALL
 
