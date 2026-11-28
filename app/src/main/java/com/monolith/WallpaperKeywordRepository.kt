@@ -139,28 +139,6 @@ class WallpaperKeywordRepository(context: Context) {
         }
     }
 
-        db.insertWithOnConflict(
-            "wallpaper_keyword_aliases",
-            null,
-            values,
-            SQLiteDatabase.CONFLICT_IGNORE
-        )
-
-        return db.rawQuery(
-            """
-            SELECT id
-            FROM wallpaper_keyword_aliases
-            WHERE normalizedAlias = ?
-              AND languageCode = ?
-            LIMIT 1
-            """.trimIndent(),
-            arrayOf(normalized, cleanLanguage)
-        ).use {
-            require(it.moveToFirst()) {
-                "Could not save alias"
-            }
-            it.getString(0)
-        }
     }
 
     fun getAllKeywords(): List<Keyword> {
