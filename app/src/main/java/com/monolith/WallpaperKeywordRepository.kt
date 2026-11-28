@@ -230,7 +230,6 @@ class WallpaperKeywordRepository(context: Context) {
                 )
             }
         }
-        }
 
         return keywords
     }
