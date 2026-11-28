@@ -1045,6 +1045,262 @@ private fun ensureWallpaperTables(db: SQLiteDatabase) {
         }
     }
     
+    // =========================================================
+    // MULTILINGUAL KEYWORD CONCEPT MIGRATION
+    // =========================================================
+
+    private fun migrateWallpaperKeywordsToConcepts(db: SQLiteDatabase) {
+
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS wallpaper_keyword_concepts (
+                id TEXT PRIMARY KEY,
+                createdAt INTEGER NOT NULL,
+                updatedAt INTEGER NOT NULL
+            )
+        """)
+
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS wallpaper_keyword_terms (
+                id TEXT PRIMARY KEY,
+                conceptId TEXT NOT NULL,
+                term TEXT NOT NULL,
+                normalizedTerm TEXT NOT NULL,
+                languageCode TEXT NOT NULL DEFAULT 'und',
+                isPrimary INTEGER NOT NULL DEFAULT 0,
+                normalizationVersion INTEGER NOT NULL DEFAULT 1,
+                createdAt INTEGER NOT NULL,
+                updatedAt INTEGER NOT NULL,
+                FOREIGN KEY(conceptId)
+                    REFERENCES wallpaper_keyword_concepts(id)
+                    ON DELETE CASCADE
+            )
+        """)
+
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS wallpaper_keyword_concept_aliases (
+                id TEXT PRIMARY KEY,
+                conceptId TEXT NOT NULL,
+                alias TEXT NOT NULL,
+                normalizedAlias TEXT NOT NULL,
+                languageCode TEXT NOT NULL DEFAULT 'und',
+                createdAt INTEGER NOT NULL,
+                UNIQUE(conceptId, languageCode, normalizedAlias),
+                FOREIGN KEY(conceptId)
+                    REFERENCES wallpaper_keyword_concepts(id)
+                    ON DELETE CASCADE
+            )
+        """)
+
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS wallpaper_asset_concepts (
+                wallpaperId TEXT NOT NULL,
+                conceptId TEXT NOT NULL,
+                createdAt INTEGER NOT NULL,
+                PRIMARY KEY(wallpaperId, conceptId),
+                FOREIGN KEY(wallpaperId)
+                    REFERENCES wallpaper_assets(id)
+                    ON DELETE CASCADE,
+                FOREIGN KEY(conceptId)
+                    REFERENCES wallpaper_keyword_concepts(id)
+                    ON DELETE CASCADE
+            )
+        """)
+
+        db.execSQL("""
+            CREATE UNIQUE INDEX IF NOT EXISTS
+            idx_wallpaper_keyword_terms_concept_language
+            ON wallpaper_keyword_terms(
+                conceptId,
+                languageCode,
+                normalizedTerm
+            )
+        """)
+
+        db.execSQL("""
+            CREATE UNIQUE INDEX IF NOT EXISTS
+            idx_wallpaper_keyword_terms_primary
+            ON wallpaper_keyword_terms(conceptId, languageCode)
+            WHERE isPrimary = 1
+        """)
+
+        db.execSQL("""
+            CREATE INDEX IF NOT EXISTS
+            idx_wallpaper_keyword_terms_lookup
+            ON wallpaper_keyword_terms(languageCode, normalizedTerm)
+        """)
+
+        db.execSQL("""
+            CREATE INDEX IF NOT EXISTS
+            idx_wallpaper_keyword_aliases_lookup
+            ON wallpaper_keyword_concept_aliases(
+                languageCode,
+                normalizedAlias
+            )
+        """)
+
+        db.execSQL("""
+            CREATE INDEX IF NOT EXISTS
+            idx_wallpaper_keyword_aliases_concept
+            ON wallpaper_keyword_concept_aliases(conceptId)
+        """)
+
+        db.execSQL("""
+            CREATE INDEX IF NOT EXISTS
+            idx_wallpaper_asset_concepts_concept
+            ON wallpaper_asset_concepts(conceptId)
+        """)
+
+        fun countRows(table: String): Long {
+            return db.rawQuery(
+                "SELECT COUNT(*) FROM $table",
+                null
+            ).use { cursor ->
+                if (cursor.moveToFirst()) cursor.getLong(0) else 0L
+            }
+        }
+
+        val oldKeywordCount = countRows("wallpaper_keywords")
+        val oldAliasCount = countRows("wallpaper_keyword_aliases")
+        val oldRelationCount = countRows("wallpaper_asset_keywords")
+
+        val newConceptCount = countRows("wallpaper_keyword_concepts")
+        val newTermCount = countRows("wallpaper_keyword_terms")
+        val newAliasCount = countRows("wallpaper_keyword_concept_aliases")
+        val newRelationCount = countRows("wallpaper_asset_concepts")
+
+        val newTablesAreEmpty =
+            newConceptCount == 0L &&
+            newTermCount == 0L &&
+            newAliasCount == 0L &&
+            newRelationCount == 0L
+
+        val newTablesMatchLegacy =
+            newConceptCount == oldKeywordCount &&
+            newTermCount == oldKeywordCount &&
+            newAliasCount == oldAliasCount &&
+            newRelationCount == oldRelationCount
+
+        if (newTablesAreEmpty) {
+
+            db.execSQL("""
+                INSERT INTO wallpaper_keyword_concepts (
+                    id,
+                    createdAt,
+                    updatedAt
+                )
+                SELECT
+                    id,
+                    createdAt,
+                    updatedAt
+                FROM wallpaper_keywords
+            """)
+
+            db.execSQL("""
+                INSERT INTO wallpaper_keyword_terms (
+                    id,
+                    conceptId,
+                    term,
+                    normalizedTerm,
+                    languageCode,
+                    isPrimary,
+                    normalizationVersion,
+                    createdAt,
+                    updatedAt
+                )
+                SELECT
+                    id,
+                    id,
+                    keyword,
+                    normalizedKeyword,
+                    languageCode,
+                    1,
+                    1,
+                    createdAt,
+                    updatedAt
+                FROM wallpaper_keywords
+            """)
+
+            db.execSQL("""
+                INSERT INTO wallpaper_keyword_concept_aliases (
+                    id,
+                    conceptId,
+                    alias,
+                    normalizedAlias,
+                    languageCode,
+                    createdAt
+                )
+                SELECT
+                    a.id,
+                    a.keywordId,
+                    a.alias,
+                    a.normalizedAlias,
+                    a.languageCode,
+                    a.createdAt
+                FROM wallpaper_keyword_aliases AS a
+            """)
+
+            db.execSQL("""
+                INSERT INTO wallpaper_asset_concepts (
+                    wallpaperId,
+                    conceptId,
+                    createdAt
+                )
+                SELECT
+                    wallpaperId,
+                    keywordId,
+                    createdAt
+                FROM wallpaper_asset_keywords
+            """)
+
+        } else if (!newTablesMatchLegacy) {
+            throw IllegalStateException(
+                "Keyword migration data is incomplete or inconsistent"
+            )
+        }
+
+        check(
+            countRows("wallpaper_keyword_concepts") == oldKeywordCount
+        ) {
+            "Keyword concept migration count mismatch"
+        }
+
+        check(
+            countRows("wallpaper_keyword_terms") == oldKeywordCount
+        ) {
+            "Keyword term migration count mismatch"
+        }
+
+        check(
+            countRows("wallpaper_keyword_concept_aliases") == oldAliasCount
+        ) {
+            "Keyword alias migration count mismatch"
+        }
+
+        check(
+            countRows("wallpaper_asset_concepts") == oldRelationCount
+        ) {
+            "Wallpaper concept relation migration count mismatch"
+        }
+
+        val tablesToCheck = listOf(
+            "wallpaper_keyword_terms",
+            "wallpaper_keyword_concept_aliases",
+            "wallpaper_asset_concepts"
+        )
+
+        for (table in tablesToCheck) {
+            db.rawQuery(
+                "PRAGMA foreign_key_check($table)",
+                null
+            ).use { cursor ->
+                if (cursor.moveToFirst()) {
+                    throw IllegalStateException(
+                        "Foreign key violation detected in $table"
+                    )
+                }
+            }
+        }
+    }
 
     // =========================================================
     // INTERNAL HELPERS
