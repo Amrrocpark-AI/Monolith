@@ -217,12 +217,17 @@ class FloatingService : Service() {
             floatingHubView?.findViewById<LinearLayout>(R.id.btnVolume)?.setOnClickListener { toggleVolumePanel() }
             floatingHubView?.findViewById<LinearLayout>(R.id.btnResize)?.setOnClickListener { toggleResizePanel() }
             floatingHubView?.findViewById<LinearLayout>(R.id.btnWallpapers)?.setOnClickListener {
-            hideHub()
-            FloatingWallpaperWindow.show(
-            this,
-            windowManager,
-            bubbleLayoutParams.x,
-            bubbleLayoutParams.y - 180
+                hideHub()
+
+                val intent = Intent(
+                    this,
+                    WallpaperGalleryActivity::class.java
+                ).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+
+                startActivity(intent)
+                        }
         )
     }
             floatingHubView?.findViewById<LinearLayout>(R.id.btnCustomize)?.setOnClickListener { Toast.makeText(this, "شاشة التخصيص (قريباً)", Toast.LENGTH_SHORT).show() }
