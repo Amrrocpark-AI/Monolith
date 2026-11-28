@@ -880,7 +880,7 @@ private fun ensureWallpaperTables(db: SQLiteDatabase) {
                 createMessageDeletionArchiveTable(db)
             }
 
-            if (oldVersion < 10) {
+              if (oldVersion < 11) {
                 ensureWallpaperTables(db)
             }
 
