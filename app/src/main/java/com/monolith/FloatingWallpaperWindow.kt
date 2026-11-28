@@ -44,10 +44,13 @@ object FloatingWallpaperWindow {
 
     private val handler = Handler(Looper.getMainLooper())
 
-    private var activeMedia =
+        private var activeMedia =
         WallpaperSearch.MediaFilter.ALL
 
-        private var favoritesOnly = false
+    private var activeSource =
+        WallpaperSearch.SourceFilter.ALL
+
+    private var favoritesOnly = false
 
     private val selectedTagIds = linkedSetOf<String>()
 
