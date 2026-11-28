@@ -48,9 +48,6 @@
             </intent-filter>
         </activity>
 
-        <activity android:name=".MainActivity" android:exported="false" android:windowSoftInputMode="adjustResize" android:configChanges="orientation|screenSize|keyboardHidden" />
-                <activity android:name=".MainActivity" android:exported="false" android:windowSoftInputMode="adjustResize" android:configChanges="orientation|screenSize|keyboardHidden" />
-
         <activity
             android:name=".WallpaperGalleryActivity"
             android:exported="false" />
