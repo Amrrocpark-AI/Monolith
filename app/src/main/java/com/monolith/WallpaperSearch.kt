@@ -27,11 +27,12 @@ class WallpaperSearch(context: Context) {
         NAME_DESC
     }
 
-    data class SearchOptions(
+        data class SearchOptions(
         val query: String = "",
         val preferredLanguageCode: String = "und",
         val media: MediaFilter = MediaFilter.ALL,
         val categoryId: String? = null,
+        val categoryIds: List<String> = emptyList(),
         val tagIds: List<String> = emptyList(),
         val keywordIds: List<String> = emptyList(),
         val traitIds: List<String> = emptyList(),
