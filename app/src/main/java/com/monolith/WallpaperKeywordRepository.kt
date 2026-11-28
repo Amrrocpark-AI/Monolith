@@ -323,25 +323,47 @@ class WallpaperKeywordRepository(context: Context) {
         }
     }
 
-    fun getAllKeywords(): List<Keyword> {
-        return queryKeywords(null)
+    fun getAllKeywords(
+        preferredLanguageCode: String = "und"
+    ): List<Keyword> {
+        return queryKeywords(
+            null,
+            preferredLanguageCode
+        )
     }
 
-    fun searchKeywords(query: String): List<Keyword> {
+    fun searchKeywords(
+        query: String,
+        preferredLanguageCode: String = "und"
+    ): List<Keyword> {
+
         val cleanQuery = normalize(query)
 
         if (cleanQuery.isEmpty()) {
-            return getAllKeywords()
+            return getAllKeywords(preferredLanguageCode)
         }
 
-        return queryKeywords(cleanQuery)
+        return queryKeywords(
+            cleanQuery,
+            preferredLanguageCode
+        )
     }
+
     private fun queryKeywords(
-        query: String?
+        query: String?,
+        preferredLanguageCode: String
     ): List<Keyword> {
 
         val keywords = linkedMapOf<String, Keyword>()
         val db = database.readableDatabase
+
+        val cleanLanguage = preferredLanguageCode.trim()
+            .ifEmpty { "und" }
+            .lowercase(Locale.ROOT)
+
+        val baseLanguage = cleanLanguage
+            .substringBefore("-")
+            .substringBefore("_")
 
         val escapedQuery = query
             ?.let { normalize(it) }
@@ -369,8 +391,22 @@ class WallpaperKeywordRepository(context: Context) {
             """.trimIndent()
         }
 
-        val arguments = escapedQuery?.let {
-            arrayOf("%$it%", "%$it%")
+        val arguments = if (escapedQuery == null) {
+            arrayOf(
+                cleanLanguage,
+                baseLanguage,
+                cleanLanguage,
+                baseLanguage
+            )
+        } else {
+            arrayOf(
+                cleanLanguage,
+                baseLanguage,
+                cleanLanguage,
+                baseLanguage,
+                "%$escapedQuery%",
+                "%$escapedQuery%"
+            )
         }
 
         db.rawQuery(
@@ -383,12 +419,16 @@ class WallpaperKeywordRepository(context: Context) {
                     FROM wallpaper_keyword_terms t
                     WHERE t.conceptId = c.id
                     ORDER BY
-                        t.isPrimary DESC,
                         CASE
-                            WHEN t.languageCode = 'und'
+                            WHEN t.languageCode = ?
                             THEN 0
-                            ELSE 1
+                            WHEN t.languageCode = ?
+                            THEN 1
+                            WHEN t.languageCode = 'und'
+                            THEN 2
+                            ELSE 3
                         END,
+                        t.isPrimary DESC,
                         t.languageCode ASC,
                         t.createdAt ASC
                     LIMIT 1
@@ -399,12 +439,16 @@ class WallpaperKeywordRepository(context: Context) {
                     FROM wallpaper_keyword_terms t
                     WHERE t.conceptId = c.id
                     ORDER BY
-                        t.isPrimary DESC,
                         CASE
-                            WHEN t.languageCode = 'und'
+                            WHEN t.languageCode = ?
                             THEN 0
-                            ELSE 1
+                            WHEN t.languageCode = ?
+                            THEN 1
+                            WHEN t.languageCode = 'und'
+                            THEN 2
+                            ELSE 3
                         END,
+                        t.isPrimary DESC,
                         t.languageCode ASC,
                         t.createdAt ASC
                     LIMIT 1
@@ -490,7 +534,7 @@ class WallpaperKeywordRepository(context: Context) {
         }
 
         return keywords.values.toList()
-    }}
+    }
 
     fun getKeywordsForWallpaper(
         wallpaperId: String,
