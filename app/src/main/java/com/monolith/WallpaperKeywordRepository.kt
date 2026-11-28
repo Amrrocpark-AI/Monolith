@@ -371,7 +371,6 @@ class WallpaperKeywordRepository(context: Context) {
 
         return queryKeywords(cleanQuery)
     }
-
     private fun queryKeywords(
         query: String?
     ): List<Keyword> {
@@ -380,6 +379,7 @@ class WallpaperKeywordRepository(context: Context) {
         val db = database.readableDatabase
 
         val escapedQuery = query
+            ?.let { normalize(it) }
             ?.replace("\\", "\\\\")
             ?.replace("%", "\\%")
             ?.replace("_", "\\_")
@@ -389,12 +389,17 @@ class WallpaperKeywordRepository(context: Context) {
         } else {
             """
             WHERE
-                LOWER(k.keyword) LIKE ? ESCAPE '\'
+                EXISTS (
+                    SELECT 1
+                    FROM wallpaper_keyword_terms matched
+                    WHERE matched.conceptId = c.id
+                      AND matched.normalizedTerm LIKE ? ESCAPE '\'
+                )
                 OR EXISTS (
                     SELECT 1
-                    FROM wallpaper_keyword_aliases a
-                    WHERE a.keywordId = k.id
-                      AND LOWER(a.alias) LIKE ? ESCAPE '\'
+                    FROM wallpaper_keyword_concept_aliases a
+                    WHERE a.conceptId = c.id
+                      AND a.normalizedAlias LIKE ? ESCAPE '\'
                 )
             """.trimIndent()
         }
@@ -406,32 +411,83 @@ class WallpaperKeywordRepository(context: Context) {
         db.rawQuery(
             """
             SELECT
-                k.id,
-                k.keyword,
-                k.languageCode,
+                c.id,
+
+                (
+                    SELECT t.term
+                    FROM wallpaper_keyword_terms t
+                    WHERE t.conceptId = c.id
+                    ORDER BY
+                        t.isPrimary DESC,
+                        CASE
+                            WHEN t.languageCode = 'und'
+                            THEN 0
+                            ELSE 1
+                        END,
+                        t.languageCode ASC,
+                        t.createdAt ASC
+                    LIMIT 1
+                ),
+
+                (
+                    SELECT t.languageCode
+                    FROM wallpaper_keyword_terms t
+                    WHERE t.conceptId = c.id
+                    ORDER BY
+                        t.isPrimary DESC,
+                        CASE
+                            WHEN t.languageCode = 'und'
+                            THEN 0
+                            ELSE 1
+                        END,
+                        t.languageCode ASC,
+                        t.createdAt ASC
+                    LIMIT 1
+                ),
+
                 (
                     SELECT COUNT(*)
-                    FROM wallpaper_keyword_aliases a
-                    WHERE a.keywordId = k.id
+                    FROM wallpaper_keyword_concept_aliases a
+                    WHERE a.conceptId = c.id
                 ),
+
                 (
                     SELECT COUNT(*)
-                    FROM wallpaper_asset_keywords countLinks
-                    WHERE countLinks.keywordId = k.id
+                    FROM wallpaper_asset_concepts ac
+                    WHERE ac.conceptId = c.id
                 ),
-                w.thumbnailPath,
-                w.filePath
-            FROM wallpaper_keywords k
-            LEFT JOIN wallpaper_asset_keywords ak
-                ON ak.keywordId = k.id
-            LEFT JOIN wallpaper_assets w
-                ON w.id = ak.wallpaperId
-               AND w.mediaType = 'IMAGE'
+
+                (
+                    SELECT w.thumbnailPath
+                    FROM wallpaper_asset_concepts ac
+                    INNER JOIN wallpaper_assets w
+                        ON w.id = ac.wallpaperId
+                    WHERE ac.conceptId = c.id
+                      AND w.mediaType = 'IMAGE'
+                    ORDER BY
+                        w.createdAt DESC,
+                        w.id ASC
+                    LIMIT 1
+                ),
+
+                (
+                    SELECT w.filePath
+                    FROM wallpaper_asset_concepts ac
+                    INNER JOIN wallpaper_assets w
+                        ON w.id = ac.wallpaperId
+                    WHERE ac.conceptId = c.id
+                      AND w.mediaType = 'IMAGE'
+                    ORDER BY
+                        w.createdAt DESC,
+                        w.id ASC
+                    LIMIT 1
+                )
+
+            FROM wallpaper_keyword_concepts c
+
             $selection
-            ORDER BY
-                k.keyword COLLATE NOCASE ASC,
-                w.createdAt DESC,
-                w.id ASC
+
+            ORDER BY 2 COLLATE NOCASE ASC
             """.trimIndent(),
             arguments
         ).use { cursor ->
@@ -439,56 +495,37 @@ class WallpaperKeywordRepository(context: Context) {
             while (cursor.moveToNext()) {
 
                 val id = cursor.getString(0)
+                val term = cursor.getString(1) ?: continue
+                val languageCode = cursor.getString(2) ?: "und"
 
-                val current = keywords[id]
+                val thumbnailPath = cursor.getString(5)
+                val originalPath = cursor.getString(6)
 
-                val previewPath = if (
-                    current?.previewPath == null
-                ) {
-
-                    val thumbnailPath = cursor.getString(5)
-                    val originalPath = cursor.getString(6)
-
-                    val validThumbnail = thumbnailPath
-                        ?.takeIf {
-                            java.io.File(it).isFile &&
-                                java.io.File(it).canRead()
-                        }
-
-                    validThumbnail ?: originalPath?.takeIf {
+                val validThumbnail = thumbnailPath
+                    ?.takeIf {
                         java.io.File(it).isFile &&
                             java.io.File(it).canRead()
                     }
 
-                } else {
-                    current.previewPath
-                }
+                val previewPath = validThumbnail
+                    ?: originalPath?.takeIf {
+                        java.io.File(it).isFile &&
+                            java.io.File(it).canRead()
+                    }
 
-                if (current == null) {
-
-                    keywords[id] = Keyword(
-                        id = id,
-                        keyword = cursor.getString(1),
-                        languageCode = cursor.getString(2),
-                        aliasCount = cursor.getInt(3),
-                        wallpaperCount = cursor.getInt(4),
-                        previewPath = previewPath
-                    )
-
-                } else if (
-                    current.previewPath == null &&
-                    previewPath != null
-                ) {
-
-                    keywords[id] = current.copy(
-                        previewPath = previewPath
-                    )
-                }
+                keywords[id] = Keyword(
+                    id = id,
+                    keyword = term,
+                    languageCode = languageCode,
+                    aliasCount = cursor.getInt(3),
+                    wallpaperCount = cursor.getInt(4),
+                    previewPath = previewPath
+                )
             }
         }
 
         return keywords.values.toList()
-    }
+    }}
 
     fun getKeywordsForWallpaper(
         wallpaperId: String
