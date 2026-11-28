@@ -234,16 +234,64 @@ class SettingsActivity : AppCompatActivity() {
                 .apply()
         }
 
-        val pickImageLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
-            if (uri != null) {
+                val pickImageLauncher =
+            registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+
+                if (uri == null) return@registerForActivityResult
+
                 try {
-                    contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    sharedPreferences.edit().putString("AppBackgroundImage", uri.toString()).apply()
-                    Toast.makeText(this, "تم حفظ الصورة!", Toast.LENGTH_SHORT).show()
-                } catch (e: Exception) { Toast.makeText(this, "حدث خطأ", Toast.LENGTH_SHORT).show() }
+                    contentResolver.takePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+
+                    val previousUri = sharedPreferences.getString(
+                        "AppBackgroundImage",
+                        null
+                    )
+
+                    sharedPreferences.edit()
+                        .putString("AppBackgroundImage", uri.toString())
+                        .apply()
+
+                    if (!previousUri.isNullOrBlank() &&
+                        previousUri != uri.toString()
+                    ) {
+                        try {
+                            contentResolver.releasePersistableUriPermission(
+                                Uri.parse(previousUri),
+                                Intent.FLAG_GRANT_READ_URI_PERMISSION
+                            )
+                        } catch (_: Exception) {
+                            // تجاهل تعذر تحرير صلاحية الصورة القديمة.
+                        }
+                    }
+
+                    Toast.makeText(
+                        this,
+                        "تم حفظ صورة الخلفية بنجاح",
+                        Toast.LENGTH_SHORT
+                    ).show()
+
+                } catch (e: SecurityException) {
+                    Toast.makeText(
+                        this,
+                        "تعذر حفظ صلاحية الوصول إلى الصورة",
+                        Toast.LENGTH_LONG
+                    ).show()
+
+                } catch (e: Exception) {
+                    Toast.makeText(
+                        this,
+                        "تعذر حفظ صورة الخلفية",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
             }
+
+        btnPickImage.setOnClickListener {
+            pickImageLauncher.launch(arrayOf("image/*"))
         }
-        btnPickImage.setOnClickListener { pickImageLauncher.launch(arrayOf("image/*")) }
 
         val sbRed = findViewById<SeekBar>(R.id.sbRed)
         val sbGreen = findViewById<SeekBar>(R.id.sbGreen)
