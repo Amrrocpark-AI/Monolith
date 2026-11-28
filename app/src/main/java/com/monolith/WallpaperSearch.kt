@@ -58,13 +58,18 @@ class WallpaperSearch(context: Context) {
         val cleanQuery =
             WallpaperTextNormalizer.normalize(options.query)
 
-        if (cleanQuery.isNotEmpty()) {
-            val escapedQuery = cleanQuery
+        val queryTokens = cleanQuery
+            .split(Regex("\\s+"))
+            .filter { it.isNotBlank() }
+            .distinct()
+
+        for (token in queryTokens) {
+            val escapedToken = token
                 .replace("\\", "\\\\")
                 .replace("%", "\\%")
                 .replace("_", "\\_")
 
-            val searchPattern = "%$escapedQuery%"
+            val searchPattern = "%$escapedToken%"
 
             conditions.add(
                 """
