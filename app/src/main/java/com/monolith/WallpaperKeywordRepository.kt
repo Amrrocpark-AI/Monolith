@@ -245,6 +245,7 @@ class WallpaperKeywordRepository(context: Context) {
         }
 
         val db = database.writableDatabase
+        val now = System.currentTimeMillis()
 
         db.beginTransaction()
 
@@ -253,21 +254,35 @@ class WallpaperKeywordRepository(context: Context) {
                 "Keyword does not exist"
             }
 
+            val conceptExists = db.rawQuery(
+                """
+                SELECT 1
+                FROM wallpaper_keyword_concepts
+                WHERE id = ?
+                LIMIT 1
+                """.trimIndent(),
+                arrayOf(keywordId)
+            ).use { it.moveToFirst() }
+
+            require(conceptExists) {
+                "Keyword concept does not exist"
+            }
+
             val id = UUID.randomUUID().toString()
 
-            val values = ContentValues().apply {
+            val legacyValues = ContentValues().apply {
                 put("id", id)
                 put("keywordId", keywordId)
                 put("alias", cleanAlias)
                 put("normalizedAlias", normalized)
                 put("languageCode", cleanLanguage)
-                put("createdAt", System.currentTimeMillis())
+                put("createdAt", now)
             }
 
             db.insertWithOnConflict(
                 "wallpaper_keyword_aliases",
                 null,
-                values,
+                legacyValues,
                 SQLiteDatabase.CONFLICT_IGNORE
             )
 
@@ -291,6 +306,48 @@ class WallpaperKeywordRepository(context: Context) {
                 }
 
                 cursor.getString(0)
+            }
+
+            val conceptAliasValues = ContentValues().apply {
+                put("id", result)
+                put("conceptId", keywordId)
+                put("alias", cleanAlias)
+                put("normalizedAlias", normalized)
+                put("languageCode", cleanLanguage)
+                put("createdAt", now)
+            }
+
+            db.insertWithOnConflict(
+                "wallpaper_keyword_concept_aliases",
+                null,
+                conceptAliasValues,
+                SQLiteDatabase.CONFLICT_IGNORE
+            )
+
+            val conceptAliasId = db.rawQuery(
+                """
+                SELECT id
+                FROM wallpaper_keyword_concept_aliases
+                WHERE conceptId = ?
+                  AND normalizedAlias = ?
+                  AND languageCode = ?
+                LIMIT 1
+                """.trimIndent(),
+                arrayOf(
+                    keywordId,
+                    normalized,
+                    cleanLanguage
+                )
+            ).use { cursor ->
+                if (cursor.moveToFirst()) {
+                    cursor.getString(0)
+                } else {
+                    null
+                }
+            }
+
+            require(conceptAliasId == result) {
+                "Alias data is inconsistent between legacy and concept tables"
             }
 
             db.setTransactionSuccessful()
