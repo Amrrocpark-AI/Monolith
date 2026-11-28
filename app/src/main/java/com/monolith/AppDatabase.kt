@@ -996,6 +996,7 @@ private fun ensureWallpaperTables(db: SQLiteDatabase) {
             createMessageDeletionArchiveTable(db)
             ensureCodeWorkspaceTables(db)
             ensureWallpaperTables(db)
+            migrateWallpaperKeywordsToConcepts(db)
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
@@ -1019,8 +1020,12 @@ private fun ensureWallpaperTables(db: SQLiteDatabase) {
                 createMessageDeletionArchiveTable(db)
             }
 
-              if (oldVersion < 11) {
+            if (oldVersion < 11) {
                 ensureWallpaperTables(db)
+            }
+
+            if (oldVersion < 12) {
+                migrateWallpaperKeywordsToConcepts(db)
             }
 
             ensureCodeWorkspaceTables(db)
@@ -1031,14 +1036,14 @@ private fun ensureWallpaperTables(db: SQLiteDatabase) {
         }
     }
 
-        override fun onOpen(db: SQLiteDatabase) {
+    override fun onOpen(db: SQLiteDatabase) {
         super.onOpen(db)
         db.setForeignKeyConstraintsEnabled(true)
         if (!db.isReadOnly) {
             ensureCodeWorkspaceTables(db)
             ensureWallpaperTables(db)
         }
-        }
+    }
     
 
     // =========================================================
