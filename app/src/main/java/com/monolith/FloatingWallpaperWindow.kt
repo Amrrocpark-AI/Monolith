@@ -888,7 +888,37 @@ object FloatingWallpaperWindow {
 
             view.alpha =
                 if (id == selected) 1f else 0.68f
+        val sourceFilters = listOf(
+            R.id.filterSourceAll,
+            R.id.filterSourceBuiltIn,
+            R.id.filterSourceUser
+        )
+
+        val selectedSourceId = when (activeSource) {
+            WallpaperSearch.SourceFilter.ALL ->
+                R.id.filterSourceAll
+
+            WallpaperSearch.SourceFilter.BUILT_IN ->
+                R.id.filterSourceBuiltIn
+
+            WallpaperSearch.SourceFilter.USER ->
+                R.id.filterSourceUser
         }
+
+        sourceFilters.forEach { id ->
+            val view = root.findViewById<TextView>(id)
+
+            view.setTextColor(
+                if (id == selectedSourceId) {
+                    Color.rgb(0, 229, 255)
+                } else {
+                    Color.WHITE
+                }
+            )
+
+            view.alpha =
+                if (id == selectedSourceId) 1f else 0.68f
+        }        }
     }
 
     private fun displayError(
