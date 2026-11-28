@@ -551,8 +551,23 @@ class WallpaperKeywordRepository(context: Context) {
             }
 
             selectedIds.forEach { keywordId ->
+
                 require(keywordExists(db, keywordId)) {
                     "Keyword does not exist: $keywordId"
+                }
+
+                val conceptExists = db.rawQuery(
+                    """
+                    SELECT 1
+                    FROM wallpaper_keyword_concepts
+                    WHERE id = ?
+                    LIMIT 1
+                    """.trimIndent(),
+                    arrayOf(keywordId)
+                ).use { it.moveToFirst() }
+
+                require(conceptExists) {
+                    "Keyword concept does not exist: $keywordId"
                 }
             }
 
@@ -562,11 +577,17 @@ class WallpaperKeywordRepository(context: Context) {
                 arrayOf(wallpaperId)
             )
 
+            db.delete(
+                "wallpaper_asset_concepts",
+                "wallpaperId = ?",
+                arrayOf(wallpaperId)
+            )
+
             val now = System.currentTimeMillis()
 
             selectedIds.forEach { keywordId ->
 
-                val values = ContentValues().apply {
+                val legacyValues = ContentValues().apply {
                     put("wallpaperId", wallpaperId)
                     put("keywordId", keywordId)
                     put("createdAt", now)
@@ -575,7 +596,19 @@ class WallpaperKeywordRepository(context: Context) {
                 db.insertOrThrow(
                     "wallpaper_asset_keywords",
                     null,
-                    values
+                    legacyValues
+                )
+
+                val conceptValues = ContentValues().apply {
+                    put("wallpaperId", wallpaperId)
+                    put("conceptId", keywordId)
+                    put("createdAt", now)
+                }
+
+                db.insertOrThrow(
+                    "wallpaper_asset_concepts",
+                    null,
+                    conceptValues
                 )
             }
 
@@ -585,7 +618,6 @@ class WallpaperKeywordRepository(context: Context) {
             db.endTransaction()
         }
     }
-
     private fun keywordExists(
         db: SQLiteDatabase,
         keywordId: String
