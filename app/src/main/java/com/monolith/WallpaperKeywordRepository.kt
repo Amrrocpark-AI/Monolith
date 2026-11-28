@@ -196,6 +196,19 @@ class WallpaperKeywordRepository(context: Context) {
                     SELECT COUNT(*)
                     FROM wallpaper_asset_keywords ak
                     WHERE ak.keywordId = k.id
+                ),
+                (
+                    SELECT COALESCE(
+                        NULLIF(w.thumbnailPath, ''),
+                        w.filePath
+                    )
+                    FROM wallpaper_asset_keywords ak
+                    INNER JOIN wallpaper_assets w
+                        ON w.id = ak.wallpaperId
+                    WHERE ak.keywordId = k.id
+                      AND w.mediaType = 'IMAGE'
+                    ORDER BY w.createdAt DESC
+                    LIMIT 1
                 )
             FROM wallpaper_keywords k
             $selection
@@ -211,10 +224,12 @@ class WallpaperKeywordRepository(context: Context) {
                         keyword = cursor.getString(1),
                         languageCode = cursor.getString(2),
                         aliasCount = cursor.getInt(3),
-                        wallpaperCount = cursor.getInt(4)
+                        wallpaperCount = cursor.getInt(4),
+                        previewPath = cursor.getString(5)
                     )
                 )
             }
+        }
         }
 
         return keywords
