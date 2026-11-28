@@ -2547,35 +2547,37 @@ private fun applyCurrentTheme() {
         }
     }
 
-    val bgImagePath = settings.getString("AppBackgroundImage", null)
+        val bgImageUri = settings.getString("AppBackgroundImage", null)
 
-    if (!bgImagePath.isNullOrBlank()) {
-        val file = File(bgImagePath)
-
-        if (file.exists() && file.isFile && file.length() > 0L) {
-            lifecycleScope.launch {
-                val bitmap = withContext(Dispatchers.IO) {
-                    try {
-                        BitmapFactory.decodeFile(file.absolutePath)
-                    } catch (_: Exception) {
-                        null
-                    }
-                }
-
-                if (isFinishing || isDestroyed) {
-                    bitmap?.recycle()
-                    return@launch
-                }
-
-                if (bitmap != null && rootLayout != null) {
-                    rootLayout.background =
-                        BitmapDrawable(resources, bitmap)
-                } else if (rootLayout != null) {
-                    applyColorBackground(rootLayout, themeColor)
+    if (!bgImageUri.isNullOrBlank()) {
+        lifecycleScope.launch {
+            val bitmap = withContext(Dispatchers.IO) {
+                try {
+                    contentResolver.openInputStream(Uri.parse(bgImageUri))
+                        ?.use { inputStream ->
+                            BitmapFactory.decodeStream(inputStream)
+                        }
+                } catch (e: Exception) {
+                    android.util.Log.e(
+                        "Monolith",
+                        "Failed to load app background image",
+                        e
+                    )
+                    null
                 }
             }
-        } else if (rootLayout != null) {
-            applyColorBackground(rootLayout, themeColor)
+
+            if (isFinishing || isDestroyed) {
+                bitmap?.recycle()
+                return@launch
+            }
+
+            if (bitmap != null && rootLayout != null) {
+                rootLayout.background =
+                    BitmapDrawable(resources, bitmap)
+            } else if (rootLayout != null) {
+                applyColorBackground(rootLayout, themeColor)
+            }
         }
     } else if (rootLayout != null) {
         applyColorBackground(rootLayout, themeColor)
