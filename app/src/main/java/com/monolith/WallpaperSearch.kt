@@ -140,10 +140,10 @@ class WallpaperSearch(context: Context) {
                 """
                 id IN (
                     SELECT wallpaperId
-                    FROM wallpaper_asset_keywords
-                    WHERE keywordId IN ($placeholders)
+                    FROM wallpaper_asset_concepts
+                    WHERE conceptId IN ($placeholders)
                     GROUP BY wallpaperId
-                    HAVING COUNT(DISTINCT keywordId) = ?
+                    HAVING COUNT(DISTINCT conceptId) = ?
                 )
                 """.trimIndent()
             )
