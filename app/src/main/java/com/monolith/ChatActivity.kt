@@ -2611,11 +2611,25 @@ private fun applyCurrentTheme() {
 }
 
     private fun applyColorBackground(rootLayout: LinearLayout, themeColor: Int) {
-        val darkBase = Color.parseColor("#0E0E10")
-        val red = (Color.red(darkBase) + Color.red(themeColor)) / 6
-        val green = (Color.green(darkBase) + Color.green(themeColor)) / 6
-        val blue = (Color.blue(darkBase) + Color.blue(themeColor)) / 6
-        rootLayout.background = ColorDrawable(Color.rgb(red, green, blue))
+    val settings = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+
+    val backgroundHex = settings.getString("AppBackground", null)
+
+    val backgroundColor = try {
+        if (backgroundHex.isNullOrBlank()) {
+            val darkBase = Color.parseColor("#0E0E10")
+            val red = (Color.red(darkBase) + Color.red(themeColor)) / 6
+            val green = (Color.green(darkBase) + Color.green(themeColor)) / 6
+            val blue = (Color.blue(darkBase) + Color.blue(themeColor)) / 6
+            Color.rgb(red, green, blue)
+        } else {
+            Color.parseColor(backgroundHex)
+        }
+    } catch (_: Exception) {
+        Color.parseColor("#0A0A0A")
+    }
+
+    rootLayout.background = ColorDrawable(backgroundColor)
     }
 
     private suspend fun getMemoriesContext(): String =
